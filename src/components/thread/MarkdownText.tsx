@@ -184,7 +184,7 @@ export const MarkdownText: FC<{ text: string }> = memo(({ text }) => {
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}
-        components={markdownComponents}
+        components={markdownComponents as any}
       >
         {text}
       </ReactMarkdown>

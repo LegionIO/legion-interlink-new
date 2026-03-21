@@ -77,7 +77,7 @@ function toMastraTools(
       description: tool.description,
       inputSchema: tool.inputSchema,
       execute: async (input, options) => {
-        const toolCallId = typeof options?.toolCallId === 'string' ? options.toolCallId : `tc-${Date.now()}`;
+        const toolCallId = typeof (options as any)?.toolCallId === 'string' ? (options as any).toolCallId : `tc-${Date.now()}`;
         const localAbortController = new AbortController();
         const cancel = (): void => {
           if (!localAbortController.signal.aborted) {
@@ -184,6 +184,10 @@ export async function* streamAgentResponse(
     augmentToolResult?: (state: { toolCallId: string; toolName: string; args: unknown; result: unknown }) => Promise<unknown> | unknown;
   },
 ): AsyncGenerator<StreamEvent> {
+  const msgArray = messages as Array<{ role?: string; content?: unknown }>;
+  console.info(`[Agent:upstream] conv=${conversationId} model=${modelConfig.modelName} provider=${modelConfig.provider} endpoint=${modelConfig.endpoint ?? 'default'}`);
+  console.info(`[Agent:upstream] messageCount=${msgArray.length} roles=[${msgArray.map((m) => m.role ?? '?').join(',')}]`);
+
   const model = await createLanguageModelFromConfig(modelConfig);
   const memory = getSharedMemory(config, dbPath);
   const mastraTools = toMastraTools(conversationId, tools, {
@@ -197,7 +201,7 @@ export async function* streamAgentResponse(
     id: `legion-${conversationId}`,
     name: 'legion',
     instructions: buildAgentInstructions(config.systemPrompt),
-    model: model as Parameters<typeof Agent>[0]['model'],
+    model: model as any,
     tools: mastraTools,
     ...(memory ? { memory } : {}),
   });
@@ -213,7 +217,7 @@ export async function* streamAgentResponse(
   if (useGenerate) {
     yield* generateWithSyntheticEvents(agent, conversationId, messages, config, memory, modelSettings, providerOptions, options);
   } else {
-    yield* streamWithRealEvents(agent, conversationId, messages, config, memory, modelSettings, providerOptions, options);
+    yield* streamWithRealEvents(agent, conversationId, messages, modelConfig, config, memory, modelSettings, providerOptions, options);
   }
 }
 
@@ -238,7 +242,8 @@ async function* generateWithSyntheticEvents(
   const eventQueue: StreamEvent[] = [];
 
   try {
-    console.info(`[Agent] Starting generate (non-streaming) for ${conversationId}`);
+    const msgArr = messages as Array<{ role?: string }>;
+    console.info(`[Agent:generate] conv=${conversationId} messageCount=${msgArr.length} roles=[${msgArr.map((m) => m.role ?? '?').join(',')}] maxSteps=${config.advanced.maxSteps} temp=${config.advanced.temperature}`);
 
     const result = await agent.generate(messages as Parameters<typeof agent.generate>[0], {
       maxSteps: config.advanced.maxSteps,
@@ -286,7 +291,7 @@ async function* generateWithSyntheticEvents(
           }
         }
       },
-    });
+    } as any);
 
     // Drain queued step events first (tool calls/results from intermediate steps)
     for (const event of eventQueue) {
@@ -330,6 +335,7 @@ async function* streamWithRealEvents(
   agent: Agent,
   conversationId: string,
   messages: unknown[],
+  modelConfig: LLMModelConfig,
   config: LegionConfig,
   memory: ReturnType<typeof getSharedMemory>,
   modelSettings: Record<string, unknown>,
@@ -357,7 +363,7 @@ async function* streamWithRealEvents(
               resourceId: getResourceId(),
             }
           : {}),
-      });
+      } as any);
 
       const fullStream = streamResult.fullStream;
       const iterator =
@@ -448,7 +454,7 @@ async function* streamWithRealEvents(
     } catch (error) {
       if (options?.abortSignal?.aborted) break;
 
-      const shouldRetry = attempt === 0 && !emittedAnyOutput && isRetryableBedrock503(error, agent.model as LLMModelConfig);
+      const shouldRetry = attempt === 0 && !emittedAnyOutput && isRetryableBedrock503(error, modelConfig);
       if (shouldRetry) {
         console.warn(`[Agent] Retrying transient Bedrock stream failure for ${conversationId}:`, error);
         await sleep(700);

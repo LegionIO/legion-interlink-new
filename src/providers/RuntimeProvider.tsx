@@ -86,6 +86,10 @@ function msgId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function toStoredContent(parts: ContentPart[]): ThreadMessageLike['content'] {
+  return parts as any;
+}
+
 function extractUserText(messages: ThreadMessageLike[]): string {
   const firstUser = messages.find((message) => message.role === 'user');
   if (!firstUser || !Array.isArray(firstUser.content)) return '';
@@ -234,7 +238,7 @@ function applyTextDelta(acc: { messages: StoredMessage[]; headId: string | null 
   } else {
     content.push({ type: 'text', source: 'assistant', text });
   }
-  acc.messages[idx] = { ...msg, content };
+  acc.messages[idx] = { ...msg, content: toStoredContent(content) };
 }
 
 function applyObserverMessage(acc: { messages: StoredMessage[]; headId: string | null }, text: string): void {
@@ -247,7 +251,7 @@ function applyObserverMessage(acc: { messages: StoredMessage[]; headId: string |
   // when transitioning back to final output.
   const block = `${lastPart?.type === 'text' ? '\n\n' : ''}${normalized}\n\n`;
   content.push({ type: 'text', source: 'observer', text: block });
-  acc.messages[idx] = { ...msg, content };
+  acc.messages[idx] = { ...msg, content: toStoredContent(content) };
 }
 
 function applyToolCall(
@@ -278,7 +282,7 @@ function applyToolCall(
       liveOutput: { stdout: '', stderr: '', truncated: false, stopped: false },
     });
   }
-  acc.messages[idx] = { ...msg, content };
+  acc.messages[idx] = { ...msg, content: toStoredContent(content) };
 }
 
 function applyToolProgress(
@@ -331,7 +335,7 @@ function applyToolProgress(
   liveOutput.truncated = Boolean(liveOutput.truncated || e.data?.truncated);
   liveOutput.stopped = Boolean(liveOutput.stopped || e.data?.stopped);
   content[tcIdx] = { ...existing, liveOutput };
-  acc.messages[idx] = { ...msg, content };
+  acc.messages[idx] = { ...msg, content: toStoredContent(content) };
 }
 
 function applyToolResult(
@@ -377,14 +381,14 @@ function applyToolResult(
       finishedAt,
     };
   }
-  acc.messages[idx] = { ...msg, content };
+  acc.messages[idx] = { ...msg, content: toStoredContent(content) };
 }
 
 function applyError(acc: { messages: StoredMessage[]; headId: string | null }, error: string): void {
   const { msg, idx } = getOrCreateAssistantInAcc(acc);
   const content = (Array.isArray(msg.content) ? [...msg.content] : []) as ContentPart[];
   content.push({ type: 'text', text: `\n\n**Error:** ${error}` });
-  acc.messages[idx] = { ...msg, content };
+  acc.messages[idx] = { ...msg, content: toStoredContent(content) };
 }
 
 // --- Persistence ---
@@ -713,7 +717,7 @@ export function RuntimeProvider({
               id: msgId(),
               parentId: saAcc.headId,
               role: 'user',
-              content: [{ type: 'text', text: msgText, source: (e as { source?: string }).source ?? 'user' }],
+              content: toStoredContent([{ type: 'text', text: msgText }]),
               createdAt: new Date(),
             };
             saAcc.messages.push(userMsg);
@@ -845,7 +849,7 @@ export function RuntimeProvider({
     }
     if (!userContent.some((p) => p.type === 'text')) return;
 
-    const userMsg: StoredMessage = { id: msgId(), parentId: headId, role: 'user', content: userContent, createdAt: new Date() };
+    const userMsg: StoredMessage = { id: msgId(), parentId: headId, role: 'user', content: toStoredContent(userContent), createdAt: new Date() };
     const newTree = [...tree, userMsg];
     const newHead = userMsg.id;
     setTree(newTree);
@@ -856,6 +860,8 @@ export function RuntimeProvider({
     const branch = getActiveBranch(newTree, newHead);
     await persistConversation(convId, newTree, newHead, { runStatus: 'running' });
     void maybeGenerateTitle(convId, branch);
+    console.info(`[UI:stream] Firing agent:stream conv=${convId} model=${selectedModelKey ?? 'default'} reasoning=${reasoningEffort ?? 'medium'} messageCount=${branch.length} roles=${branch.map((m) => m.role).join(',')}`);
+    console.info('[UI:stream] Last message preview:', branch.length > 0 ? JSON.stringify(branch[branch.length - 1]).slice(0, 500) : '(empty)');
     legion.agent.stream(convId, branch, selectedModelKey ?? undefined, reasoningEffort ?? 'medium');
   }, [tree, headId, selectedModelKey, reasoningEffort, consumeAttachments]);
 
@@ -882,6 +888,7 @@ export function RuntimeProvider({
     streamAccumulators.set(convId, { messages: newTree, headId: actualParent });
     const branch = getActiveBranch(newTree, actualParent);
     persistConversation(convId, newTree, actualParent, { runStatus: 'running' });
+    console.info(`[UI:stream:reload] Firing agent:stream conv=${convId} model=${selectedModelKey ?? 'default'} reasoning=${reasoningEffort ?? 'medium'} messageCount=${branch.length} roles=${branch.map((m) => m.role).join(',')}`);
     legion.agent.stream(convId, branch, selectedModelKey ?? undefined, reasoningEffort ?? 'medium');
   }, [tree, headId, selectedModelKey, reasoningEffort]);
 
@@ -975,7 +982,7 @@ export function RuntimeProvider({
         id: msgId(),
         parentId: saAcc.headId,
         role: 'user',
-        content: [{ type: 'text', text, source: 'user' }],
+        content: toStoredContent([{ type: 'text', text }]),
         createdAt: new Date(),
       };
       saAcc.messages.push(userMsg);

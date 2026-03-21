@@ -199,6 +199,17 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
 
     const modelEntry = resolveModelForThread(config, modelKey ?? null);
     const backend = resolveAgentBackend(config);
+    const messageList = messages as Array<{ role?: string; content?: unknown }>;
+    console.info(`[Agent:stream] conv=${conversationId} backend=${backend} model=${modelKey ?? config.models.defaultModelKey} messageCount=${messageList.length}`);
+    for (const [index, message] of messageList.entries()) {
+      const contentPreview = typeof message.content === 'string'
+        ? message.content.slice(0, 200)
+        : Array.isArray(message.content)
+          ? JSON.stringify(message.content).slice(0, 200)
+          : String(message.content ?? '').slice(0, 200);
+      console.info(`[Agent:stream]   msg[${index}] role=${message.role ?? '?'} contentLen=${JSON.stringify(message.content ?? '').length} preview=${contentPreview}`);
+    }
+
     if (!modelEntry) {
       broadcastStreamEvent({
         conversationId,
@@ -606,7 +617,7 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
           'Avoid apologies, disclaimers, or copied response text.',
           'Return only the title text with no quotes or formatting.',
         ].join(' '),
-        model: model as Parameters<typeof Agent>[0]['model'],
+        model: model as any,
       });
 
       const titleInput = buildTitleGenerationInput(messages);

@@ -136,7 +136,7 @@ export async function compactConversationPrefix(
     id: `compaction-${Date.now()}`,
     name: 'compaction-agent',
     instructions: COMPACTION_SYSTEM_PROMPT,
-    model: model as Parameters<typeof Agent>[0]['model'],
+    model: model as any,
   });
 
   const prompt = [

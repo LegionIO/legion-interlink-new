@@ -177,7 +177,7 @@ export async function* runSubAgent(opts: SubAgentRunOptions): AsyncGenerator<Sub
     const maxTurns = Math.max(config.advanced.maxSteps, 20); // generous turn limit
 
     // Emit initial status
-    const emitStatus = (status: SubAgentEvent['type'] extends 'sub-agent-status' ? never : never, st: 'running' | 'awaiting-input' | 'completed' | 'stopped' | 'failed', summary?: string) => {
+    const emitStatus = (_status: never, st: 'running' | 'awaiting-input' | 'completed' | 'stopped' | 'failed', summary?: string) => {
       const evt: SubAgentEvent = { subAgentConversationId, parentConversationId, parentToolCallId, type: 'sub-agent-status', status: st, summary };
       broadcastSubAgentEvent(evt);
       return evt;
@@ -314,7 +314,7 @@ export async function* runSubAgent(opts: SubAgentRunOptions): AsyncGenerator<Sub
       if (abortSignal?.aborted) break;
 
       // Check what the sub-agent signaled via the control tool
-      const signal = controlSignal.current;
+      const signal = controlSignal.current as ControlSignal | null;
 
       if (signal?.action === 'complete' || signal?.action === 'failed') {
         // Before finalizing, check if a message arrived during this turn

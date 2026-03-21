@@ -204,7 +204,7 @@ function AppShell() {
 
   // Listen for Cmd+, / menu Settings
   useEffect(() => {
-    const cleanup = window.legion.onMenuOpenSettings(() => {
+    const cleanup = window.legion?.onMenuOpenSettings(() => {
       void handleOpenSettings();
     });
     return cleanup;

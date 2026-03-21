@@ -49,6 +49,24 @@ type LegionAPI = {
     testConnection: (server: { name: string; url?: string; command?: string; args?: string[]; env?: Record<string, string> }) =>
       Promise<{ status: string; toolCount: number; error?: string }>;
   };
+  skills: {
+    list: () => Promise<Array<{
+      name: string;
+      description: string;
+      version?: string;
+      type: string;
+      enabled: boolean;
+      dir: string;
+    }>>;
+    get: (name: string) => Promise<{
+      manifest?: Record<string, unknown>;
+      files?: Record<string, string>;
+      dir?: string;
+      error?: string;
+    }>;
+    delete: (name: string) => Promise<{ success?: boolean; error?: string }>;
+    toggle: (name: string, enable: boolean) => Promise<{ success?: boolean; enabled?: boolean }>;
+  };
   modelCatalog: () => Promise<unknown>;
   dialog: {
     openFile: (options?: { filters?: Array<{ name: string; extensions: string[] }> }) => Promise<unknown>;

@@ -66,7 +66,7 @@ export function getSharedMemory(config: LegionConfig, dbPath: string): Memory | 
     ensureDir(dbPath);
 
     const openAIProvider = buildAzureOpenAIProvider(config);
-    const storage = new LibSQLStore({ url: sqliteUrl });
+    const storage = new LibSQLStore({ id: 'legion-memory', url: sqliteUrl });
 
     // Working memory config
     const workingMemory = config.memory.workingMemory.enabled
@@ -98,7 +98,7 @@ export function getSharedMemory(config: LegionConfig, dbPath: string): Memory | 
           messageRange: { before: 1, after: 1 },
           scope: config.memory.semanticRecall.scope,
         },
-        vector: new LibSQLVector({ url: sqliteUrl }),
+        vector: new LibSQLVector({ id: 'legion-vector', url: sqliteUrl }),
         embedder: openAIProvider.embedding(embeddingModelId),
       };
     }
@@ -117,7 +117,7 @@ export function getSharedMemory(config: LegionConfig, dbPath: string): Memory | 
       memoryConfig.embedder = semanticRecallConfig.embedder;
     }
 
-    sharedMemory = new Memory(memoryConfig as Parameters<typeof Memory>[0]);
+    sharedMemory = new Memory(memoryConfig as any);
   } catch (error) {
     console.error('[Memory] Failed to initialize:', error);
     sharedMemory = null;

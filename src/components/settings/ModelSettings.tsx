@@ -396,7 +396,7 @@ const ModelForm: FC<{
   const [modelName, setModelName] = useState(initial.modelName);
   const [deploymentName, setDeploymentName] = useState(initial.deploymentName ?? '');
   const [maxInputTokens, setMaxInputTokens] = useState(initial.maxInputTokens?.toString() ?? '');
-  const [useResponsesApi, setUseResponsesApi] = useState(initial.useResponsesApi ?? true);
+  const [useResponsesApi, setUseResponsesApi] = useState(initial.useResponsesApi ?? false);
 
   const selectedProvider = providers[provider];
 

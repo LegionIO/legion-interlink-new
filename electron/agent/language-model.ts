@@ -91,6 +91,10 @@ export async function createLanguageModelFromConfig(modelConfig: LLMModelConfig)
     throw new Error('Gemini models are not supported by Legion runtime yet.');
   }
 
+  console.info(
+    `[LLM] Creating model: provider=${modelConfig.provider} model=${modelConfig.modelName} baseURL=${modelConfig.endpoint ?? 'default'} useResponsesApi=${modelConfig.useResponsesApi ?? 'default'}`,
+  );
+
   if (modelConfig.provider === 'anthropic') {
     const anthropic = createAnthropic({
       baseURL: stripTrailingSlashes(modelConfig.endpoint),
@@ -115,8 +119,9 @@ export async function createLanguageModelFromConfig(modelConfig: LLMModelConfig)
   });
 
   const modelId = modelConfig.deploymentName || modelConfig.modelName;
-  if (modelConfig.useResponsesApi === false && typeof openai.chat === 'function') {
-    return openai.chat(modelId);
+  // Default to Chat Completions unless a model explicitly opts into Responses.
+  if (modelConfig.useResponsesApi === true) {
+    return openai(modelId);
   }
-  return openai(modelId);
+  return openai.chat(modelId);
 }

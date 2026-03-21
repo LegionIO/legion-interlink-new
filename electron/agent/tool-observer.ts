@@ -547,7 +547,7 @@ export class ToolObserverManager {
           id: `tool-observer-${this.conversationId}`,
           name: 'tool-observer',
           instructions: OBSERVER_SYSTEM_PROMPT,
-          model: model as Parameters<typeof Agent>[0]['model'],
+          model: model as any,
         });
         this.observerAgent = agent;
         return agent;
