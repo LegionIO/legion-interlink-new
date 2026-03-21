@@ -1,6 +1,6 @@
-# Legion Aithena
+# AITHENA
 
-Legion Aithena is an Electron-based local AI assistant for coding and operator workflows. It pairs a React desktop UI with a local Electron runtime that can manage conversations, switch models, call tools, load skills, connect to MCP servers, and delegate work to sub-agents.
+AITHENA is an Electron-based local AI assistant for coding and operator workflows. It pairs a React desktop UI with a local Electron runtime that can manage conversations, switch models, call tools, load skills, connect to MCP servers, and delegate work to sub-agents.
 
 ## What It Does
 
@@ -75,7 +75,7 @@ The current builder config is set up for macOS output in `legion-aithena/dist/`.
 
 ## Configuration
 
-Legion Aithena creates and reads its local state from `~/.legionio`.
+AITHENA creates and reads its local state from `~/.legionio`.
 
 Important paths:
 
@@ -121,7 +121,7 @@ Skills are loaded from disk and can be enabled or disabled in the app. Enabled s
 
 ### MCP
 
-MCP servers can be configured in settings or in `~/.legionio/config.json`. On config changes, Legion Aithena rebuilds the active MCP tool set.
+MCP servers can be configured in settings or in `~/.legionio/config.json`. On config changes, AITHENA rebuilds the active MCP tool set.
 
 ### Memory And Compaction
 
@@ -137,7 +137,7 @@ These settings are configurable from the in-app settings panel.
 
 ### Sub-Agents
 
-Legion Aithena can spawn child agents for delegated work. Limits such as nesting depth and concurrency are configurable.
+AITHENA can spawn child agents for delegated work. Limits such as nesting depth and concurrency are configurable.
 
 ## Architecture Notes
 
