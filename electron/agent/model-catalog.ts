@@ -56,7 +56,7 @@ export function resolveModelCatalog(config: LegionConfig): {
       deploymentName: model.deploymentName,
       modelName: model.modelName,
       maxInputTokens: model.maxInputTokens,
-      useResponsesApi: model.useResponsesApi ?? config.advanced.useResponsesApi,
+      useResponsesApi: model.useResponsesApi,
       temperature: config.advanced.temperature,
       maxSteps: config.advanced.maxSteps,
       maxRetries: config.advanced.maxRetries,
@@ -140,11 +140,14 @@ export function resolveStreamConfig(
   const temperature = profile?.temperature ?? config.advanced.temperature;
   const maxSteps = profile?.maxSteps ?? config.advanced.maxSteps;
   const maxRetries = profile?.maxRetries ?? config.advanced.maxRetries;
-  const useResponsesApi = profile?.useResponsesApi ?? config.advanced.useResponsesApi;
+  const profileUseResponsesApi = profile?.useResponsesApi;
+  const useResponsesApi = profileUseResponsesApi ?? config.advanced.useResponsesApi;
   const systemPrompt = profile?.systemPrompt?.trim() || config.systemPrompt;
   const reasoningEffort = opts.reasoningEffort ?? profile?.reasoningEffort as ReasoningEffort | undefined;
 
   // 5. Apply merged parameters to model configs (cloned so we don't mutate catalog)
+  // For useResponsesApi, precedence is: profile explicit > per-model > global default.
+  // We only let the profile override the per-model value when the profile explicitly sets it.
   const applyOverrides = (entry: ModelCatalogEntry): ModelCatalogEntry => ({
     key: entry.key,
     displayName: entry.displayName,
@@ -153,7 +156,7 @@ export function resolveStreamConfig(
       temperature,
       maxSteps,
       maxRetries,
-      useResponsesApi: useResponsesApi ?? entry.modelConfig.useResponsesApi,
+      useResponsesApi: profileUseResponsesApi ?? entry.modelConfig.useResponsesApi ?? config.advanced.useResponsesApi,
     },
   });
 
