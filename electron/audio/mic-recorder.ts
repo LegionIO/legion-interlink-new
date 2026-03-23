@@ -182,43 +182,52 @@ window._mic = {
     this.chunks = [];
   },
 
-  // Level monitoring for device picker UI
-  _monitorCtx: null,
-  _monitorSource: null,
-  _monitorAnalyser: null,
-  _monitorStream: null,
+  // Multi-device level monitoring for device picker UI
+  _monitors: {}, // keyed by deviceId (or 'default')
 
-  async startMonitor(deviceId) {
-    this.stopMonitor();
-    try {
-      const constraints = { audio: { channelCount: 1 } };
-      if (deviceId) constraints.audio.deviceId = { exact: deviceId };
-      this._monitorStream = await navigator.mediaDevices.getUserMedia(constraints);
-      this._monitorCtx = new AudioContext();
-      this._monitorSource = this._monitorCtx.createMediaStreamSource(this._monitorStream);
-      this._monitorAnalyser = this._monitorCtx.createAnalyser();
-      this._monitorAnalyser.fftSize = 256;
-      this._monitorSource.connect(this._monitorAnalyser);
-      return { ok: true };
-    } catch (err) {
-      return { error: err.message };
+  async startMonitorAll(deviceIds) {
+    this.stopMonitorAll();
+    const results = {};
+    for (const id of deviceIds) {
+      try {
+        const constraints = { audio: { channelCount: 1 } };
+        if (id && id !== 'default') constraints.audio.deviceId = { exact: id };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        const ctx = new AudioContext();
+        const source = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        this._monitors[id] = { stream, ctx, source, analyser };
+        results[id] = { ok: true };
+      } catch (err) {
+        results[id] = { error: err.message };
+      }
     }
+    return results;
   },
 
-  getLevel() {
-    if (!this._monitorAnalyser) return 0;
-    const buf = new Float32Array(this._monitorAnalyser.fftSize);
-    this._monitorAnalyser.getFloatTimeDomainData(buf);
-    let max = 0;
-    for (let i = 0; i < buf.length; i++) { const a = Math.abs(buf[i]); if (a > max) max = a; }
-    return max;
+  getAllLevels() {
+    const levels = {};
+    const buf = new Float32Array(256);
+    for (const [id, mon] of Object.entries(this._monitors)) {
+      if (!mon || !mon.analyser) { levels[id] = 0; continue; }
+      mon.analyser.getFloatTimeDomainData(buf);
+      let max = 0;
+      for (let i = 0; i < buf.length; i++) { const a = Math.abs(buf[i]); if (a > max) max = a; }
+      levels[id] = max;
+    }
+    return levels;
   },
 
-  stopMonitor() {
-    if (this._monitorSource) { try { this._monitorSource.disconnect(); } catch {} this._monitorSource = null; }
-    if (this._monitorCtx) { try { this._monitorCtx.close(); } catch {} this._monitorCtx = null; }
-    if (this._monitorStream) { this._monitorStream.getTracks().forEach(t => t.stop()); this._monitorStream = null; }
-    this._monitorAnalyser = null;
+  stopMonitorAll() {
+    for (const mon of Object.values(this._monitors)) {
+      if (!mon) continue;
+      try { mon.source.disconnect(); } catch {}
+      try { mon.ctx.close(); } catch {}
+      mon.stream.getTracks().forEach(t => t.stop());
+    }
+    this._monitors = {};
   }
 };
 console.log('[MicRecorder] Ready, secure=' + window.isSecureContext + ', getUserMedia=' + !!navigator.mediaDevices?.getUserMedia);
@@ -323,12 +332,12 @@ export function registerMicRecorderHandlers(ipc: IpcMain): void {
     return { ok: true };
   });
 
-  // Level monitoring for device picker
-  ipc.handle('stt:start-monitor', async (_event, deviceId?: string) => {
+  // Multi-device level monitoring for device picker
+  ipc.handle('stt:start-monitor', async (_event, deviceIds?: string[]) => {
     try {
       const win = await ensureRecorderWindow();
-      const escaped = deviceId ? JSON.stringify(deviceId) : 'null';
-      return await win.webContents.executeJavaScript(`window._mic.startMonitor(${escaped})`);
+      const escaped = JSON.stringify(deviceIds ?? ['default']);
+      return await win.webContents.executeJavaScript(`window._mic.startMonitorAll(${escaped})`);
     } catch (err) {
       return { error: err instanceof Error ? err.message : String(err) };
     }
@@ -336,17 +345,17 @@ export function registerMicRecorderHandlers(ipc: IpcMain): void {
 
   ipc.handle('stt:get-level', async () => {
     try {
-      if (!recorderWindow || recorderWindow.isDestroyed()) return 0;
-      return await recorderWindow.webContents.executeJavaScript('window._mic.getLevel()');
+      if (!recorderWindow || recorderWindow.isDestroyed()) return {};
+      return await recorderWindow.webContents.executeJavaScript('window._mic.getAllLevels()');
     } catch {
-      return 0;
+      return {};
     }
   });
 
   ipc.handle('stt:stop-monitor', async () => {
     try {
       if (recorderWindow && !recorderWindow.isDestroyed()) {
-        await recorderWindow.webContents.executeJavaScript('window._mic.stopMonitor()');
+        await recorderWindow.webContents.executeJavaScript('window._mic.stopMonitorAll()');
       }
     } catch { /* ignore */ }
     return { ok: true };

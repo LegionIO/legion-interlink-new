@@ -98,8 +98,8 @@ type LegionAPI = {
       error?: string;
     }>;
     cancelRecording: () => Promise<{ ok?: boolean }>;
-    startMonitor: (deviceId?: string) => Promise<{ ok?: boolean; error?: string }>;
-    getLevel: () => Promise<number>;
+    startMonitor: (deviceIds?: string[]) => Promise<Record<string, { ok?: boolean; error?: string }>>;
+    getLevel: () => Promise<Record<string, number>>;
     stopMonitor: () => Promise<{ ok?: boolean }>;
   };
   onMenuOpenSettings: (callback: () => void) => () => void;

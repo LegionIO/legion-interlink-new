@@ -685,7 +685,7 @@ const DictationButton: FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [devices, setDevices] = useState<Array<{ deviceId: string; label: string }>>([]);
-  const [levels, setLevels] = useState<number>(0);
+  const [levels, setLevels] = useState<Record<string, number>>({});
   const sessionRef = useRef<DictationAdapterTypes.Session | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const levelTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -713,42 +713,37 @@ const DictationButton: FC = () => {
   // Load devices and start level monitoring when picker opens
   useEffect(() => {
     if (!pickerOpen) {
-      // Stop monitoring when closed
       window.legion?.mic?.stopMonitor();
       if (levelTimerRef.current) { clearInterval(levelTimerRef.current); levelTimerRef.current = null; }
-      setLevels(0);
+      setLevels({});
       return;
     }
 
     const mic = window.legion?.mic;
     if (!mic) return;
 
-    // Load device list
-    mic.listDevices().then(setDevices).catch(() => setDevices([]));
-
-    // Start level monitoring on current device
-    mic.startMonitor(selectedDeviceId).then((res) => {
-      if (res.error) { console.warn('[DevicePicker] Monitor start error:', res.error); return; }
-      // Poll level ~15 fps
-      levelTimerRef.current = setInterval(() => {
-        mic.getLevel().then(setLevels).catch(() => setLevels(0));
-      }, 66);
-    });
+    // Load device list, then start monitoring all devices
+    mic.listDevices().then((devs) => {
+      setDevices(devs);
+      // Get unique device IDs (include 'default' for system default)
+      const ids = ['default', ...devs.filter(d => d.deviceId !== 'default').map(d => d.deviceId)];
+      mic.startMonitor(ids).then(() => {
+        // Poll all levels ~15 fps
+        levelTimerRef.current = setInterval(() => {
+          mic.getLevel().then(setLevels).catch(() => setLevels({}));
+        }, 66);
+      });
+    }).catch(() => setDevices([]));
 
     return () => {
       mic.stopMonitor();
       if (levelTimerRef.current) { clearInterval(levelTimerRef.current); levelTimerRef.current = null; }
     };
-  }, [pickerOpen, selectedDeviceId]);
+  }, [pickerOpen]);
 
   const selectDevice = useCallback((deviceId: string | undefined) => {
     updateConfig('audio.dictation.inputDeviceId', deviceId);
-    // Restart monitor on new device
-    const mic = window.legion?.mic;
-    if (mic && pickerOpen) {
-      mic.stopMonitor().then(() => mic.startMonitor(deviceId));
-    }
-  }, [updateConfig, pickerOpen]);
+  }, [updateConfig]);
 
   const handleToggle = useCallback(() => {
     setError(null);
@@ -844,7 +839,6 @@ const DictationButton: FC = () => {
   }, [error]);
 
   const isActive = isListening || isRecognizing;
-  const levelPct = Math.min(100, Math.round(levels * 500)); // amplify for visual
 
   return (
     <div ref={rootRef} className="relative flex items-center gap-1">
@@ -900,47 +894,28 @@ const DictationButton: FC = () => {
 
       {/* Device picker popover */}
       {pickerOpen && (
-        <div className="absolute bottom-full left-0 z-50 mb-2 w-[280px] rounded-2xl border border-border/70 bg-popover/95 p-1.5 shadow-[0_16px_40px_rgba(5,4,15,0.28)] backdrop-blur-xl">
+        <div className="absolute bottom-full left-0 z-50 mb-2 w-[300px] rounded-2xl border border-border/70 bg-popover/95 p-1.5 shadow-[0_16px_40px_rgba(5,4,15,0.28)] backdrop-blur-xl">
           <div className="px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
             Input Device
           </div>
 
-          {/* Live level meter */}
-          <div className="mx-3 mb-2 h-2 rounded-full bg-muted/50 overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all duration-75"
-              style={{
-                width: `${levelPct}%`,
-                backgroundColor: levelPct > 60 ? '#22c55e' : levelPct > 20 ? '#eab308' : '#6b7280',
-              }}
-            />
-          </div>
-
-          <div className="max-h-[200px] overflow-y-auto">
-            {/* Default device option */}
-            <button
-              type="button"
-              className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs transition-colors ${
-                !selectedDeviceId ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted/60 text-foreground'
-              }`}
+          <div className="max-h-[280px] overflow-y-auto space-y-0.5">
+            {/* Default device */}
+            <DeviceRow
+              label="System Default"
+              selected={!selectedDeviceId}
+              level={levels['default'] ?? 0}
               onClick={() => selectDevice(undefined)}
-            >
-              <span className="flex-1 truncate text-left">System Default</span>
-              {!selectedDeviceId && <CheckSmallIcon className="h-3 w-3 shrink-0" />}
-            </button>
+            />
 
             {devices.filter(d => d.deviceId !== 'default').map((d) => (
-              <button
+              <DeviceRow
                 key={d.deviceId}
-                type="button"
-                className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs transition-colors ${
-                  selectedDeviceId === d.deviceId ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted/60 text-foreground'
-                }`}
+                label={d.label}
+                selected={selectedDeviceId === d.deviceId}
+                level={levels[d.deviceId] ?? 0}
                 onClick={() => selectDevice(d.deviceId)}
-              >
-                <span className="flex-1 truncate text-left">{d.label}</span>
-                {selectedDeviceId === d.deviceId && <CheckSmallIcon className="h-3 w-3 shrink-0" />}
-              </button>
+              />
             ))}
 
             {devices.length === 0 && (
@@ -952,6 +927,37 @@ const DictationButton: FC = () => {
         </div>
       )}
     </div>
+  );
+};
+
+/** Individual device row with inline level meter */
+const DeviceRow: FC<{
+  label: string;
+  selected: boolean;
+  level: number;
+  onClick: () => void;
+}> = ({ label, selected, level, onClick }) => {
+  const pct = Math.min(100, Math.round(level * 500));
+  const barColor = pct > 60 ? '#22c55e' : pct > 20 ? '#eab308' : '#6b7280';
+
+  return (
+    <button
+      type="button"
+      className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs transition-colors ${
+        selected ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted/60 text-foreground'
+      }`}
+      onClick={onClick}
+    >
+      {selected && <CheckSmallIcon className="h-3 w-3 shrink-0" />}
+      <span className="flex-1 min-w-0 truncate text-left">{label}</span>
+      {/* Inline level bar */}
+      <div className="w-16 h-1.5 rounded-full bg-muted/50 overflow-hidden shrink-0">
+        <div
+          className="h-full rounded-full transition-all duration-75"
+          style={{ width: `${pct}%`, backgroundColor: barColor }}
+        />
+      </div>
+    </button>
   );
 };
 

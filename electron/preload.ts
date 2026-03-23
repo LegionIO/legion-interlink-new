@@ -160,8 +160,8 @@ const legionAPI = {
       error?: string;
     }>,
     cancelRecording: () => ipcRenderer.invoke('stt:cancel-recording') as Promise<{ ok?: boolean }>,
-    startMonitor: (deviceId?: string) => ipcRenderer.invoke('stt:start-monitor', deviceId) as Promise<{ ok?: boolean; error?: string }>,
-    getLevel: () => ipcRenderer.invoke('stt:get-level') as Promise<number>,
+    startMonitor: (deviceIds?: string[]) => ipcRenderer.invoke('stt:start-monitor', deviceIds) as Promise<Record<string, { ok?: boolean; error?: string }>>,
+    getLevel: () => ipcRenderer.invoke('stt:get-level') as Promise<Record<string, number>>,
     stopMonitor: () => ipcRenderer.invoke('stt:stop-monitor') as Promise<{ ok?: boolean }>,
   },
 
