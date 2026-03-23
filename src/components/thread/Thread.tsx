@@ -844,7 +844,7 @@ const DictationButton: FC = () => {
     <div ref={rootRef} className="relative flex items-center gap-1">
       {/* Split button: mic | caret */}
       <div className={`flex items-center rounded-xl border overflow-hidden transition-colors ${
-        isListening ? 'border-destructive/50 bg-destructive/10'
+        isListening ? 'border-emerald-500/50 bg-emerald-500/10'
         : error ? 'border-yellow-500/50 bg-yellow-500/10'
         : 'border-border/70 bg-card/70'
       }`}>
@@ -858,8 +858,8 @@ const DictationButton: FC = () => {
           title={error ?? (isListening ? 'Stop dictation' : 'Start dictation')}
         >
           {isListening
-            ? <MicOffIcon className="h-3.5 w-3.5 text-destructive" />
-            : <MicIcon className={`h-3.5 w-3.5 ${error ? 'text-yellow-500' : 'text-muted-foreground'}`} />
+            ? <MicIcon className="h-3.5 w-3.5 text-emerald-500 animate-pulse" />
+            : <MicOffIcon className={`h-3.5 w-3.5 ${error ? 'text-yellow-500' : 'text-muted-foreground'}`} />
           }
         </button>
         {/* Caret dropdown trigger */}
@@ -877,7 +877,7 @@ const DictationButton: FC = () => {
 
       {/* Status label */}
       {isActive && (
-        <span className="text-[10px] font-medium animate-pulse text-destructive/70">
+        <span className="text-[10px] font-medium animate-pulse text-emerald-500">
           Listening...
         </span>
       )}
