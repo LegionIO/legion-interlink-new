@@ -149,6 +149,22 @@ const legionAPI = {
     homedir: () => ipcRenderer.invoke('platform:homedir'),
   },
 
+  // Microphone recording (via main process for macOS permission compatibility)
+  mic: {
+    listDevices: () => ipcRenderer.invoke('stt:list-devices') as Promise<Array<{ deviceId: string; label: string }>>,
+    startRecording: (deviceId?: string) => ipcRenderer.invoke('stt:start-recording', deviceId) as Promise<{ ok?: boolean; silent?: boolean; error?: string }>,
+    stopRecording: () => ipcRenderer.invoke('stt:stop-recording') as Promise<{
+      wavBase64?: string;
+      durationSec?: number;
+      maxAmplitude?: number;
+      error?: string;
+    }>,
+    cancelRecording: () => ipcRenderer.invoke('stt:cancel-recording') as Promise<{ ok?: boolean }>,
+    startMonitor: (deviceId?: string) => ipcRenderer.invoke('stt:start-monitor', deviceId) as Promise<{ ok?: boolean; error?: string }>,
+    getLevel: () => ipcRenderer.invoke('stt:get-level') as Promise<number>,
+    stopMonitor: () => ipcRenderer.invoke('stt:stop-monitor') as Promise<{ ok?: boolean }>,
+  },
+
   // Menu events
   onMenuOpenSettings: (callback: () => void) => {
     const handler = () => callback();

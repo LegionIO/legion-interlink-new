@@ -157,7 +157,20 @@ const fallbackConfigSchema = z.object({
   modelKeys: z.array(z.string()),
 });
 
+const azureAudioConfigSchema = z.object({
+  endpoint: z.string().optional(),        // Custom TTS base URL (overrides region-based URL)
+  region: z.string().optional(),          // e.g. "eastus" — used to construct standard Azure endpoints
+  subscriptionKey: z.string().optional(), // Ocp-Apim-Subscription-Key
+  ttsVoice: z.string().optional(),        // e.g. "en-US-JennyNeural"
+  ttsOutputFormat: z.string().optional(), // e.g. "audio-24khz-48kbitrate-mono-mp3"
+  ttsRate: z.number().min(0.5).max(3).optional(),
+  sttLanguage: z.string().optional(),     // e.g. "en-US"
+  sttEndpoint: z.string().optional(),     // Custom WebSocket endpoint for STT
+});
+
 const audioConfigSchema = z.object({
+  provider: z.enum(['native', 'azure']).optional(), // default: 'native'
+  azure: azureAudioConfigSchema.optional(),
   tts: z.object({
     enabled: z.boolean(),
     voice: z.string().optional(),
@@ -167,6 +180,7 @@ const audioConfigSchema = z.object({
     enabled: z.boolean(),
     language: z.string().optional(),
     continuous: z.boolean(),
+    inputDeviceId: z.string().optional(),
   }),
 });
 

@@ -1,7 +1,15 @@
 /**
  * Speech adapter factories for assistant-ui runtime.
  * Uses the OS-native Web Speech API for both TTS and dictation.
+ * Also provides unified factory functions that delegate to Azure AI adapters.
  */
+
+import {
+  createAzureSpeechAdapter,
+  createAzureDictationAdapter,
+  type AzureTtsConfig,
+  type AzureSttConfig,
+} from './azure-speech-adapters';
 
 // -- Types matching @assistant-ui/core adapter interfaces --
 
@@ -270,4 +278,72 @@ export function createDictationAdapter(config: DictationConfig): DictationAdapte
       } as DictationAdapterTypes.Session & { onError: (callback: (error: string) => void) => Unsubscribe };
     },
   };
+}
+
+// -----------------------------------------------------------------
+// Unified factories — delegate to native or Azure adapters
+// -----------------------------------------------------------------
+
+export type AudioProvider = 'native' | 'azure';
+
+export { type AzureTtsConfig, type AzureSttConfig } from './azure-speech-adapters';
+
+/**
+ * Create a TTS adapter based on the configured provider.
+ * Falls back to native if Azure is selected but credentials are missing.
+ */
+export function createUnifiedSpeechAdapter(opts: {
+  provider: AudioProvider;
+  enabled: boolean;
+  voice?: string;
+  rate: number;
+  azure?: AzureTtsConfig;
+}): SpeechSynthesisAdapter | undefined {
+  if (!opts.enabled) return undefined;
+
+  if (opts.provider === 'azure' && opts.azure?.subscriptionKey) {
+    return createAzureSpeechAdapter(opts.azure);
+  }
+
+  // Fall back to native (also covers azure-selected-but-no-key)
+  if (opts.provider === 'azure' && !opts.azure?.subscriptionKey) {
+    console.warn('[Audio] Azure TTS selected but no subscription key configured, falling back to native');
+  }
+  return createSpeechAdapter({ enabled: true, voice: opts.voice, rate: opts.rate });
+}
+
+/**
+ * Create a dictation adapter based on the configured provider.
+ * Falls back to native if Azure is selected but credentials are missing.
+ */
+export function createUnifiedDictationAdapter(opts: {
+  provider: AudioProvider;
+  enabled: boolean;
+  language?: string;
+  continuous: boolean;
+  azure?: AzureSttConfig;
+}): DictationAdapter | undefined {
+  if (!opts.enabled) return undefined;
+
+  if (opts.provider === 'azure' && opts.azure?.subscriptionKey) {
+    return createAzureDictationAdapter(opts.azure);
+  }
+
+  // Fall back to native (also covers azure-selected-but-no-key)
+  if (opts.provider === 'azure' && !opts.azure?.subscriptionKey) {
+    console.warn('[Audio] Azure STT selected but no subscription key configured, falling back to native');
+  }
+  return createDictationAdapter({ enabled: true, language: opts.language, continuous: opts.continuous });
+}
+
+/**
+ * Check if dictation is supported for the given provider.
+ * Azure STT uses WebSocket, so doesn't depend on browser's Web Speech API.
+ * Native STT requires window.SpeechRecognition.
+ */
+export function isDictationSupportedForProvider(provider: AudioProvider, azureKeySet?: boolean): boolean {
+  if (provider === 'azure' && azureKeySet) {
+    return true; // Azure uses WebSocket — always available
+  }
+  return isDictationSupported(); // Check native browser support
 }

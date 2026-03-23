@@ -110,6 +110,14 @@ function getDefaultConfig() {
       sidebarWidth: 280,
     },
     audio: {
+      provider: 'native' as const,
+      azure: {
+        region: 'eastus',
+        ttsVoice: 'en-US-JennyNeural',
+        ttsOutputFormat: 'audio-24khz-48kbitrate-mono-mp3',
+        ttsRate: 1,
+        sttLanguage: 'en-US',
+      },
       tts: { enabled: true, rate: 1 },
       dictation: { enabled: true, language: 'en-US', continuous: true },
     },

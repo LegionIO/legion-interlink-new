@@ -25,12 +25,14 @@ import {
   SquareIcon,
   MicIcon,
   MicOffIcon,
+  ChevronUpIcon,
+  CheckIcon as CheckSmallIcon,
 } from 'lucide-react';
 import { legion } from '@/lib/ipc-client';
 import { useAttachments } from '@/providers/AttachmentContext';
 import { useBranchNav } from '@/providers/RuntimeProvider';
 import { useConfig } from '@/providers/ConfigProvider';
-import { isDictationSupported, createDictationAdapter, type DictationAdapterTypes } from '@/lib/audio/speech-adapters';
+import { isDictationSupportedForProvider, createUnifiedDictationAdapter, type DictationAdapterTypes, type AudioProvider } from '@/lib/audio/speech-adapters';
 import { MarkdownText } from './MarkdownText';
 import { ToolCallDisplay } from './ToolGroup';
 import { SubAgentInline } from './SubAgentInline';
@@ -563,14 +565,51 @@ const CopyButton: FC = () => {
 };
 
 const SpeakButton: FC = () => {
-  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [state, setState] = useState<'idle' | 'loading' | 'speaking'>('idle');
 
-  if (isSpeaking) {
+  // When in loading state, listen for audio playback to start
+  // The adapter moves from 'starting' → 'running' when audio plays.
+  // We detect this by monitoring for the 'play' event on any new Audio element.
+  useEffect(() => {
+    if (state !== 'loading') return;
+
+    // Listen for any audio play event (our Azure TTS adapter creates an Audio element)
+    const onPlay = () => setState('speaking');
+    document.addEventListener('play', onPlay, true);
+
+    // Timeout fallback — if no audio plays within 15 seconds, assume it's speaking
+    // (for native TTS which doesn't use Audio elements)
+    const timer = setTimeout(() => {
+      setState((s) => s === 'loading' ? 'speaking' : s);
+    }, 500);
+
+    return () => {
+      document.removeEventListener('play', onPlay, true);
+      clearTimeout(timer);
+    };
+  }, [state]);
+
+  if (state === 'loading') {
     return (
       <ActionBarPrimitive.StopSpeaking asChild>
         <button
           type="button"
-          onClick={() => setIsSpeaking(false)}
+          onClick={() => setState('idle')}
+          className="flex h-7 w-7 items-center justify-center rounded-xl hover:bg-muted transition-colors"
+          title="Cancel"
+        >
+          <span className="h-3.5 w-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+        </button>
+      </ActionBarPrimitive.StopSpeaking>
+    );
+  }
+
+  if (state === 'speaking') {
+    return (
+      <ActionBarPrimitive.StopSpeaking asChild>
+        <button
+          type="button"
+          onClick={() => setState('idle')}
           className="flex h-7 w-7 items-center justify-center rounded-xl hover:bg-muted transition-colors"
           title="Stop speaking"
         >
@@ -584,7 +623,7 @@ const SpeakButton: FC = () => {
     <ActionBarPrimitive.Speak asChild>
       <button
         type="button"
-        onClick={() => setIsSpeaking(true)}
+        onClick={() => setState('loading')}
         className="flex h-7 w-7 items-center justify-center rounded-xl hover:bg-muted transition-colors"
         title="Read aloud"
       >
@@ -640,47 +679,117 @@ const StopButton: FC = () => {
 
 const DictationButton: FC = () => {
   const composerRuntime = useComposerRuntime();
-  const { config } = useConfig();
+  const { config, updateConfig } = useConfig();
   const [isListening, setIsListening] = useState(false);
+  const [isRecognizing, setIsRecognizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [devices, setDevices] = useState<Array<{ deviceId: string; label: string }>>([]);
+  const [levels, setLevels] = useState<number>(0);
   const sessionRef = useRef<DictationAdapterTypes.Session | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const levelTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const dictationConfig = (config as Record<string, unknown> | null)?.audio
-    ? ((config as Record<string, unknown>).audio as { dictation?: { enabled?: boolean; language?: string; continuous?: boolean } })?.dictation
-    : undefined;
+  const audioConfig = (config as Record<string, unknown> | null)?.audio as {
+    provider?: AudioProvider;
+    azure?: { endpoint?: string; region?: string; subscriptionKey?: string; sttLanguage?: string };
+    dictation?: { enabled?: boolean; language?: string; continuous?: boolean; inputDeviceId?: string };
+  } | undefined;
+  const audioProvider: AudioProvider = audioConfig?.provider ?? 'native';
+  const dictationConfig = audioConfig?.dictation;
+  const azureConfig = audioConfig?.azure;
+  const selectedDeviceId = dictationConfig?.inputDeviceId;
+
+  // Close picker on outside click
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const handler = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setPickerOpen(false);
+    };
+    window.addEventListener('pointerdown', handler);
+    return () => window.removeEventListener('pointerdown', handler);
+  }, [pickerOpen]);
+
+  // Load devices and start level monitoring when picker opens
+  useEffect(() => {
+    if (!pickerOpen) {
+      // Stop monitoring when closed
+      window.legion?.mic?.stopMonitor();
+      if (levelTimerRef.current) { clearInterval(levelTimerRef.current); levelTimerRef.current = null; }
+      setLevels(0);
+      return;
+    }
+
+    const mic = window.legion?.mic;
+    if (!mic) return;
+
+    // Load device list
+    mic.listDevices().then(setDevices).catch(() => setDevices([]));
+
+    // Start level monitoring on current device
+    mic.startMonitor(selectedDeviceId).then((res) => {
+      if (res.error) { console.warn('[DevicePicker] Monitor start error:', res.error); return; }
+      // Poll level ~15 fps
+      levelTimerRef.current = setInterval(() => {
+        mic.getLevel().then(setLevels).catch(() => setLevels(0));
+      }, 66);
+    });
+
+    return () => {
+      mic.stopMonitor();
+      if (levelTimerRef.current) { clearInterval(levelTimerRef.current); levelTimerRef.current = null; }
+    };
+  }, [pickerOpen, selectedDeviceId]);
+
+  const selectDevice = useCallback((deviceId: string | undefined) => {
+    updateConfig('audio.dictation.inputDeviceId', deviceId);
+    // Restart monitor on new device
+    const mic = window.legion?.mic;
+    if (mic && pickerOpen) {
+      mic.stopMonitor().then(() => mic.startMonitor(deviceId));
+    }
+  }, [updateConfig, pickerOpen]);
 
   const handleToggle = useCallback(() => {
     setError(null);
 
     if (isListening) {
-      // Stop listening
+      console.log('[DictationButton] Stopping...');
       sessionRef.current?.stop();
-      sessionRef.current = null;
-      setIsListening(false);
       return;
     }
 
-    // Start listening
-    if (!isDictationSupported()) {
+    console.log('[DictationButton] Starting, provider=%s, deviceId=%s', audioProvider, selectedDeviceId ?? 'default');
+    if (!isDictationSupportedForProvider(audioProvider, Boolean(azureConfig?.subscriptionKey))) {
       setError('Speech recognition is not supported');
-      console.warn('[Dictation] Speech recognition not supported in this browser/environment.');
       return;
     }
 
     try {
-      const adapter = createDictationAdapter({
+      const adapter = createUnifiedDictationAdapter({
+        provider: audioProvider,
         enabled: true,
         language: dictationConfig?.language ?? 'en-US',
         continuous: dictationConfig?.continuous ?? true,
+        azure: audioProvider === 'azure' ? {
+          endpoint: azureConfig?.endpoint,
+          region: azureConfig?.region ?? 'eastus',
+          subscriptionKey: azureConfig?.subscriptionKey ?? '',
+          language: azureConfig?.sttLanguage ?? dictationConfig?.language ?? 'en-US',
+          continuous: dictationConfig?.continuous ?? true,
+          inputDeviceId: selectedDeviceId,
+        } : undefined,
       });
+
+      if (!adapter) { setError('Failed to create dictation adapter'); return; }
 
       const session = adapter.listen();
       sessionRef.current = session;
       setIsListening(true);
 
-      // Append transcribed text to composer
       session.onSpeech((result) => {
-        if (result.isFinal) {
+        console.log('[DictationButton] onSpeech: "%s" isFinal=%s', result.transcript, result.isFinal);
+        if (result.isFinal && result.transcript) {
           const state = composerRuntime.getState();
           const currentText = state.text ?? '';
           const separator = currentText && !currentText.endsWith(' ') ? ' ' : '';
@@ -688,66 +797,158 @@ const DictationButton: FC = () => {
         }
       });
 
-      // Listen for errors to reset state
-      const extSession = session as DictationAdapterTypes.Session & { onError?: (cb: (err: string) => void) => void };
-      extSession.onError?.((err: string) => {
-        console.error('[Dictation] Error received in button:', err);
+      const extSession = session as DictationAdapterTypes.Session & {
+        onError?: (cb: (err: string) => void) => void;
+        onRecognizing?: (cb: (recognizing: boolean) => void) => void;
+      };
+      extSession.onRecognizing?.((r) => setIsRecognizing(r));
+      extSession.onError?.((err) => {
+        console.error('[DictationButton] onError:', err);
         setIsListening(false);
+        setIsRecognizing(false);
         sessionRef.current = null;
-        if (err === 'not-allowed') {
-          setError('Microphone permission denied');
-        } else if (err === 'no-speech') {
-          setError('No speech detected — try again');
-        } else if (err === 'network') {
-          setError('Speech recognition requires a network connection');
-        } else {
-          setError(`Dictation error: ${err}`);
-        }
+        setError(err === 'not-allowed' ? 'Microphone permission denied'
+          : err === 'no-speech' ? 'No speech detected — try again'
+          : err === 'network' ? 'Network connection required'
+          : `Dictation error: ${err}`);
       });
     } catch (err) {
-      console.error('[Dictation] Failed to start dictation:', err);
+      console.error('[DictationButton] Failed:', err);
       setIsListening(false);
+      setIsRecognizing(false);
       setError('Failed to start dictation');
     }
-  }, [isListening, dictationConfig, composerRuntime]);
+  }, [isListening, audioProvider, dictationConfig, azureConfig, composerRuntime, selectedDeviceId]);
 
-  // Cleanup on unmount
+  // Poll session status for cleanup
   useEffect(() => {
-    return () => {
-      sessionRef.current?.cancel();
-      sessionRef.current = null;
-    };
-  }, []);
+    if (!isListening || !sessionRef.current) return;
+    const session = sessionRef.current;
+    const interval = setInterval(() => {
+      if (session.status.type === 'ended') {
+        setIsListening(false);
+        setIsRecognizing(false);
+        sessionRef.current = null;
+        clearInterval(interval);
+      }
+    }, 200);
+    return () => clearInterval(interval);
+  }, [isListening]);
 
-  // Clear error after 5 seconds
+  useEffect(() => { return () => { sessionRef.current?.cancel(); }; }, []);
+
   useEffect(() => {
     if (!error) return;
-    const timer = setTimeout(() => setError(null), 5000);
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => setError(null), 5000);
+    return () => clearTimeout(t);
   }, [error]);
 
+  const isActive = isListening || isRecognizing;
+  const levelPct = Math.min(100, Math.round(levels * 500)); // amplify for visual
+
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={handleToggle}
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border transition-colors ${
-          isListening
-            ? 'border-destructive/50 bg-destructive/10 hover:bg-destructive/20'
-            : error
-              ? 'border-yellow-500/50 bg-yellow-500/10'
-              : 'border-border/70 bg-card/70 hover:bg-muted/50'
-        }`}
-        title={error ?? (isListening ? 'Stop dictation' : 'Start dictation')}
-      >
-        {isListening
-          ? <MicOffIcon className="h-4 w-4 text-destructive" />
-          : <MicIcon className={`h-4 w-4 ${error ? 'text-yellow-500' : 'text-muted-foreground'}`} />
-        }
-      </button>
+    <div ref={rootRef} className="relative flex items-center gap-1">
+      {/* Split button: mic | caret */}
+      <div className={`flex items-center rounded-xl border overflow-hidden transition-colors ${
+        isRecognizing ? 'border-primary/50 bg-primary/10'
+        : isListening ? 'border-destructive/50 bg-destructive/10'
+        : error ? 'border-yellow-500/50 bg-yellow-500/10'
+        : 'border-border/70 bg-card/70'
+      }`}>
+        {/* Mic toggle */}
+        <button
+          type="button"
+          onClick={handleToggle}
+          className={`flex h-8 w-7 items-center justify-center transition-colors ${
+            isActive ? '' : 'hover:bg-muted/50'
+          }`}
+          title={error ?? (isRecognizing ? 'Transcribing...' : isListening ? 'Stop dictation' : 'Start dictation')}
+        >
+          {isRecognizing
+            ? <span className="h-3.5 w-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            : isListening
+              ? <MicOffIcon className="h-3.5 w-3.5 text-destructive" />
+              : <MicIcon className={`h-3.5 w-3.5 ${error ? 'text-yellow-500' : 'text-muted-foreground'}`} />
+          }
+        </button>
+        {/* Caret dropdown trigger */}
+        <button
+          type="button"
+          onClick={() => setPickerOpen(!pickerOpen)}
+          className={`flex h-8 w-4 items-center justify-center border-l transition-colors ${
+            isActive ? 'border-border/30' : 'border-border/50 hover:bg-muted/50'
+          }`}
+          title="Select microphone"
+        >
+          <ChevronUpIcon className="h-2.5 w-2.5 text-muted-foreground" />
+        </button>
+      </div>
+
+      {/* Status label */}
+      {isActive && (
+        <span className={`text-[10px] font-medium animate-pulse ${isRecognizing ? 'text-primary' : 'text-destructive/70'}`}>
+          {isRecognizing ? 'Transcribing...' : 'Listening...'}
+        </span>
+      )}
+
+      {/* Error tooltip */}
       {error && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 whitespace-nowrap rounded-lg bg-card border border-border/70 px-2.5 py-1.5 text-[10px] text-muted-foreground shadow-lg">
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 whitespace-nowrap rounded-lg bg-card border border-border/70 px-2.5 py-1.5 text-[10px] text-muted-foreground shadow-lg z-50">
           {error}
+        </div>
+      )}
+
+      {/* Device picker popover */}
+      {pickerOpen && (
+        <div className="absolute bottom-full left-0 z-50 mb-2 w-[280px] rounded-2xl border border-border/70 bg-popover/95 p-1.5 shadow-[0_16px_40px_rgba(5,4,15,0.28)] backdrop-blur-xl">
+          <div className="px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+            Input Device
+          </div>
+
+          {/* Live level meter */}
+          <div className="mx-3 mb-2 h-2 rounded-full bg-muted/50 overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-75"
+              style={{
+                width: `${levelPct}%`,
+                backgroundColor: levelPct > 60 ? '#22c55e' : levelPct > 20 ? '#eab308' : '#6b7280',
+              }}
+            />
+          </div>
+
+          <div className="max-h-[200px] overflow-y-auto">
+            {/* Default device option */}
+            <button
+              type="button"
+              className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs transition-colors ${
+                !selectedDeviceId ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted/60 text-foreground'
+              }`}
+              onClick={() => selectDevice(undefined)}
+            >
+              <span className="flex-1 truncate text-left">System Default</span>
+              {!selectedDeviceId && <CheckSmallIcon className="h-3 w-3 shrink-0" />}
+            </button>
+
+            {devices.filter(d => d.deviceId !== 'default').map((d) => (
+              <button
+                key={d.deviceId}
+                type="button"
+                className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs transition-colors ${
+                  selectedDeviceId === d.deviceId ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted/60 text-foreground'
+                }`}
+                onClick={() => selectDevice(d.deviceId)}
+              >
+                <span className="flex-1 truncate text-left">{d.label}</span>
+                {selectedDeviceId === d.deviceId && <CheckSmallIcon className="h-3 w-3 shrink-0" />}
+              </button>
+            ))}
+
+            {devices.length === 0 && (
+              <div className="px-3 py-3 text-[10px] text-muted-foreground text-center">
+                No input devices found
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

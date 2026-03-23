@@ -13,6 +13,7 @@ mac:
   extendInfo:
     CFBundleDisplayName: Legion Aithena
     CFBundleName: Legion Aithena
+    NSMicrophoneUsageDescription: "Legion Aithena uses the microphone for voice dictation (speech-to-text)."
   target:
     - target: dir
       arch:

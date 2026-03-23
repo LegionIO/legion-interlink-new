@@ -88,6 +88,20 @@ type LegionAPI = {
   platform: {
     homedir: () => Promise<string>;
   };
+  mic: {
+    listDevices: () => Promise<Array<{ deviceId: string; label: string }>>;
+    startRecording: (deviceId?: string) => Promise<{ ok?: boolean; silent?: boolean; error?: string }>;
+    stopRecording: () => Promise<{
+      wavBase64?: string;
+      durationSec?: number;
+      maxAmplitude?: number;
+      error?: string;
+    }>;
+    cancelRecording: () => Promise<{ ok?: boolean }>;
+    startMonitor: (deviceId?: string) => Promise<{ ok?: boolean; error?: string }>;
+    getLevel: () => Promise<number>;
+    stopMonitor: () => Promise<{ ok?: boolean }>;
+  };
   onMenuOpenSettings: (callback: () => void) => () => void;
   onFind: (callback: () => void) => () => void;
   onModelSwitched: (callback: (modelKey: string) => void) => () => void;

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, Menu, nativeTheme, dialog, net, MenuItem, clipboard, session } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, Menu, nativeTheme, dialog, net, MenuItem, clipboard, session, systemPreferences } from 'electron';
 import { join } from 'path';
 import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
@@ -13,6 +13,7 @@ import { loadSkillsAsTools } from './tools/skill-loader.js';
 import { registerSkillsHandlers } from './ipc/skills.js';
 import { PluginManager } from './plugins/plugin-manager.js';
 import { registerPluginHandlers } from './ipc/plugins.js';
+import { registerMicRecorderHandlers, cleanupMicRecorder } from './audio/mic-recorder.js';
 import type { LegionConfig } from './config/schema.js';
 
 const LEGION_HOME = join(homedir(), '.legionio');
@@ -284,6 +285,15 @@ app.whenReady().then(() => {
   applyTheme();
   buildMenu();
 
+  // Request microphone permission on macOS (needed for speech-to-text dictation)
+  if (process.platform === 'darwin') {
+    systemPreferences.askForMediaAccess('microphone').then((granted) => {
+      console.info(`[Legion] Microphone permission: ${granted ? 'granted' : 'denied'}`);
+    }).catch((err) => {
+      console.warn('[Legion] Failed to request microphone permission:', err);
+    });
+  }
+
   // Set dock icon (macOS) — needed for dev mode since packager config doesn't apply
   if (process.platform === 'darwin' && app.dock && existsSync(APP_ICON)) {
     app.dock.setIcon(APP_ICON);
@@ -331,6 +341,7 @@ app.whenReady().then(() => {
   registerMcpHandlers(ipcMain);
   registerMemoryHandlers(ipcMain, LEGION_HOME, getConfig);
   registerSkillsHandlers(ipcMain, LEGION_HOME);
+  registerMicRecorderHandlers(ipcMain);
 
   // Plugin system
   const pluginManager = new PluginManager(
@@ -463,4 +474,5 @@ app.on('before-quit', () => {
   pluginManagerRef?.unloadAll().catch((err) => {
     console.error('[Legion] Plugin cleanup error:', err);
   });
+  cleanupMicRecorder();
 });

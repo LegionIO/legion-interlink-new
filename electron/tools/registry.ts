@@ -12,6 +12,7 @@ import {
   createToolSettingsTool,
   createAdvancedSettingsTool,
   createSystemPromptTool,
+  createAudioSettingsTool,
 } from './config-manage.js';
 import { createModelSwitchTool } from './model-switch.js';
 import { createSubAgentTool } from './sub-agent.js';
@@ -60,6 +61,7 @@ export async function buildToolRegistry(getConfig: () => LegionConfig, legionHom
     tools.push(createToolSettingsTool(legionHome));
     tools.push(createAdvancedSettingsTool(legionHome));
     tools.push(createSystemPromptTool(legionHome));
+    tools.push(createAudioSettingsTool(legionHome));
     tools.push(createModelSwitchTool(legionHome));
   }
 

@@ -235,3 +235,46 @@ export function createSystemPromptTool(legionHome: string): ToolDefinition {
     },
   };
 }
+
+/* ── Audio Settings ── */
+
+export function createAudioSettingsTool(legionHome: string): ToolDefinition {
+  return {
+    name: 'audio_settings',
+    description: [
+      'View or update audio settings. Controls speech provider (native/azure), text-to-speech, dictation, and Azure AI Speech configuration.',
+      'Use "get" to see current values, "set" to change one.',
+    ].join(' '),
+    inputSchema: z.object({
+      action: z.enum(['get', 'set']).describe('Read or write audio settings'),
+      field: z.enum([
+        'provider',
+        'tts.enabled',
+        'tts.voice',
+        'tts.rate',
+        'dictation.enabled',
+        'dictation.language',
+        'dictation.continuous',
+        'azure.endpoint',
+        'azure.region',
+        'azure.subscriptionKey',
+        'azure.ttsVoice',
+        'azure.ttsOutputFormat',
+        'azure.ttsRate',
+        'azure.sttLanguage',
+        'azure.sttEndpoint',
+      ]).optional().describe('Field to set (required for "set")'),
+      value: z.any().optional().describe('New value (required for "set")'),
+    }),
+    execute: async (input) => {
+      const { action, field, value } = input as { action: string; field?: string; value?: unknown };
+      const config = readConfig(legionHome);
+      if (action === 'get') return { audio: config.audio };
+      if (!field || value === undefined) return { error: 'Field and value required for "set".' };
+      const previous = getNested(config.audio as unknown as Record<string, unknown>, field);
+      setNested(config.audio as unknown as Record<string, unknown>, field, value);
+      writeDesktopConfig(legionHome, config);
+      return settingChanged(field, previous, value);
+    },
+  };
+}

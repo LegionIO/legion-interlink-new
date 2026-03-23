@@ -7,7 +7,7 @@ import {
 import { legion } from '@/lib/ipc-client';
 import { useAttachments } from './AttachmentContext';
 import { useConfig } from './ConfigProvider';
-import { createSpeechAdapter, createDictationAdapter } from '@/lib/audio/speech-adapters';
+import { createUnifiedSpeechAdapter, createUnifiedDictationAdapter, type AudioProvider } from '@/lib/audio/speech-adapters';
 
 type ContentPart =
   | { type: 'text'; text: string; source?: 'assistant' | 'observer' }
@@ -601,15 +601,74 @@ export function RuntimeProvider({
 
   // --- Audio adapters (TTS & Dictation) ---
   const { config } = useConfig();
-  const audioConfig = (config as Record<string, unknown> | null)?.audio as { tts?: { enabled?: boolean; voice?: string; rate?: number }; dictation?: { enabled?: boolean; language?: string; continuous?: boolean } } | undefined;
-  const speechAdapter = useMemo(
-    () => audioConfig?.tts?.enabled ? createSpeechAdapter({ enabled: true, voice: audioConfig.tts!.voice, rate: audioConfig.tts!.rate ?? 1 }) : undefined,
-    [audioConfig?.tts?.enabled, audioConfig?.tts?.voice, audioConfig?.tts?.rate],
-  );
-  const dictationAdapter = useMemo(
-    () => audioConfig?.dictation?.enabled ? createDictationAdapter({ enabled: true, language: audioConfig.dictation!.language, continuous: audioConfig.dictation!.continuous ?? true }) : undefined,
-    [audioConfig?.dictation?.enabled, audioConfig?.dictation?.language, audioConfig?.dictation?.continuous],
-  );
+  type ExpandedAudioConfig = {
+    provider?: AudioProvider;
+    azure?: {
+      endpoint?: string;
+      region?: string;
+      subscriptionKey?: string;
+      ttsVoice?: string;
+      ttsOutputFormat?: string;
+      ttsRate?: number;
+      sttLanguage?: string;
+      sttEndpoint?: string;
+    };
+    tts?: { enabled?: boolean; voice?: string; rate?: number };
+    dictation?: { enabled?: boolean; language?: string; continuous?: boolean };
+  };
+  const audioConfig = (config as Record<string, unknown> | null)?.audio as ExpandedAudioConfig | undefined;
+  const audioProvider: AudioProvider = audioConfig?.provider ?? 'native';
+
+  const speechAdapter = useMemo(() => {
+    const tts = audioConfig?.tts;
+    if (!tts?.enabled) return undefined;
+
+    return createUnifiedSpeechAdapter({
+      provider: audioProvider,
+      enabled: true,
+      voice: tts.voice,
+      rate: tts.rate ?? 1,
+      azure: audioProvider === 'azure' ? {
+        endpoint: audioConfig?.azure?.endpoint,
+        region: audioConfig?.azure?.region ?? 'eastus',
+        subscriptionKey: audioConfig?.azure?.subscriptionKey ?? '',
+        voice: audioConfig?.azure?.ttsVoice ?? 'en-US-JennyNeural',
+        outputFormat: audioConfig?.azure?.ttsOutputFormat ?? 'audio-24khz-48kbitrate-mono-mp3',
+        rate: audioConfig?.azure?.ttsRate ?? 1,
+      } : undefined,
+    });
+  }, [
+    audioProvider,
+    audioConfig?.tts?.enabled, audioConfig?.tts?.voice, audioConfig?.tts?.rate,
+    audioConfig?.azure?.endpoint, audioConfig?.azure?.region,
+    audioConfig?.azure?.subscriptionKey, audioConfig?.azure?.ttsVoice,
+    audioConfig?.azure?.ttsOutputFormat, audioConfig?.azure?.ttsRate,
+  ]);
+
+  const dictationAdapter = useMemo(() => {
+    const dict = audioConfig?.dictation;
+    if (!dict?.enabled) return undefined;
+
+    return createUnifiedDictationAdapter({
+      provider: audioProvider,
+      enabled: true,
+      language: dict.language,
+      continuous: dict.continuous ?? true,
+      azure: audioProvider === 'azure' ? {
+        endpoint: audioConfig?.azure?.endpoint,
+        region: audioConfig?.azure?.region ?? 'eastus',
+        subscriptionKey: audioConfig?.azure?.subscriptionKey ?? '',
+        language: audioConfig?.azure?.sttLanguage ?? dict.language ?? 'en-US',
+        continuous: dict.continuous ?? true,
+        inputDeviceId: (audioConfig?.dictation as { inputDeviceId?: string } | undefined)?.inputDeviceId,
+      } : undefined,
+    });
+  }, [
+    audioProvider,
+    audioConfig?.dictation?.enabled, audioConfig?.dictation?.language, audioConfig?.dictation?.continuous,
+    audioConfig?.azure?.endpoint, audioConfig?.azure?.region,
+    audioConfig?.azure?.subscriptionKey, audioConfig?.azure?.sttLanguage,
+  ]);
 
   // Sub-agent state — backed by module-level globals so it survives remounts
   const [subAgentVersion, setSubAgentVersion] = useState(globalSubAgentVersion);
