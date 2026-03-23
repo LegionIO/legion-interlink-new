@@ -37,15 +37,14 @@ export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
   const pluginSections = usePluginSettingsSections();
   const { setPluginConfig, sendAction } = usePlugins();
 
-  // Merge built-in + plugin sections
+  // Merge built-in + plugin sections (plugins always shown after Advanced)
   const builtInSections: Array<{ key: string; label: string }> = sections;
-  const beforeBuiltIn = pluginSections.filter((s) => s.priority < 0);
-  const afterBuiltIn = pluginSections.filter((s) => s.priority >= 0);
+  const sortedPluginSections = [...pluginSections].sort((a, b) => a.priority - b.priority);
   const allSections: Array<{ key: string; label: string }> = [
-    ...beforeBuiltIn.map((s) => ({ key: s.key, label: s.label })),
     ...builtInSections,
-    ...afterBuiltIn.map((s) => ({ key: s.key, label: s.label })),
+    ...sortedPluginSections.map((s) => ({ key: s.key, label: s.label })),
   ];
+  const hasPluginSections = sortedPluginSections.length > 0;
 
   if (!config) {
     return (
@@ -65,7 +64,7 @@ export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
             <XIcon className="h-4 w-4" />
           </button>
         </div>
-        {allSections.map((s) => (
+        {builtInSections.map((s) => (
           <button
             key={s.key}
             type="button"
@@ -78,6 +77,28 @@ export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
             <ChevronRightIcon className="ml-auto h-3 w-3 opacity-50" />
           </button>
         ))}
+        {hasPluginSections && (
+          <>
+            <div className="flex items-center gap-2 pt-3 pb-1 px-1">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground whitespace-nowrap">Plugin Settings</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+            {sortedPluginSections.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => setActiveSection(s.key)}
+                className={`flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-xs font-medium transition-all ${
+                  activeSection === s.key ? 'bg-primary text-primary-foreground shadow-[0_12px_28px_rgba(95,87,196,0.22)]' : 'hover:bg-muted/80 text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {s.label}
+                <ChevronRightIcon className="ml-auto h-3 w-3 opacity-50" />
+              </button>
+            ))}
+          </>
+        )}
       </div>
 
       {/* Section content */}
