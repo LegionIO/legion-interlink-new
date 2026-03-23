@@ -163,6 +163,29 @@ const legionAPI = {
     startMonitor: (deviceIds?: string[]) => ipcRenderer.invoke('stt:start-monitor', deviceIds) as Promise<Record<string, { ok?: boolean; error?: string }>>,
     getLevel: () => ipcRenderer.invoke('stt:get-level') as Promise<Record<string, number>>,
     stopMonitor: () => ipcRenderer.invoke('stt:stop-monitor') as Promise<{ ok?: boolean }>,
+    // Live streaming STT
+    liveStart: (config: { subscriptionKey: string; region?: string; endpoint?: string; language: string; deviceId?: string }) =>
+      ipcRenderer.invoke('stt:live-start', config) as Promise<{ ok?: boolean; error?: string }>,
+    liveMicStart: (deviceId?: string) => ipcRenderer.invoke('stt:live-mic-start', deviceId) as Promise<{ ok?: boolean; error?: string }>,
+    liveMicDrain: () => ipcRenderer.invoke('stt:live-mic-drain') as Promise<string[]>,
+    liveMicStop: () => ipcRenderer.invoke('stt:live-mic-stop') as Promise<{ ok?: boolean }>,
+    liveAudio: (pcmBase64: string) => ipcRenderer.send('stt:live-audio', pcmBase64),
+    liveStop: () => ipcRenderer.invoke('stt:live-stop') as Promise<{ ok?: boolean }>,
+    onPartial: (callback: (text: string) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, text: string) => callback(text);
+      ipcRenderer.on('stt:partial', handler);
+      return () => ipcRenderer.removeListener('stt:partial', handler);
+    },
+    onFinal: (callback: (text: string) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, text: string) => callback(text);
+      ipcRenderer.on('stt:final', handler);
+      return () => ipcRenderer.removeListener('stt:final', handler);
+    },
+    onSttError: (callback: (error: string) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, error: string) => callback(error);
+      ipcRenderer.on('stt:error', handler);
+      return () => ipcRenderer.removeListener('stt:error', handler);
+    },
   },
 
   // Menu events

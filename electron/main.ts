@@ -14,6 +14,7 @@ import { registerSkillsHandlers } from './ipc/skills.js';
 import { PluginManager } from './plugins/plugin-manager.js';
 import { registerPluginHandlers } from './ipc/plugins.js';
 import { registerMicRecorderHandlers, cleanupMicRecorder } from './audio/mic-recorder.js';
+import { registerLiveSttHandlers } from './audio/live-stt.js';
 import type { LegionConfig } from './config/schema.js';
 
 const LEGION_HOME = join(homedir(), '.legionio');
@@ -342,6 +343,7 @@ app.whenReady().then(() => {
   registerMemoryHandlers(ipcMain, LEGION_HOME, getConfig);
   registerSkillsHandlers(ipcMain, LEGION_HOME);
   registerMicRecorderHandlers(ipcMain);
+  registerLiveSttHandlers(ipcMain);
 
   // Plugin system
   const pluginManager = new PluginManager(

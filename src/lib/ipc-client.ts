@@ -101,6 +101,16 @@ type LegionAPI = {
     startMonitor: (deviceIds?: string[]) => Promise<Record<string, { ok?: boolean; error?: string }>>;
     getLevel: () => Promise<Record<string, number>>;
     stopMonitor: () => Promise<{ ok?: boolean }>;
+    // Live streaming STT
+    liveStart: (config: { subscriptionKey: string; region?: string; endpoint?: string; language: string; deviceId?: string }) => Promise<{ ok?: boolean; error?: string }>;
+    liveMicStart: (deviceId?: string) => Promise<{ ok?: boolean; error?: string }>;
+    liveMicDrain: () => Promise<string[]>;
+    liveMicStop: () => Promise<{ ok?: boolean }>;
+    liveAudio: (pcmBase64: string) => void;
+    liveStop: () => Promise<{ ok?: boolean }>;
+    onPartial: (callback: (text: string) => void) => () => void;
+    onFinal: (callback: (text: string) => void) => () => void;
+    onSttError: (callback: (error: string) => void) => () => void;
   };
   onMenuOpenSettings: (callback: () => void) => () => void;
   onFind: (callback: () => void) => () => void;

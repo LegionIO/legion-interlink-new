@@ -681,7 +681,6 @@ const DictationButton: FC = () => {
   const composerRuntime = useComposerRuntime();
   const { config, updateConfig } = useConfig();
   const [isListening, setIsListening] = useState(false);
-  const [isRecognizing, setIsRecognizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [devices, setDevices] = useState<Array<{ deviceId: string; label: string }>>([]);
@@ -782,25 +781,28 @@ const DictationButton: FC = () => {
       sessionRef.current = session;
       setIsListening(true);
 
+      // Track the committed text (finalized segments) vs partial preview
+      let baseText = composerRuntime.getState().text ?? '';
+
       session.onSpeech((result) => {
-        console.log('[DictationButton] onSpeech: "%s" isFinal=%s', result.transcript, result.isFinal);
-        if (result.isFinal && result.transcript) {
-          const state = composerRuntime.getState();
-          const currentText = state.text ?? '';
-          const separator = currentText && !currentText.endsWith(' ') ? ' ' : '';
-          composerRuntime.setText(currentText + separator + result.transcript);
+        const transcript = result.transcript?.trim();
+        if (!transcript) return;
+        console.log('[DictationButton] onSpeech: "%s" isFinal=%s', transcript, result.isFinal);
+        if (result.isFinal) {
+          baseText = baseText ? baseText.trimEnd() + ' ' + transcript : transcript;
+          composerRuntime.setText(baseText);
+        } else {
+          const preview = baseText ? baseText.trimEnd() + ' ' + transcript : transcript;
+          composerRuntime.setText(preview);
         }
       });
 
       const extSession = session as DictationAdapterTypes.Session & {
         onError?: (cb: (err: string) => void) => void;
-        onRecognizing?: (cb: (recognizing: boolean) => void) => void;
       };
-      extSession.onRecognizing?.((r) => setIsRecognizing(r));
       extSession.onError?.((err) => {
         console.error('[DictationButton] onError:', err);
         setIsListening(false);
-        setIsRecognizing(false);
         sessionRef.current = null;
         setError(err === 'not-allowed' ? 'Microphone permission denied'
           : err === 'no-speech' ? 'No speech detected — try again'
@@ -810,7 +812,6 @@ const DictationButton: FC = () => {
     } catch (err) {
       console.error('[DictationButton] Failed:', err);
       setIsListening(false);
-      setIsRecognizing(false);
       setError('Failed to start dictation');
     }
   }, [isListening, audioProvider, dictationConfig, azureConfig, composerRuntime, selectedDeviceId]);
@@ -822,7 +823,6 @@ const DictationButton: FC = () => {
     const interval = setInterval(() => {
       if (session.status.type === 'ended') {
         setIsListening(false);
-        setIsRecognizing(false);
         sessionRef.current = null;
         clearInterval(interval);
       }
@@ -838,14 +838,13 @@ const DictationButton: FC = () => {
     return () => clearTimeout(t);
   }, [error]);
 
-  const isActive = isListening || isRecognizing;
+  const isActive = isListening;
 
   return (
     <div ref={rootRef} className="relative flex items-center gap-1">
       {/* Split button: mic | caret */}
       <div className={`flex items-center rounded-xl border overflow-hidden transition-colors ${
-        isRecognizing ? 'border-primary/50 bg-primary/10'
-        : isListening ? 'border-destructive/50 bg-destructive/10'
+        isListening ? 'border-destructive/50 bg-destructive/10'
         : error ? 'border-yellow-500/50 bg-yellow-500/10'
         : 'border-border/70 bg-card/70'
       }`}>
@@ -856,13 +855,11 @@ const DictationButton: FC = () => {
           className={`flex h-8 w-7 items-center justify-center transition-colors ${
             isActive ? '' : 'hover:bg-muted/50'
           }`}
-          title={error ?? (isRecognizing ? 'Transcribing...' : isListening ? 'Stop dictation' : 'Start dictation')}
+          title={error ?? (isListening ? 'Stop dictation' : 'Start dictation')}
         >
-          {isRecognizing
-            ? <span className="h-3.5 w-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-            : isListening
-              ? <MicOffIcon className="h-3.5 w-3.5 text-destructive" />
-              : <MicIcon className={`h-3.5 w-3.5 ${error ? 'text-yellow-500' : 'text-muted-foreground'}`} />
+          {isListening
+            ? <MicOffIcon className="h-3.5 w-3.5 text-destructive" />
+            : <MicIcon className={`h-3.5 w-3.5 ${error ? 'text-yellow-500' : 'text-muted-foreground'}`} />
           }
         </button>
         {/* Caret dropdown trigger */}
@@ -880,8 +877,8 @@ const DictationButton: FC = () => {
 
       {/* Status label */}
       {isActive && (
-        <span className={`text-[10px] font-medium animate-pulse ${isRecognizing ? 'text-primary' : 'text-destructive/70'}`}>
-          {isRecognizing ? 'Transcribing...' : 'Listening...'}
+        <span className="text-[10px] font-medium animate-pulse text-destructive/70">
+          Listening...
         </span>
       )}
 

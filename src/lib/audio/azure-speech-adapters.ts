@@ -56,13 +56,6 @@ function buildTtsEndpoint(config: AzureTtsConfig): string {
   return `${base}/tts/cognitiveservices/v1`;
 }
 
-function buildSttEndpoint(config: AzureSttConfig): string {
-  const base = config.endpoint
-    ? config.endpoint.replace(/\/+$/, '')
-    : `https://${config.region ?? 'eastus'}.stt.speech.microsoft.com`;
-  return `${base}/stt/speech/recognition/conversation/cognitiveservices/v1?language=${encodeURIComponent(config.language)}&format=detailed`;
-}
-
 function buildSsml(voice: string, rate: number, text: string): string {
   // SSML prosody rate: percentage relative to 1x, e.g. 1.5 → "+50%", 0.5 → "-50%"
   const pctDelta = Math.round((rate - 1) * 100);
@@ -218,13 +211,19 @@ export function createAzureSpeechAdapter(config: AzureTtsConfig): SpeechSynthesi
   };
 }
 
-// ─── Azure STT Adapter (via main-process mic recording) ─────────────────────
+// ─── Azure STT Adapter (Live Streaming via Speech SDK) ──────────────────────
 //
-// Recording happens in a hidden BrowserWindow in the main process (which has
-// proper macOS microphone permissions). The renderer communicates via IPC:
-//   legion.mic.startRecording()  → starts mic capture
-//   legion.mic.stopRecording()   → stops capture, returns WAV as base64
-// The WAV is then sent to the Azure STT REST API from the renderer.
+// Uses the Azure Speech SDK running in the main process for real-time
+// streaming recognition. Audio is captured by the hidden mic-recorder window,
+// piped as PCM16 chunks to the SDK, and partial/final results are broadcast
+// to the renderer in real-time.
+//
+// Flow:
+//   1. Start mic capture in hidden window (stt:live-mic-start)
+//   2. Start SDK recognizer (stt:live-start)
+//   3. Poll audio chunks (stt:live-mic-drain) and push to SDK (stt:live-audio) at ~50ms
+//   4. Receive partial (stt:partial) and final (stt:final) transcripts via events
+//   5. On stop: tear down mic + SDK (stt:live-mic-stop, stt:live-stop)
 
 export function createAzureDictationAdapter(config: AzureSttConfig): DictationAdapter {
   return {
@@ -238,96 +237,99 @@ export function createAzureDictationAdapter(config: AzureSttConfig): DictationAd
       const speechEndListeners = new Set<(result: DictationAdapterTypes.Result) => void>();
       const speechListeners = new Set<(result: DictationAdapterTypes.Result) => void>();
       const errorListeners = new Set<(error: string) => void>();
-      const recognizingListeners = new Set<(recognizing: boolean) => void>();
 
       let stopRequested = false;
-      let recording = false;
+      let drainTimer: ReturnType<typeof setInterval> | null = null;
+      let unsubPartial: (() => void) | null = null;
+      let unsubFinal: (() => void) | null = null;
+      let unsubError: (() => void) | null = null;
+      // Track committed (final) text so partials can be shown as preview
+      let committedText = '';
 
-      const sttEndpoint = buildSttEndpoint(config);
-      console.log('[Azure STT] listen() — endpoint: %s, language: %s, continuous: %s', sttEndpoint, config.language, config.continuous);
+      console.log('[Azure STT] listen() — live mode, language=%s', config.language);
 
       const setEnded = (reason: 'stopped' | 'cancelled' | 'error', errorMsg?: string) => {
         if (status.type === 'ended') return;
         console.log('[Azure STT] setEnded: reason=%s, error=%s', reason, errorMsg ?? 'none');
         status = { type: 'ended', reason };
+        // Cleanup
+        if (drainTimer) { clearInterval(drainTimer); drainTimer = null; }
+        unsubPartial?.(); unsubFinal?.(); unsubError?.();
         if (errorMsg) {
           errorListeners.forEach((cb) => cb(errorMsg));
         }
       };
 
-      async function recognizeWav(wavBase64: string): Promise<string | null> {
-        console.log('[Azure STT] recognizeWav: %d base64 chars', wavBase64.length);
-        recognizingListeners.forEach((cb) => cb(true));
-        try {
-          // Decode base64 to binary
-          const binary = atob(wavBase64);
-          const bytes = new Uint8Array(binary.length);
-          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-          const wavBlob = new Blob([bytes], { type: 'audio/wav' });
-          console.log('[Azure STT] WAV blob: %d bytes', wavBlob.size);
-
-          const response = await fetch(sttEndpoint, {
-            method: 'POST',
-            headers: {
-              'Ocp-Apim-Subscription-Key': config.subscriptionKey,
-              'Content-Type': 'audio/wav; codecs=audio/pcm; samplerate=16000',
-              'Accept': 'application/json',
-            },
-            body: wavBlob,
-          });
-
-          console.log('[Azure STT] HTTP %d', response.status);
-          if (!response.ok) {
-            const body = await response.text().catch(() => '');
-            throw new Error(`Azure STT HTTP ${response.status}: ${body || response.statusText}`);
-          }
-
-          const result = await response.json();
-          console.log('[Azure STT] Result:', JSON.stringify(result));
-
-          if (result.RecognitionStatus === 'Success') {
-            return (result.NBest?.[0]?.Display ?? result.NBest?.[0]?.Lexical ?? result.DisplayText ?? '') || null;
-          }
-          if (result.RecognitionStatus === 'NoMatch') { console.log('[Azure STT] No match'); return null; }
-          if (result.RecognitionStatus === 'InitialSilenceTimeout') { console.log('[Azure STT] Silence'); return null; }
-          console.log('[Azure STT] Unhandled status:', result.RecognitionStatus);
-          return null;
-        } finally {
-          recognizingListeners.forEach((cb) => cb(false));
+      const teardown = async () => {
+        if (drainTimer) { clearInterval(drainTimer); drainTimer = null; }
+        const mic = window.legion?.mic;
+        if (mic) {
+          await mic.liveMicStop().catch(() => {});
+          await mic.liveStop().catch(() => {});
         }
-      }
+      };
 
-      // Start recording via main process
+      // Start everything
       (async () => {
         try {
           const mic = window.legion?.mic;
-          if (!mic) {
-            throw new Error('Mic recorder IPC not available');
-          }
+          if (!mic) throw new Error('Mic IPC not available');
 
-          // List available devices for debugging
-          const devices = await mic.listDevices();
-          console.log('[Azure STT] Available input devices:', JSON.stringify(devices));
+          // 1. Start mic capture in hidden window
+          console.log('[Azure STT] Starting mic capture, deviceId=%s', config.inputDeviceId ?? 'default');
+          const micResult = await mic.liveMicStart(config.inputDeviceId);
+          if (micResult.error) throw new Error(`Mic start failed: ${micResult.error}`);
 
-          console.log('[Azure STT] Starting main-process recording, deviceId=%s...', config.inputDeviceId ?? 'default');
-          const startResult = await mic.startRecording(config.inputDeviceId);
-          console.log('[Azure STT] Start result:', JSON.stringify(startResult));
-          if (startResult.error) {
-            throw new Error(startResult.error);
-          }
-          if (startResult.silent) {
-            console.warn('[Azure STT] ⚠️ Mic reports SILENT — recording may not capture audio');
-          }
+          // 2. Start SDK recognizer in main process
+          console.log('[Azure STT] Starting SDK recognizer...');
+          const sttResult = await mic.liveStart({
+            subscriptionKey: config.subscriptionKey,
+            region: config.region,
+            endpoint: config.endpoint,
+            language: config.language,
+          });
+          if (sttResult.error) throw new Error(`SDK start failed: ${sttResult.error}`);
 
-          recording = true;
+          // 3. Subscribe to partial/final/error events from main process
+          unsubPartial = mic.onPartial((text) => {
+            // Partial = in-progress hypothesis. Send as non-final for live preview.
+            speechListeners.forEach((cb) => cb({ transcript: text, isFinal: false }));
+          });
+
+          unsubFinal = mic.onFinal((text) => {
+            // Final = committed segment. Append to committed text.
+            console.log('[Azure STT] Final segment: "%s"', text);
+            committedText += (committedText ? ' ' : '') + text;
+            speechListeners.forEach((cb) => cb({ transcript: committedText, isFinal: true }));
+            speechEndListeners.forEach((cb) => cb({ transcript: committedText, isFinal: true }));
+          });
+
+          unsubError = mic.onSttError((err) => {
+            console.error('[Azure STT] SDK error:', err);
+            teardown();
+            setEnded('error', err);
+          });
+
+          // 4. Start audio drain pump: poll PCM chunks from hidden window → push to SDK
+          drainTimer = setInterval(async () => {
+            if (stopRequested) return;
+            try {
+              const chunks = await mic.liveMicDrain();
+              for (const chunk of chunks) {
+                mic.liveAudio(chunk);
+              }
+            } catch { /* ignore */ }
+          }, 50);
+
           status = { type: 'running' };
           speechStartListeners.forEach((cb) => cb());
-          console.log('[Azure STT] Recording active');
+          console.log('[Azure STT] Live STT active');
 
         } catch (err) {
-          const errorMsg = err instanceof Error ? err.message : String(err);
-          console.error('[Azure STT] Start error:', errorMsg);
-          setEnded('error', errorMsg);
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error('[Azure STT] Start error:', msg);
+          await teardown();
+          setEnded('error', msg);
         }
       })();
 
@@ -335,65 +337,17 @@ export function createAzureDictationAdapter(config: AzureSttConfig): DictationAd
         get status() { return status; },
 
         async stop() {
-          console.log('[Azure STT] stop() called, recording=%s', recording);
+          console.log('[Azure STT] stop()');
           if (stopRequested) return;
           stopRequested = true;
-
-          const mic = window.legion?.mic;
-          if (!mic || !recording) {
-            setEnded('stopped');
-            return;
-          }
-
-          try {
-            recording = false;
-            console.log('[Azure STT] Stopping main-process recording...');
-            const result = await mic.stopRecording();
-
-            if (result.error) {
-              console.error('[Azure STT] Stop error:', result.error);
-              setEnded('error', result.error);
-              return;
-            }
-
-            if (!result.wavBase64) {
-              console.log('[Azure STT] No audio data returned');
-              setEnded('stopped');
-              return;
-            }
-
-            console.log('[Azure STT] Got WAV: %d b64 chars, %.2fs, amplitude=%.6f',
-              result.wavBase64.length, result.durationSec ?? 0, result.maxAmplitude ?? 0);
-
-            // Check if recording was silent
-            if ((result.maxAmplitude ?? 0) < 0.001) {
-              console.warn('[Azure STT] ⚠️ Recording was SILENT (amplitude %.6f). Skipping Azure API call.', result.maxAmplitude);
-              console.warn('[Azure STT] Check: System Settings > Sound > Input — is the correct mic selected?');
-              setEnded('stopped');
-              return;
-            }
-
-            // Send to Azure for recognition
-            const transcript = await recognizeWav(result.wavBase64);
-            if (transcript) {
-              console.log('[Azure STT] TRANSCRIPT: "%s"', transcript);
-              speechListeners.forEach((cb) => cb({ transcript, isFinal: true }));
-              speechEndListeners.forEach((cb) => cb({ transcript, isFinal: true }));
-            } else {
-              console.log('[Azure STT] No transcript from audio (speech not recognized)');
-            }
-          } catch (err) {
-            console.error('[Azure STT] Recognition error:', err);
-          }
-
+          await teardown();
           setEnded('stopped');
         },
 
         cancel() {
           console.log('[Azure STT] cancel()');
           stopRequested = true;
-          recording = false;
-          window.legion?.mic?.cancelRecording();
+          teardown();
           setEnded('cancelled');
         },
 
@@ -413,13 +367,8 @@ export function createAzureDictationAdapter(config: AzureSttConfig): DictationAd
           errorListeners.add(callback);
           return () => errorListeners.delete(callback);
         },
-        onRecognizing(callback: (recognizing: boolean) => void) {
-          recognizingListeners.add(callback);
-          return () => recognizingListeners.delete(callback);
-        },
       } as DictationAdapterTypes.Session & {
         onError: (callback: (error: string) => void) => Unsubscribe;
-        onRecognizing: (callback: (recognizing: boolean) => void) => Unsubscribe;
       };
     },
   };

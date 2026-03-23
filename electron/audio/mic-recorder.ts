@@ -15,17 +15,14 @@ import { tmpdir } from 'os';
 
 let recorderWindow: BrowserWindow | null = null;
 let isRecording = false;
-let recorderHtmlPath: string | null = null;
 
 function getRecorderHtmlPath(): string {
-  if (recorderHtmlPath) return recorderHtmlPath;
-
+  // Always rewrite the HTML to ensure it's up-to-date with the current code
   const dir = join(tmpdir(), 'legion-aithena-mic');
   mkdirSync(dir, { recursive: true });
-  recorderHtmlPath = join(dir, 'recorder.html');
-  writeFileSync(recorderHtmlPath, RECORDER_HTML, 'utf-8');
-  console.log('[MicRecorder] Wrote recorder HTML to:', recorderHtmlPath);
-  return recorderHtmlPath;
+  const htmlPath = join(dir, 'recorder.html');
+  writeFileSync(htmlPath, RECORDER_HTML, 'utf-8');
+  return htmlPath;
 }
 
 const RECORDER_HTML = `<!DOCTYPE html>
@@ -220,6 +217,72 @@ window._mic = {
     return levels;
   },
 
+  // Live PCM streaming for Speech SDK (sends PCM16 chunks to main process via IPC)
+  _liveCtx: null,
+  _liveSource: null,
+  _liveProcessor: null,
+  _liveStream: null,
+
+  async startLiveStream(deviceId) {
+    this.stopLiveStream();
+    try {
+      const constraints = { audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } };
+      if (deviceId) constraints.audio.deviceId = { exact: deviceId };
+      this._liveStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      // Create AudioContext at 16kHz for direct PCM output (SDK expects 16kHz)
+      this._liveCtx = new AudioContext({ sampleRate: 16000 });
+      this._liveSource = this._liveCtx.createMediaStreamSource(this._liveStream);
+      const bufferSize = 4096;
+      this._liveProcessor = this._liveCtx.createScriptProcessor(bufferSize, 1, 1);
+
+      this._liveProcessor.onaudioprocess = (e) => {
+        const float32 = e.inputBuffer.getChannelData(0);
+        // Convert Float32 to PCM16
+        const pcm = new Int16Array(float32.length);
+        for (let i = 0; i < float32.length; i++) {
+          const s = Math.max(-1, Math.min(1, float32[i]));
+          pcm[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        // Send to main process as base64
+        const bytes = new Uint8Array(pcm.buffer);
+        let bin = '';
+        for (let j = 0; j < bytes.length; j++) bin += String.fromCharCode(bytes[j]);
+        const b64 = btoa(bin);
+        // Use require('electron').ipcRenderer since we have nodeIntegration:false
+        // Actually we don't have ipcRenderer here — we need a different way to send to main
+        // We'll store chunks and let main poll them
+        if (!this._liveChunks) this._liveChunks = [];
+        this._liveChunks.push(b64);
+      };
+
+      this._liveSource.connect(this._liveProcessor);
+      this._liveProcessor.connect(this._liveCtx.destination);
+      this._liveChunks = [];
+      console.log('[MicRecorder] Live stream started (16kHz PCM)');
+      return { ok: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  },
+
+  _liveChunks: [],
+
+  drainLiveChunks() {
+    const chunks = this._liveChunks || [];
+    this._liveChunks = [];
+    return chunks;
+  },
+
+  stopLiveStream() {
+    if (this._liveProcessor) { try { this._liveProcessor.disconnect(); } catch {} this._liveProcessor = null; }
+    if (this._liveSource) { try { this._liveSource.disconnect(); } catch {} this._liveSource = null; }
+    if (this._liveCtx) { try { this._liveCtx.close(); } catch {} this._liveCtx = null; }
+    if (this._liveStream) { this._liveStream.getTracks().forEach(t => t.stop()); this._liveStream = null; }
+    this._liveChunks = [];
+    console.log('[MicRecorder] Live stream stopped');
+  },
+
   stopMonitorAll() {
     for (const mon of Object.values(this._monitors)) {
       if (!mon) continue;
@@ -248,6 +311,7 @@ async function ensureRecorderWindow(): Promise<BrowserWindow> {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: false,
+      webSecurity: false, // Allow getUserMedia from file:// URLs
     },
   });
 
@@ -259,6 +323,16 @@ async function ensureRecorderWindow(): Promise<BrowserWindow> {
   });
 
   await recorderWindow.loadFile(htmlPath);
+
+  // Forward hidden window console messages to main process console
+  recorderWindow.webContents.on('console-message', (event) => {
+    const { level, message } = event as unknown as { level: number; message: string };
+    const prefix = '[MicRecorder:window]';
+    if (level <= 1) console.log(prefix, message);
+    else if (level === 2) console.warn(prefix, message);
+    else console.error(prefix, message);
+  });
+
   console.log('[MicRecorder] Hidden window loaded');
 
   return recorderWindow;
@@ -356,6 +430,35 @@ export function registerMicRecorderHandlers(ipc: IpcMain): void {
     try {
       if (recorderWindow && !recorderWindow.isDestroyed()) {
         await recorderWindow.webContents.executeJavaScript('window._mic.stopMonitorAll()');
+      }
+    } catch { /* ignore */ }
+    return { ok: true };
+  });
+
+  // Live PCM streaming for Speech SDK
+  ipc.handle('stt:live-mic-start', async (_event, deviceId?: string) => {
+    try {
+      const win = await ensureRecorderWindow();
+      const escaped = deviceId ? JSON.stringify(deviceId) : 'null';
+      return await win.webContents.executeJavaScript(`window._mic.startLiveStream(${escaped})`);
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  ipc.handle('stt:live-mic-drain', async () => {
+    try {
+      if (!recorderWindow || recorderWindow.isDestroyed()) return [];
+      return await recorderWindow.webContents.executeJavaScript('window._mic.drainLiveChunks()');
+    } catch {
+      return [];
+    }
+  });
+
+  ipc.handle('stt:live-mic-stop', async () => {
+    try {
+      if (recorderWindow && !recorderWindow.isDestroyed()) {
+        await recorderWindow.webContents.executeJavaScript('window._mic.stopLiveStream()');
       }
     } catch { /* ignore */ }
     return { ok: true };
