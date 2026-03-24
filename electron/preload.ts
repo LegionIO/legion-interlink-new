@@ -128,6 +128,8 @@ const legionAPI = {
   memory: {
     clear: (options: { working?: boolean; observational?: boolean; semantic?: boolean; all?: boolean }) =>
       ipcRenderer.invoke('memory:clear', options) as Promise<{ success?: boolean; cleared?: string[]; error?: string }>,
+    testEmbedding: () =>
+      ipcRenderer.invoke('memory:test-embedding') as Promise<{ ok?: boolean; model?: string; dimensions?: number; error?: string }>,
   },
 
   // MCP servers

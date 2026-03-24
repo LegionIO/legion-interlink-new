@@ -1,7 +1,7 @@
 import type { IpcMain } from 'electron';
 import { join } from 'path';
 import type { LegionConfig } from '../config/schema.js';
-import { getSharedMemory, getResourceId } from '../agent/memory.js';
+import { getSharedMemory, getResourceId, testEmbeddingConnection } from '../agent/memory.js';
 
 export function registerMemoryHandlers(
   ipcMain: IpcMain,
@@ -93,5 +93,10 @@ export function registerMemoryHandlers(
     } catch (error) {
       return { error: error instanceof Error ? error.message : String(error) };
     }
+  });
+
+  ipcMain.handle('memory:test-embedding', async () => {
+    const config = getConfig();
+    return testEmbeddingConnection(config);
   });
 }

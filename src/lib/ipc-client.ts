@@ -89,6 +89,8 @@ type LegionAPI = {
   memory: {
     clear: (options: { working?: boolean; observational?: boolean; semantic?: boolean; all?: boolean }) =>
       Promise<{ success?: boolean; cleared?: string[]; error?: string }>;
+    testEmbedding: () =>
+      Promise<{ ok?: boolean; model?: string; dimensions?: number; error?: string }>;
   };
   mcp: {
     testConnection: (server: { name: string; url?: string; command?: string; args?: string[]; env?: Record<string, string> }) =>

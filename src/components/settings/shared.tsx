@@ -1,4 +1,4 @@
-import type { FC } from 'react';
+import { useState, useEffect, useRef, type FC } from 'react';
 
 export type SettingsProps = {
   config: Record<string, unknown>;
@@ -51,3 +51,54 @@ export const SliderField: FC<{ label: string; value: number; min: number; max: n
     />
   </div>
 );
+
+/**
+ * Text input that holds local state while the user types and only
+ * flushes to the parent onChange on blur (or after a 600ms debounce).
+ * Prevents cursor-jump issues caused by async config round-trips.
+ */
+export const TextField: FC<{
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  mono?: boolean;
+  hint?: string;
+}> = ({ label, value, onChange, placeholder, mono, hint }) => {
+  const [local, setLocal] = useState(value);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const focusedRef = useRef(false);
+
+  // Sync from parent when not focused (e.g. config reload from another source)
+  useEffect(() => {
+    if (!focusedRef.current) setLocal(value);
+  }, [value]);
+
+  const flush = (v: string) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
+    if (v !== value) onChange(v);
+  };
+
+  const handleChange = (v: string) => {
+    setLocal(v);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => flush(v), 600);
+  };
+
+  return (
+    <div>
+      <label className="text-[10px] text-muted-foreground block mb-0.5">{label}</label>
+      <input
+        type="text"
+        className={`w-full rounded-xl border border-border/70 bg-card/80 px-3 py-2 text-xs outline-none${mono ? ' font-mono' : ''}`}
+        value={local}
+        onChange={(e) => handleChange(e.target.value)}
+        onFocus={() => { focusedRef.current = true; }}
+        onBlur={() => { focusedRef.current = false; flush(local); }}
+        placeholder={placeholder}
+      />
+      {hint && <span className="text-[10px] text-muted-foreground/60 mt-0.5 block">{hint}</span>}
+    </div>
+  );
+};

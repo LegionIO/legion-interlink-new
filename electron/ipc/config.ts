@@ -42,7 +42,15 @@ function getDefaultConfig() {
       enabled: true,
       workingMemory: { enabled: true, scope: 'resource' as const },
       observationalMemory: { enabled: true, scope: 'resource' as const },
-      semanticRecall: { enabled: true, topK: 4, scope: 'resource' as const },
+      semanticRecall: {
+        enabled: true,
+        topK: 4,
+        scope: 'resource' as const,
+        embeddingProvider: {
+          type: 'azure' as const,
+          model: 'text-embedding-3-small',
+        },
+      },
       lastMessages: 10,
     },
     compaction: {

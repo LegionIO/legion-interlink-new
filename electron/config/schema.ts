@@ -31,6 +31,24 @@ const modelsConfigSchema = z.object({
   catalog: z.array(modelEntrySchema),
 });
 
+const embeddingProviderSchema = z.object({
+  type: z.enum(['openai', 'azure', 'custom']),
+  model: z.string().optional(),           // e.g. "text-embedding-3-small"
+  openai: z.object({
+    apiKey: z.string().optional(),
+  }).optional(),
+  azure: z.object({
+    endpoint: z.string().optional(),      // e.g. "https://myresource.openai.azure.com"
+    apiKey: z.string().optional(),
+    deploymentName: z.string().optional(), // e.g. "text-embedding-3-small"
+    apiVersion: z.string().optional(),     // e.g. "2024-02-01"
+  }).optional(),
+  custom: z.object({
+    baseUrl: z.string().optional(),       // Any OpenAI-compatible embeddings endpoint
+    apiKey: z.string().optional(),
+  }).optional(),
+});
+
 const memoryConfigSchema = z.object({
   enabled: z.boolean(),
   workingMemory: z.object({
@@ -47,7 +65,8 @@ const memoryConfigSchema = z.object({
     enabled: z.boolean(),
     topK: z.number().positive(),
     scope: z.enum(['thread', 'resource']),
-    embeddingDeploymentName: z.string().optional(),
+    embeddingDeploymentName: z.string().optional(), // legacy — kept for backward compat
+    embeddingProvider: embeddingProviderSchema.optional(),
   }),
   lastMessages: z.number().positive(),
 });
