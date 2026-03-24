@@ -11,6 +11,8 @@ import { registerMemoryHandlers } from './ipc/memory.js';
 import { rebuildMcpTools } from './tools/mcp-client.js';
 import { loadSkillsAsTools } from './tools/skill-loader.js';
 import { registerSkillsHandlers } from './ipc/skills.js';
+import { registerDaemonSettingsHandlers } from './ipc/daemon-settings.js';
+import { registerDaemonApiHandlers } from './ipc/daemon-api.js';
 import { PluginManager } from './plugins/plugin-manager.js';
 import { registerPluginHandlers } from './ipc/plugins.js';
 import { registerMicRecorderHandlers, cleanupMicRecorder } from './audio/mic-recorder.js';
@@ -348,6 +350,8 @@ app.whenReady().then(() => {
   registerMcpHandlers(ipcMain);
   registerMemoryHandlers(ipcMain, LEGION_HOME, getConfig);
   registerSkillsHandlers(ipcMain, LEGION_HOME);
+  registerDaemonSettingsHandlers(ipcMain, LEGION_HOME, getConfig);
+  registerDaemonApiHandlers(ipcMain, LEGION_HOME, getConfig, () => BrowserWindow.getAllWindows());
   registerMicRecorderHandlers(ipcMain);
   registerLiveSttHandlers(ipcMain);
 

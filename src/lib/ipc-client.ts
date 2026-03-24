@@ -1,6 +1,8 @@
 // Type-safe wrapper for the Electron IPC bridge exposed via preload
 // window.legion is set by electron/preload.ts via contextBridge
 
+type DaemonResult<T = unknown> = { ok: boolean; data?: T; error?: string };
+
 type LegionAPI = {
   config: {
     get: () => Promise<unknown>;
@@ -27,6 +29,62 @@ type LegionAPI = {
     getActiveId: () => Promise<string | null>;
     setActiveId: (id: string) => Promise<unknown>;
     onChanged: (callback: (store: unknown) => void) => () => void;
+  };
+  daemon: {
+    settings: () => Promise<{ ok: boolean; settings?: Record<string, unknown>; error?: string }>;
+    settingsUpdate: (key: string, value: unknown) => Promise<{ ok: boolean; error?: string }>;
+    catalog: () => Promise<DaemonResult>;
+    extensions: () => Promise<DaemonResult>;
+    extension: (id: string) => Promise<DaemonResult>;
+    extensionRunners: (id: string) => Promise<DaemonResult>;
+    tasks: (filters?: Record<string, string>) => Promise<DaemonResult>;
+    task: (id: string) => Promise<DaemonResult>;
+    taskLogs: (id: string) => Promise<DaemonResult>;
+    taskCreate: (body: unknown) => Promise<DaemonResult>;
+    taskDelete: (id: string) => Promise<DaemonResult>;
+    workers: (filters?: Record<string, string>) => Promise<DaemonResult>;
+    worker: (id: string) => Promise<DaemonResult>;
+    workerHealth: (id: string) => Promise<DaemonResult>;
+    workerCosts: (id: string) => Promise<DaemonResult>;
+    workerLifecycle: (id: string, body: unknown) => Promise<DaemonResult>;
+    schedules: () => Promise<DaemonResult>;
+    schedule: (id: string) => Promise<DaemonResult>;
+    scheduleCreate: (body: unknown) => Promise<DaemonResult>;
+    scheduleUpdate: (id: string, body: unknown) => Promise<DaemonResult>;
+    scheduleDelete: (id: string) => Promise<DaemonResult>;
+    audit: (filters?: Record<string, string>) => Promise<DaemonResult>;
+    auditVerify: () => Promise<DaemonResult>;
+    transport: () => Promise<DaemonResult>;
+    transportExchanges: () => Promise<DaemonResult>;
+    transportQueues: () => Promise<DaemonResult>;
+    transportPublish: (body: unknown) => Promise<DaemonResult>;
+    prompts: () => Promise<DaemonResult>;
+    prompt: (name: string) => Promise<DaemonResult>;
+    promptRun: (name: string, body: unknown) => Promise<DaemonResult>;
+    webhooks: () => Promise<DaemonResult>;
+    webhookCreate: (body: unknown) => Promise<DaemonResult>;
+    webhookDelete: (id: string) => Promise<DaemonResult>;
+    tenants: () => Promise<DaemonResult>;
+    tenant: (id: string) => Promise<DaemonResult>;
+    capacity: () => Promise<DaemonResult>;
+    capacityForecast: (params?: Record<string, string>) => Promise<DaemonResult>;
+    governanceApprovals: (filters?: Record<string, string>) => Promise<DaemonResult>;
+    governanceApprove: (id: string, body: unknown) => Promise<DaemonResult>;
+    governanceReject: (id: string, body: unknown) => Promise<DaemonResult>;
+    rbacRoles: () => Promise<DaemonResult>;
+    rbacAssignments: (filters?: Record<string, string>) => Promise<DaemonResult>;
+    rbacCheck: (body: unknown) => Promise<DaemonResult>;
+    nodes: () => Promise<DaemonResult>;
+    eventsSubscribe: () => Promise<DaemonResult>;
+    eventsUnsubscribe: () => Promise<DaemonResult>;
+    eventsRecent: (count?: number) => Promise<DaemonResult>;
+    onEvent: (callback: (event: unknown) => void) => () => void;
+    subAgentCreate: (body: { message: string; model?: string; parent_conversation_id?: string }) => Promise<DaemonResult>;
+    subAgentStatus: (taskId: string) => Promise<DaemonResult>;
+    health: () => Promise<DaemonResult>;
+    ready: () => Promise<DaemonResult>;
+    metrics: () => Promise<DaemonResult>;
+    doctor: () => Promise<DaemonResult>;
   };
   memory: {
     clear: (options: { working?: boolean; observational?: boolean; semantic?: boolean; all?: boolean }) =>

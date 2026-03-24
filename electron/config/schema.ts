@@ -132,6 +132,7 @@ const legionRuntimeSchema = z.object({
   configDir: z.string(),
   daemonUrl: z.string(),
   rubyPath: z.string(),
+  daemonStreaming: z.boolean().optional(),
 });
 
 const runtimeConfigSchema = z.object({

@@ -242,13 +242,62 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
     (async () => {
       if (backend !== 'mastra') {
         try {
+          let daemonMessages = messages;
+
+          if (backend === 'legion-daemon' && config.compaction?.conversation?.enabled) {
+            const chatMessages = messages as Array<{ role: string; content: unknown; id?: string }>;
+            const check = shouldCompact(
+              chatMessages as Parameters<typeof shouldCompact>[0],
+              modelEntry.modelConfig.modelName,
+              config.compaction.conversation.triggerPercent,
+              modelEntry.modelConfig.maxInputTokens,
+            );
+
+            if (check.shouldCompact) {
+              broadcastStreamEvent({
+                conversationId,
+                type: 'context-usage',
+                data: {
+                  usedTokens: check.usedTokens,
+                  contextWindowTokens: check.contextWindowTokens,
+                  phase: 'pre-compaction',
+                },
+              });
+
+              const compactionResult = await compactConversationPrefix(
+                chatMessages as Parameters<typeof compactConversationPrefix>[0],
+                modelEntry.modelConfig,
+                config.compaction.conversation,
+              );
+
+              if (!controller.signal.aborted && compactionResult.compactedMessages) {
+                broadcastStreamEvent({
+                  conversationId,
+                  type: 'compaction',
+                  data: {
+                    compactionId: compactionResult.compactionId,
+                    summaryText: compactionResult.summaryText,
+                    compactedMessageIds: compactionResult.compactedMessageIds,
+                  },
+                });
+                daemonMessages = compactionResult.compactedMessages;
+              }
+            }
+          }
+
+          if (controller.signal.aborted) {
+            broadcastStreamEvent({ conversationId, type: 'done' });
+            return;
+          }
+
           const stream = streamLegionAgent({
             conversationId,
-            messages,
+            messages: daemonMessages,
             modelConfig: modelEntry.modelConfig,
             config,
             legionHome,
             abortSignal: controller.signal,
+            reasoningEffort,
           });
 
           for await (const event of stream) {

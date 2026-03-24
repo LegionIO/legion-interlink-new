@@ -13,14 +13,33 @@ import { McpSettings } from './McpSettings';
 import { SkillSettings } from './SkillSettings';
 import { AudioSettings } from './AudioSettings';
 import { RealtimeSettings } from './RealtimeSettings';
+import { DaemonSettings } from './DaemonSettings';
+import { DaemonExtensions } from './DaemonExtensions';
+import { DaemonTasks } from './DaemonTasks';
+import { DaemonWorkers } from './DaemonWorkers';
+import { DaemonSchedules } from './DaemonSchedules';
+import { DaemonEvents } from './DaemonEvents';
+import { DaemonAudit } from './DaemonAudit';
+import { DaemonPrompts } from './DaemonPrompts';
+import { DaemonWebhooks } from './DaemonWebhooks';
+import { DaemonTenants } from './DaemonTenants';
+import { DaemonCapacity } from './DaemonCapacity';
+import { DaemonGovernance } from './DaemonGovernance';
+import { DaemonMetrics } from './DaemonMetrics';
+import { DaemonDoctor } from './DaemonDoctor';
+import { DaemonTopology } from './DaemonTopology';
 import type { SettingsProps } from './shared';
 import { usePluginSettingsSections } from '@/components/plugins/PluginSettingsSections';
 import { getPluginComponent } from '@/components/plugins/PluginComponentRegistry';
 import { usePlugins } from '@/providers/PluginProvider';
 
-type SettingsSection = 'models' | 'profiles' | 'memory' | 'compaction' | 'tools' | 'skills' | 'sub-agents' | 'system-prompt' | 'audio' | 'realtime' | 'advanced' | 'mcp';
+type SettingsSection =
+  | 'models' | 'profiles' | 'memory' | 'compaction' | 'tools' | 'skills' | 'sub-agents' | 'system-prompt'
+  | 'audio' | 'realtime' | 'advanced' | 'mcp'
+  | 'daemon' | 'extensions' | 'tasks' | 'workers' | 'schedules' | 'events' | 'audit'
+  | 'prompts' | 'webhooks' | 'tenants' | 'capacity' | 'governance' | 'metrics' | 'doctor' | 'topology';
 
-const sections: Array<{ key: SettingsSection; label: string }> = [
+const sections: Array<{ key: SettingsSection; label: string; group?: string }> = [
   { key: 'models', label: 'Models' },
   { key: 'profiles', label: 'Profiles' },
   { key: 'memory', label: 'Memory' },
@@ -33,6 +52,21 @@ const sections: Array<{ key: SettingsSection; label: string }> = [
   { key: 'audio', label: 'Audio' },
   { key: 'realtime', label: 'Realtime Audio' },
   { key: 'advanced', label: 'Advanced' },
+  { key: 'daemon', label: 'Config', group: 'Legion Daemon' },
+  { key: 'extensions', label: 'Extensions', group: 'Legion Daemon' },
+  { key: 'tasks', label: 'Tasks', group: 'Legion Daemon' },
+  { key: 'workers', label: 'Workers', group: 'Legion Daemon' },
+  { key: 'schedules', label: 'Schedules', group: 'Legion Daemon' },
+  { key: 'events', label: 'Events', group: 'Legion Daemon' },
+  { key: 'audit', label: 'Audit', group: 'Legion Daemon' },
+  { key: 'prompts', label: 'Prompts', group: 'Legion Daemon' },
+  { key: 'webhooks', label: 'Webhooks', group: 'Legion Daemon' },
+  { key: 'tenants', label: 'Tenants', group: 'Legion Daemon' },
+  { key: 'capacity', label: 'Capacity', group: 'Legion Daemon' },
+  { key: 'governance', label: 'Governance', group: 'Legion Daemon' },
+  { key: 'metrics', label: 'Metrics', group: 'Legion Daemon' },
+  { key: 'doctor', label: 'Diagnostics', group: 'Legion Daemon' },
+  { key: 'topology', label: 'Topology', group: 'Legion Daemon' },
 ];
 
 export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
@@ -42,7 +76,7 @@ export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
   const { setPluginConfig, sendAction } = usePlugins();
 
   // Merge built-in + plugin sections (plugins always shown after Advanced)
-  const builtInSections: Array<{ key: string; label: string }> = sections;
+  const builtInSections: Array<{ key: string; label: string; group?: string }> = sections;
   const sortedPluginSections = [...pluginSections].sort((a, b) => a.priority - b.priority);
   const allSections: Array<{ key: string; label: string }> = [
     ...builtInSections,
@@ -68,18 +102,24 @@ export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
             <XIcon className="h-4 w-4" />
           </button>
         </div>
-        {builtInSections.map((s) => (
-          <button
-            key={s.key}
-            type="button"
-            onClick={() => setActiveSection(s.key)}
-            className={`flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-xs font-medium transition-all ${
-              activeSection === s.key ? 'bg-primary text-primary-foreground shadow-[0_12px_28px_rgba(95,87,196,0.22)]' : 'hover:bg-muted/80 text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {s.label}
-            <ChevronRightIcon className="ml-auto h-3 w-3 opacity-50" />
-          </button>
+        {builtInSections.map((s, i) => (
+          <div key={s.key}>
+            {s.group && (i === 0 || builtInSections[i - 1].group !== s.group) && (
+              <div className="mt-3 mb-1 px-2">
+                <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">{s.group}</span>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setActiveSection(s.key)}
+              className={`flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-xs font-medium transition-all ${
+                activeSection === s.key ? 'bg-primary text-primary-foreground shadow-[0_12px_28px_rgba(95,87,196,0.22)]' : 'hover:bg-muted/80 text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {s.label}
+              <ChevronRightIcon className="ml-auto h-3 w-3 opacity-50" />
+            </button>
+          </div>
         ))}
         {hasPluginSections && (
           <>
@@ -119,6 +159,21 @@ export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
         {activeSection === 'audio' && <AudioSettings config={config} updateConfig={updateConfig} />}
         {activeSection === 'realtime' && <RealtimeSettings config={config} updateConfig={updateConfig} />}
         {activeSection === 'advanced' && <AdvancedSettings config={config} updateConfig={updateConfig} />}
+        {activeSection === 'daemon' && <DaemonSettings config={config} updateConfig={updateConfig} />}
+        {activeSection === 'extensions' && <DaemonExtensions config={config} updateConfig={updateConfig} />}
+        {activeSection === 'tasks' && <DaemonTasks config={config} updateConfig={updateConfig} />}
+        {activeSection === 'workers' && <DaemonWorkers config={config} updateConfig={updateConfig} />}
+        {activeSection === 'schedules' && <DaemonSchedules config={config} updateConfig={updateConfig} />}
+        {activeSection === 'events' && <DaemonEvents config={config} updateConfig={updateConfig} />}
+        {activeSection === 'audit' && <DaemonAudit config={config} updateConfig={updateConfig} />}
+        {activeSection === 'prompts' && <DaemonPrompts config={config} updateConfig={updateConfig} />}
+        {activeSection === 'webhooks' && <DaemonWebhooks config={config} updateConfig={updateConfig} />}
+        {activeSection === 'tenants' && <DaemonTenants config={config} updateConfig={updateConfig} />}
+        {activeSection === 'capacity' && <DaemonCapacity config={config} updateConfig={updateConfig} />}
+        {activeSection === 'governance' && <DaemonGovernance config={config} updateConfig={updateConfig} />}
+        {activeSection === 'metrics' && <DaemonMetrics config={config} updateConfig={updateConfig} />}
+        {activeSection === 'doctor' && <DaemonDoctor config={config} updateConfig={updateConfig} />}
+        {activeSection === 'topology' && <DaemonTopology config={config} updateConfig={updateConfig} />}
         {/* Plugin settings sections */}
         {pluginSections.map((ps) => {
           if (activeSection !== ps.key) return null;

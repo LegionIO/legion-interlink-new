@@ -55,6 +55,7 @@ type StreamLegionOptions = {
   config: LegionConfig;
   legionHome: string;
   abortSignal?: AbortSignal;
+  reasoningEffort?: string;
 };
 
 type RuntimeConfig = NonNullable<LegionConfig['runtime']>;
@@ -436,13 +437,6 @@ async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator
     return;
   }
 
-  let readyBody: unknown = null;
-  try {
-    readyBody = await readyResponse.json();
-  } catch {
-    readyBody = null;
-  }
-
   if (!readyResponse.ok) {
     yield {
       conversationId: options.conversationId,
@@ -453,14 +447,58 @@ async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator
     return;
   }
 
-  const message = buildDaemonPrompt(options.messages);
-  if (!message) {
+  const daemonPayload = buildDaemonPayload(options.messages);
+  if (!daemonPayload.message) {
     yield {
       conversationId: options.conversationId,
       type: 'error',
       error: 'No user message was provided to Legion.',
     };
     yield { conversationId: options.conversationId, type: 'done' };
+    return;
+  }
+
+  const requestBody: Record<string, unknown> = {
+    message: daemonPayload.message,
+    ...(daemonPayload.context ? { context: daemonPayload.context } : {}),
+    model: options.modelConfig.modelName,
+    provider: toLegionProvider(options.modelConfig.provider),
+  };
+  if (options.reasoningEffort) {
+    requestBody.reasoning_effort = options.reasoningEffort;
+  }
+
+  const useStreaming = options.config.runtime?.legion?.daemonStreaming !== false;
+  if (useStreaming) {
+    let streamResponse: Response;
+    try {
+      streamResponse = await fetch(chatUrl, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'accept': 'text/event-stream',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+        body: JSON.stringify(requestBody),
+        signal: options.abortSignal,
+      });
+    } catch (error) {
+      yield {
+        conversationId: options.conversationId,
+        type: 'error',
+        error: `Daemon streaming request failed: ${error instanceof Error ? error.message : String(error)}`,
+      };
+      yield { conversationId: options.conversationId, type: 'done' };
+      return;
+    }
+
+    const contentType = streamResponse.headers.get('content-type') ?? '';
+    if (streamResponse.ok && contentType.includes('text/event-stream') && streamResponse.body) {
+      yield* consumeDaemonSSE(options.conversationId, streamResponse.body, options.abortSignal);
+      return;
+    }
+
+    yield* handleDaemonSyncResponse(options.conversationId, streamResponse, chatUrl, authToken, options.abortSignal, daemonUrl);
     return;
   }
 
@@ -471,14 +509,115 @@ async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator
       'x-legion-sync': 'true',
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     },
-    body: JSON.stringify({
-      message,
-      model: options.modelConfig.modelName,
-      provider: toLegionProvider(options.modelConfig.provider),
-    }),
+    body: JSON.stringify(requestBody),
     signal: options.abortSignal,
   });
 
+  yield* handleDaemonSyncResponse(options.conversationId, response, chatUrl, authToken, options.abortSignal, daemonUrl);
+}
+
+async function* consumeDaemonSSE(
+  conversationId: string,
+  body: ReadableStream<Uint8Array>,
+  abortSignal?: AbortSignal,
+): AsyncGenerator<StreamEvent> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let emittedAny = false;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const raw = line.slice(5).trim();
+        if (!raw || raw === '[DONE]') continue;
+
+        let event: Record<string, unknown>;
+        try {
+          event = JSON.parse(raw) as Record<string, unknown>;
+        } catch {
+          emittedAny = true;
+          yield { conversationId, type: 'text-delta', text: raw };
+          continue;
+        }
+
+        const eventType = (event.type as string) || '';
+        if (eventType === 'text-delta' || eventType === 'delta') {
+          const text = (event.text as string) || (event.delta as string) || '';
+          if (text) {
+            emittedAny = true;
+            yield { conversationId, type: 'text-delta', text };
+          }
+        } else if (eventType === 'tool-call') {
+          emittedAny = true;
+          yield {
+            conversationId,
+            type: 'tool-call',
+            toolCallId: event.toolCallId as string,
+            toolName: event.toolName as string,
+            args: event.args,
+            startedAt: new Date().toISOString(),
+          };
+        } else if (eventType === 'tool-result') {
+          emittedAny = true;
+          yield {
+            conversationId,
+            type: 'tool-result',
+            toolCallId: event.toolCallId as string,
+            toolName: event.toolName as string,
+            result: event.result,
+            finishedAt: new Date().toISOString(),
+          };
+        } else if (eventType === 'error') {
+          yield {
+            conversationId,
+            type: 'error',
+            error: (event.error as string) || (event.message as string) || 'Daemon stream error',
+          };
+        } else if (event.response && typeof event.response === 'string') {
+          emittedAny = true;
+          yield { conversationId, type: 'text-delta', text: event.response as string };
+        }
+      }
+    }
+  } catch (error) {
+    if (!abortSignal?.aborted) {
+      yield {
+        conversationId,
+        type: 'error',
+        error: `SSE stream error: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (!emittedAny && !abortSignal?.aborted) {
+    yield {
+      conversationId,
+      type: 'error',
+      error: 'Daemon SSE stream ended without producing any output.',
+    };
+  }
+  yield { conversationId, type: 'done' };
+}
+
+async function* handleDaemonSyncResponse(
+  conversationId: string,
+  response: Response,
+  chatUrl: string,
+  authToken: string | null,
+  abortSignal?: AbortSignal,
+  daemonUrl?: string,
+): AsyncGenerator<StreamEvent> {
   let body: unknown = null;
   try {
     body = await response.json();
@@ -486,14 +625,22 @@ async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator
     body = null;
   }
 
-  const data = body && typeof body === 'object' ? (body as { data?: Record<string, unknown>; error?: { message?: string } }) : {};
+  const data = body && typeof body === 'object'
+    ? body as { data?: Record<string, unknown>; error?: { message?: string }; task_id?: string }
+    : {} as { data?: Record<string, unknown>; error?: { message?: string }; task_id?: string };
+
   if (response.status === 202) {
+    const taskId = data.task_id || (data.data?.task_id as string | undefined);
+    if (taskId) {
+      yield* pollDaemonTask(conversationId, taskId, daemonUrl || '', authToken, abortSignal);
+      return;
+    }
     yield {
-      conversationId: options.conversationId,
+      conversationId,
       type: 'error',
-      error: 'Legion daemon accepted the request asynchronously, but polling that response is not implemented yet. Use embedded Legion mode or disable Legion cache for now.',
+      error: 'Legion daemon accepted the request asynchronously but returned no task_id for polling.',
     };
-    yield { conversationId: options.conversationId, type: 'done' };
+    yield { conversationId, type: 'done' };
     return;
   }
 
@@ -505,31 +652,131 @@ async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator
         : undefined)
       || `Legion daemon request failed with HTTP ${response.status}.`
     );
-    yield { conversationId: options.conversationId, type: 'error', error: errorMessage };
-    yield { conversationId: options.conversationId, type: 'done' };
+    yield { conversationId, type: 'error', error: errorMessage };
+    yield { conversationId, type: 'done' };
     return;
   }
 
   const text = typeof data.data?.response === 'string' ? data.data.response : '';
   if (text) {
-    yield { conversationId: options.conversationId, type: 'text-delta', text };
+    yield { conversationId, type: 'text-delta', text };
   } else {
     yield {
-      conversationId: options.conversationId,
+      conversationId,
       type: 'error',
       error: `Legion daemon returned an unexpected payload from ${chatUrl}.`,
     };
   }
-  void readyBody;
-  yield { conversationId: options.conversationId, type: 'done' };
+  yield { conversationId, type: 'done' };
 }
 
-function buildDaemonPrompt(messages: unknown[]): string {
+async function* pollDaemonTask(
+  conversationId: string,
+  taskId: string,
+  daemonUrl: string,
+  authToken: string | null,
+  abortSignal?: AbortSignal,
+): AsyncGenerator<StreamEvent> {
+  const taskUrl = new URL(`/api/tasks/${taskId}`, daemonUrl).toString();
+  const headers: Record<string, string> = {
+    accept: 'application/json',
+    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+  };
+
+  const maxAttempts = 120;
+  let attempt = 0;
+
+  yield {
+    conversationId,
+    type: 'text-delta',
+    text: '_Waiting for daemon to process request..._\n\n',
+  };
+
+  while (attempt < maxAttempts) {
+    if (abortSignal?.aborted) {
+      yield { conversationId, type: 'done' };
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    attempt++;
+
+    let resp: Response;
+    try {
+      resp = await fetch(taskUrl, { headers, signal: abortSignal });
+    } catch {
+      if (abortSignal?.aborted) break;
+      continue;
+    }
+
+    if (!resp.ok) continue;
+
+    let taskBody: { data?: { status?: string; result?: { response?: string }; error?: string } };
+    try {
+      taskBody = await resp.json() as typeof taskBody;
+    } catch {
+      continue;
+    }
+
+    const status = taskBody.data?.status;
+    if (status === 'completed' || status === 'done') {
+      const responseText = taskBody.data?.result?.response;
+      if (typeof responseText === 'string' && responseText) {
+        yield { conversationId, type: 'text-delta', text: responseText };
+      }
+      yield { conversationId, type: 'done' };
+      return;
+    }
+
+    if (status === 'failed' || status === 'error') {
+      yield {
+        conversationId,
+        type: 'error',
+        error: taskBody.data?.error || `Daemon task ${taskId} failed.`,
+      };
+      yield { conversationId, type: 'done' };
+      return;
+    }
+  }
+
+  yield {
+    conversationId,
+    type: 'error',
+    error: `Daemon task ${taskId} did not complete within ${maxAttempts} seconds.`,
+  };
+  yield { conversationId, type: 'done' };
+}
+
+type DaemonPayload = {
+  message: string;
+  context?: string;
+};
+
+function buildDaemonPayload(messages: unknown[]): DaemonPayload {
   const normalized = normalizeMessages(messages);
-  return normalized
+  let lastUserIndex = -1;
+  for (let i = normalized.length - 1; i >= 0; i--) {
+    if (normalized[i].role === 'user') {
+      lastUserIndex = i;
+      break;
+    }
+  }
+
+  if (lastUserIndex === -1) {
+    return { message: '' };
+  }
+
+  const message = extractText(normalized[lastUserIndex].content);
+  const priorMessages = normalized.slice(0, lastUserIndex);
+  if (priorMessages.length === 0) {
+    return { message };
+  }
+
+  const context = priorMessages
     .map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${extractText(message.content)}`)
-    .join('\n\n')
-    .trim();
+    .join('\n\n');
+
+  return { message, context };
 }
 
 function toLegionProvider(provider: LLMModelConfig['provider']): string {
