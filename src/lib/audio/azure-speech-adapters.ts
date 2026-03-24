@@ -117,7 +117,7 @@ export function createAzureSpeechAdapter(config: AzureTtsConfig): SpeechSynthesi
               'Ocp-Apim-Subscription-Key': config.subscriptionKey,
               'Content-Type': 'application/ssml+xml',
               'X-Microsoft-OutputFormat': config.outputFormat,
-              'User-Agent': 'LegionAithena',
+              'User-Agent': 'LegionInterlink',
             },
             body: ssml,
             signal: abortController.signal,

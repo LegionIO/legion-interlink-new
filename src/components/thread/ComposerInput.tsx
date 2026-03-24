@@ -3,12 +3,12 @@ import { useComposerRuntime } from '@assistant-ui/react';
 import { useAttachments } from '@/providers/AttachmentContext';
 
 /**
- * Custom composer input using contentEditable that renders "Legion Aithena"
+ * Custom composer input using contentEditable that renders "Legion Interlink"
  * with the gradient animation. Replaces ComposerPrimitive.Input but
  * uses the same composer runtime for state management.
  */
 export const ComposerInput: FC<{ placeholder?: string; className?: string; autoFocus?: boolean }> = ({
-  placeholder = 'Message Legion Aithena...',
+  placeholder = 'Message Legion Interlink...',
   className = '',
   autoFocus,
 }) => {

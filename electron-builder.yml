@@ -1,6 +1,6 @@
-appId: com.legion.aithena
-productName: Legion Aithena
-executableName: Legion Aithena
+appId: com.legion.interlink
+productName: Legion Interlink
+executableName: Legion Interlink
 directories:
   buildResources: build
   output: dist
@@ -11,9 +11,9 @@ icon: build/icon.icns
 mac:
   category: public.app-category.developer-tools
   extendInfo:
-    CFBundleDisplayName: Legion Aithena
-    CFBundleName: Legion Aithena
-    NSMicrophoneUsageDescription: "Legion Aithena uses the microphone for voice dictation (speech-to-text)."
+    CFBundleDisplayName: Legion Interlink
+    CFBundleName: Legion Interlink
+    NSMicrophoneUsageDescription: "Legion Interlink uses the microphone for voice dictation (speech-to-text)."
   target:
     - target: dir
       arch:

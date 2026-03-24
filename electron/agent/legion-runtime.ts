@@ -166,8 +166,8 @@ function resolveDaemonAuthToken(config: LegionConfig, legionHome: string): strin
     const now = Math.floor(Date.now() / 1000);
     const header = base64UrlEncode({ alg: 'HS256', typ: 'JWT' });
     const payload = base64UrlEncode({
-      sub: process.env.USER || process.env.USERNAME || 'legion-aithena',
-      name: 'Legion Aithena',
+      sub: process.env.USER || process.env.USERNAME || 'legion-interlink',
+      name: 'Legion Interlink',
       roles: ['desktop'],
       scope: 'human',
       iss: 'legion',

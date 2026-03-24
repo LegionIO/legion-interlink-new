@@ -19,7 +19,7 @@ export function createSkillManageTool(legionHome: string): ToolDefinition {
   return {
     name: 'skills',
     description: [
-      'Manage Legion Aithena skills. Skills are reusable tools stored on disk that persist across sessions.',
+      'Manage Legion Interlink skills. Skills are reusable tools stored on disk that persist across sessions.',
       'Actions: "list" shows all skills. "get" reads a skill\'s manifest and files. "create" makes a new skill. "edit" updates one. "delete" removes one. "enable"/"disable" toggles availability.',
       'Skill types: "shell" (runs a command), "script" (runs Node.js), "prompt" (template), "http" (calls an endpoint), "composite" (chains tools).',
       `Created skills are immediately available as tools named like "${getSkillToolName('deploy-status')}".`,

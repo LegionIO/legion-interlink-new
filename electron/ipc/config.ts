@@ -10,9 +10,9 @@ export type { LegionConfig } from '../config/schema.js';
 
 export const LEGION_LLM_CONFIG_PATH = join(homedir(), '.legionio', 'settings', 'llm.json');
 const DESKTOP_SETTINGS_FILENAME = 'desktop.json';
-const DEFAULT_SYSTEM_PROMPT = 'You are Aithena, a powerful local AI assistant with access to the user\'s computer. You can execute shell commands, read/write files, search codebases, and connect to external services via MCP. Be proactive, thorough, and helpful. When executing tools, explain what you\'re doing and why.';
+const DEFAULT_SYSTEM_PROMPT = 'You are Interlink, a powerful local AI assistant with access to the user\'s computer. You can execute shell commands, read/write files, search codebases, and connect to external services via MCP. Be proactive, thorough, and helpful. When executing tools, explain what you\'re doing and why.';
 const LEGACY_DEFAULT_SYSTEM_PROMPTS = new Set([
-  'You are Legion Aithena, a powerful local AI assistant with access to the user\'s computer. You can execute shell commands, read/write files, search codebases, and connect to external services via MCP. Be proactive, thorough, and helpful. When executing tools, explain what you\'re doing and why.',
+  'You are Legion Interlink, a powerful local AI assistant with access to the user\'s computer. You can execute shell commands, read/write files, search codebases, and connect to external services via MCP. Be proactive, thorough, and helpful. When executing tools, explain what you\'re doing and why.',
   'You are Legion, a powerful local AI assistant with access to the user\'s computer. You can execute shell commands, read/write files, search codebases, and connect to external services via MCP. Be proactive, thorough, and helpful. When executing tools, explain what you\'re doing and why.',
 ]);
 

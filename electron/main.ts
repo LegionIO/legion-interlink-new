@@ -20,8 +20,8 @@ import type { LegionConfig } from './config/schema.js';
 
 const LEGION_HOME = join(homedir(), '.legionio');
 
-// Set app name early so macOS menu bar and dock show "Legion Aithena" instead of "Electron"
-app.setName('Legion Aithena');
+// Set app name early so macOS menu bar and dock show "Legion Interlink" instead of "Electron"
+app.setName('Legion Interlink');
 
 // Module-level ref for cleanup in before-quit handler
 let pluginManagerRef: PluginManager | null = null;
@@ -140,7 +140,7 @@ function createWindow(): BrowserWindow {
     minWidth: 800,
     minHeight: 600,
     show: false,
-    title: 'Legion Aithena',
+    title: 'Legion Interlink',
     icon: APP_ICON,
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 15, y: 10 },

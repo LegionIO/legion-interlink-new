@@ -184,7 +184,7 @@ const RuntimeCard: FC<{
         <div>
           <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Agent Runtime</h4>
           <p className="mt-1 text-xs text-muted-foreground">
-            Choose how Aithena routes chats through AI providers.
+            Choose how Interlink routes chats through AI providers.
           </p>
         </div>
         <button

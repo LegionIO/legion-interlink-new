@@ -1,6 +1,6 @@
-# AITHENA
+# INTERLINK
 
-AITHENA is an Electron-based local AI assistant for coding and operator workflows. It pairs a React desktop UI with a local Electron runtime that can manage conversations, switch models, call tools, load skills, connect to MCP servers, and delegate work to sub-agents.
+INTERLINK is an Electron-based local AI assistant for coding and operator workflows. It pairs a React desktop UI with a local Electron runtime that can manage conversations, switch models, call tools, load skills, connect to MCP servers, and delegate work to sub-agents.
 
 ## What It Does
 
@@ -24,7 +24,7 @@ AITHENA is an Electron-based local AI assistant for coding and operator workflow
 ## Project Layout
 
 ```text
-legion-aithena/
+legion-interlink/
 ├── electron/              # Electron main process, IPC handlers, tool registry, agent runtime
 ├── src/                   # React renderer app and settings UI
 ├── build/                 # App icons and packaging assets
@@ -43,7 +43,7 @@ legion-aithena/
 ### Install
 
 ```bash
-cd legion-aithena
+cd legion-interlink
 pnpm install
 ```
 
@@ -71,11 +71,11 @@ pnpm rebuild
 pnpm build:mac
 ```
 
-The current builder config is set up for macOS output in `legion-aithena/dist/`.
+The current builder config is set up for macOS output in `legion-interlink/dist/`.
 
 ## Configuration
 
-AITHENA creates and reads its local state from `~/.legionio`.
+INTERLINK creates and reads its local state from `~/.legionio`.
 
 Important paths:
 
@@ -121,7 +121,7 @@ Skills are loaded from disk and can be enabled or disabled in the app. Enabled s
 
 ### MCP
 
-MCP servers can be configured in settings or in `~/.legionio/config.json`. On config changes, AITHENA rebuilds the active MCP tool set.
+MCP servers can be configured in settings or in `~/.legionio/config.json`. On config changes, INTERLINK rebuilds the active MCP tool set.
 
 ### Memory And Compaction
 
@@ -137,7 +137,7 @@ These settings are configurable from the in-app settings panel.
 
 ### Sub-Agents
 
-AITHENA can spawn child agents for delegated work. Limits such as nesting depth and concurrency are configurable.
+INTERLINK can spawn child agents for delegated work. Limits such as nesting depth and concurrency are configurable.
 
 ## Architecture Notes
 

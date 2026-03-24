@@ -176,7 +176,7 @@ const SystemPromptSettings: FC<SettingsProps> = ({ config, updateConfig }) => {
         onFocus={() => { isFocusedRef.current = true; }}
         onBlur={() => { isFocusedRef.current = false; }}
         onChange={(v) => handleChange(v)}
-        placeholder="Enter the system prompt for Legion Aithena..."
+        placeholder="Enter the system prompt for Legion Interlink..."
       />
     </div>
   );

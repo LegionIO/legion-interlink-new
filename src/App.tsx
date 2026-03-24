@@ -338,7 +338,7 @@ function AppShell() {
             <div className="titlebar-drag relative flex h-14 items-center justify-center border-b border-sidebar-border/80 px-4">
               <div className="pointer-events-none absolute inset-y-0 left-0 w-20" />
               <span className="titlebar-no-drag inline-flex items-center gap-0.5 text-sm font-medium text-sidebar-foreground">
-                <span className="legion-gradient-text legion-wordmark">AITHENA</span>
+                <span className="legion-gradient-text legion-wordmark">INTERLINK</span>
                 <CpuIcon className="h-4 w-4 text-primary/80" />
               </span>
             </div>

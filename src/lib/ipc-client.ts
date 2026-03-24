@@ -132,7 +132,7 @@ declare global {
 
 function getLegion(): LegionAPI {
   if (!window.legion) {
-    throw new Error('Legion Aithena IPC bridge not available. Ensure the app is running in Electron.');
+    throw new Error('Legion Interlink IPC bridge not available. Ensure the app is running in Electron.');
   }
   return window.legion;
 }

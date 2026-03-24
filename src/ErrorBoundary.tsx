@@ -31,7 +31,7 @@ export class ErrorBoundary extends Component<Props, State> {
               letterSpacing: '0.08em',
               textTransform: 'uppercase',
               textShadow: '0 0 18px rgba(160, 154, 232, 0.18)',
-            }}>Legion Aithena</span> encountered an error
+            }}>Legion Interlink</span> encountered an error
           </h2>
           <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12, lineHeight: 1.5, color: '#d9d0ff' }}>
             {this.state.error.message}

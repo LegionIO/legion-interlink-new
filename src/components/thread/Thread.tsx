@@ -122,7 +122,7 @@ const ThreadWelcome: FC = () => {
       <div className="flex flex-1 items-center justify-center py-24">
         <div className="relative z-10 flex select-none flex-col items-center justify-center">
           <div className="mb-3 inline-flex items-center gap-0.5 text-4xl font-semibold">
-            <span className="legion-gradient-text legion-wordmark">AITHENA</span>
+            <span className="legion-gradient-text legion-wordmark">INTERLINK</span>
             <CpuIcon className="h-9 w-9 text-primary/80" />
           </div>
           <p className="max-w-xl text-center text-sm text-muted-foreground">
@@ -978,7 +978,7 @@ const Composer: FC<{
 
       <ComposerPrimitive.Root className="flex flex-col gap-0 rounded-[1.7rem] border border-border/70 bg-card/78 px-3 py-3 shadow-[inset_0_0_0_1px_rgba(197,194,245,0.08),0_12px_40px_rgba(5,4,15,0.18)]">
         <ComposerInput
-          placeholder="Message Aithena..."
+          placeholder="Message Interlink..."
           className="min-h-[48px] max-h-[220px] w-full overflow-y-auto px-1 py-0.5 text-[15px]"
           autoFocus
         />

@@ -41,7 +41,7 @@ export function createMemorySettingsTool(legionHome: string): ToolDefinition {
   return {
     name: 'memory_settings',
     description: [
-      'View or update Legion Aithena memory settings. Controls working memory, observational memory, semantic recall, and context window.',
+      'View or update Legion Interlink memory settings. Controls working memory, observational memory, semantic recall, and context window.',
       'Use "get" to see current values, "set" to change one.',
     ].join(' '),
     inputSchema: z.object({
@@ -218,7 +218,7 @@ export function createAdvancedSettingsTool(legionHome: string): ToolDefinition {
 export function createSystemPromptTool(legionHome: string): ToolDefinition {
   return {
     name: 'system_prompt',
-    description: 'View or update the Legion Aithena system prompt. Use "get" to read, "set" to replace it.',
+    description: 'View or update the Legion Interlink system prompt. Use "get" to read, "set" to replace it.',
     inputSchema: z.object({
       action: z.enum(['get', 'set']).describe('Read or write the system prompt'),
       prompt: z.string().optional().describe('The new system prompt text (required for "set")'),

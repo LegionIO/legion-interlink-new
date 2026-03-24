@@ -1,4 +1,4 @@
-# Aithena: Electron Desktop AI Assistant
+# Interlink: Electron Desktop AI Assistant
 
 ## What Is This?
 

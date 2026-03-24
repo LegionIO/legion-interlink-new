@@ -1,8 +1,8 @@
 {
-  "name": "legion-aithena",
-  "productName": "Legion Aithena",
+  "name": "legion-interlink",
+  "productName": "Legion Interlink",
   "version": "1.0.0",
-  "description": "Legion Aithena - Local AI Assistant",
+  "description": "Legion Interlink - Local AI Assistant",
   "main": "./out/main/index.js",
   "type": "module",
   "license": "MIT",
