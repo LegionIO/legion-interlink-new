@@ -191,6 +191,7 @@ function getDefaultConfig() {
         deniedApps: [],
         allowedDisplays: [],
         redactApps: [],
+        captureExcludedApps: ['Electron', 'Interlink'],
       },
       isolated: {
         browserProfileDir: '~/.legionio/browser-profile',

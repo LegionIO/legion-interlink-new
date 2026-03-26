@@ -1,9 +1,5 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { nativeImage } from 'electron';
 import type {
   ComputerActionProposal,
   ComputerEnvironmentMetadata,
@@ -11,6 +7,7 @@ import type {
   ComputerSession,
 } from '../../../shared/computer-use.js';
 import { makeComputerUseId, nowIso } from '../../../shared/computer-use.js';
+import type { LegionConfig } from '../../config/schema.js';
 import {
   getComputerUsePermissions,
   getLocalMacDesktopSize,
@@ -19,11 +16,6 @@ import {
   runLocalMacMouseCommand,
 } from '../permissions.js';
 import type { ComputerHarness, ComputerHarnessActionContext, ComputerHarnessActionResult } from './shared.js';
-import {
-  hasOverlayWindow,
-  hideOverlayForCapture,
-  showOverlayAfterCapture,
-} from '../overlay-window.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -38,6 +30,7 @@ const LOCAL_MACOS_HELPER_COMMANDS = {
   pressKeys: 'pressKeys',
   pointer: 'pointer',
   monitor: 'monitor',
+  screenshot: 'screenshot',
 } as const;
 
 type LocalMacosHelperCommand = typeof LOCAL_MACOS_HELPER_COMMANDS[keyof typeof LOCAL_MACOS_HELPER_COMMANDS];
@@ -209,17 +202,13 @@ function toFramePoint(point: { x: number; y: number }, space: LocalMacCoordinate
   };
 }
 
-async function resolveFrameSize(data: Buffer): Promise<{ width: number; height: number }> {
-  const size = nativeImage.createFromBuffer(data).getSize();
-  if (size.width > 0 && size.height > 0) {
-    return size;
-  }
-  const desktopSize = await getLocalMacDesktopSize();
-  return desktopSize ?? { width: 1440, height: 900 };
-}
-
 export class LocalMacosHarness implements ComputerHarness {
   readonly target = 'local-macos' as const;
+  private readonly getConfig: () => LegionConfig;
+
+  constructor(getConfig: () => LegionConfig) {
+    this.getConfig = getConfig;
+  }
 
   async initialize(_session: ComputerSession): Promise<void> {
     const permissions = await getComputerUsePermissions();
@@ -233,35 +222,31 @@ export class LocalMacosHarness implements ComputerHarness {
   }
 
   async captureFrame(session: ComputerSession): Promise<ComputerFrame> {
-    // Hide overlay before capture so screencapture won't see it
-    const overlayActive = hasOverlayWindow(session.id);
-    if (overlayActive) {
-      await hideOverlayForCapture(session.id);
+    const config = this.getConfig();
+    const excludeApps = config.computerUse.localMacos.captureExcludedApps ?? ['Electron', 'Interlink'];
+    const jpegQuality = config.computerUse.capture.jpegQuality ?? 0.8;
+
+    const excludeArg = Buffer.from(JSON.stringify(excludeApps)).toString('base64');
+    const qualityArg = String(jpegQuality);
+
+    const result = await runLocalMacMouseCommand(
+      helperArgs(LOCAL_MACOS_HELPER_COMMANDS.screenshot, [excludeArg, qualityArg]),
+    );
+
+    if (!result.imageBase64 || !result.width || !result.height) {
+      throw new Error(result.error ?? 'Screenshot capture failed');
     }
 
-    const dir = await mkdtemp(join(tmpdir(), 'legion-cu-'));
-    const outputPath = join(dir, `${session.id}.jpg`);
-    try {
-      await execFileAsync('screencapture', ['-x', '-t', 'jpg', outputPath], { timeout: 15000 });
-      const data = await readFile(outputPath);
-      const size = await resolveFrameSize(data);
-      return {
-        id: makeComputerUseId('frame'),
-        sessionId: session.id,
-        createdAt: nowIso(),
-        mimeType: 'image/jpeg',
-        dataUrl: `data:image/jpeg;base64,${data.toString('base64')}`,
-        width: size.width,
-        height: size.height,
-        source: 'local-macos',
-      };
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-      // Re-show overlay after capture completes
-      if (overlayActive) {
-        showOverlayAfterCapture(session.id);
-      }
-    }
+    return {
+      id: makeComputerUseId('frame'),
+      sessionId: session.id,
+      createdAt: nowIso(),
+      mimeType: 'image/jpeg',
+      dataUrl: `data:image/jpeg;base64,${result.imageBase64}`,
+      width: result.width,
+      height: result.height,
+      source: 'local-macos',
+    };
   }
 
   async movePointer(session: ComputerSession, action: ComputerActionProposal, _context?: ComputerHarnessActionContext): Promise<ComputerHarnessActionResult> {

@@ -30,6 +30,7 @@ type ComputerUseConfig = {
     deniedApps: string[];
     allowedDisplays: string[];
     redactApps: string[];
+    captureExcludedApps: string[];
   };
   isolated: {
     browserProfileDir: string;
@@ -180,6 +181,7 @@ export const ComputerUseSettings: FC<SettingsProps> = ({ config, updateConfig })
         <TextField label="Denied Apps" value={joinList(computerUse.localMacos.deniedApps)} onChange={(value) => updateConfig('computerUse.localMacos.deniedApps', splitList(value))} hint="Comma-separated app names" />
         <TextField label="Allowed Displays" value={joinList(computerUse.localMacos.allowedDisplays)} onChange={(value) => updateConfig('computerUse.localMacos.allowedDisplays', splitList(value))} hint="Comma-separated display identifiers" />
         <TextField label="Redact Apps" value={joinList(computerUse.localMacos.redactApps)} onChange={(value) => updateConfig('computerUse.localMacos.redactApps', splitList(value))} hint="Hide sensitive app windows from screenshots" />
+        <TextField label="Capture Excluded Apps" value={joinList(computerUse.localMacos.captureExcludedApps ?? [])} onChange={(value) => updateConfig('computerUse.localMacos.captureExcludedApps', splitList(value))} hint="Apps hidden from screenshots via ScreenCaptureKit (comma-separated)" />
       </fieldset>
 
       <fieldset className="rounded-lg border p-3 space-y-3">
@@ -199,7 +201,7 @@ export const ComputerUseSettings: FC<SettingsProps> = ({ config, updateConfig })
       <fieldset className="rounded-lg border p-3 space-y-3">
         <legend className="text-xs font-semibold px-1">Overlay</legend>
         <div className="rounded-md border border-border/60 bg-card/50 px-3 py-2 text-xs text-muted-foreground">
-          Shows a status bar on your screen during Local Mac sessions. Automatically hidden during screenshots.
+          Shows a status bar on your screen during Local Mac sessions. Excluded from screenshots via ScreenCaptureKit.
         </div>
         <Toggle label="Enabled" checked={computerUse.overlay.enabled} onChange={(value) => updateConfig('computerUse.overlay.enabled', value)} />
         {computerUse.overlay.enabled && (

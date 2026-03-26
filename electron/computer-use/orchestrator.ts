@@ -20,8 +20,8 @@ type SessionMutator = (sessionId: string, update: (session: ComputerSession) => 
 type SessionReader = (sessionId: string) => ComputerSession | null;
 type EventSink = (event: ComputerUseEvent) => void;
 
-function getHarness(config: LegionConfig, session: ComputerSession): ComputerHarness {
-  if (session.target === 'local-macos') return new LocalMacosHarness();
+function getHarness(config: LegionConfig, session: ComputerSession, getConfig: () => LegionConfig): ComputerHarness {
+  if (session.target === 'local-macos') return new LocalMacosHarness(getConfig);
   if (session.target === 'isolated-vm') {
     const remoteVmUrl = config.computerUse.isolated.remoteVmUrl?.trim();
     if (!remoteVmUrl) {
@@ -162,7 +162,7 @@ export class ComputerUseOrchestrator {
     this.cycleDurations.delete(sessionId);
     const session = this.readSession(sessionId);
     if (!session) return;
-    const harness = getHarness(this.getConfig(), session);
+    const harness = getHarness(this.getConfig(), session, this.getConfig);
     await harness.dispose(sessionId).catch(() => {});
   }
 
@@ -170,7 +170,7 @@ export class ComputerUseOrchestrator {
     const session = this.readSession(sessionId);
     if (!session) return;
     const config = this.getConfig();
-    const harness = getHarness(config, session);
+    const harness = getHarness(config, session, this.getConfig);
     try {
       await harness.initialize(session);
       this.mutateSession(sessionId, (current) => ({ ...current, status: 'running', updatedAt: nowIso() }));
@@ -361,7 +361,7 @@ export class ComputerUseOrchestrator {
     if (!session) return;
     const action = session.actions.find((candidate) => candidate.id === actionId);
     if (!action) return;
-    const harness = getHarness(this.getConfig(), session);
+    const harness = getHarness(this.getConfig(), session, this.getConfig);
     try {
       await harness.initialize(session);
       await this.executeAction(harness, { ...action, status: 'running' }, undefined, sessionId);

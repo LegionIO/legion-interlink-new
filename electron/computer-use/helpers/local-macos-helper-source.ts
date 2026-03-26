@@ -2,6 +2,7 @@ export const LOCAL_MACOS_HELPER_SOURCE = String.raw`
 import Foundation
 import AppKit
 import ApplicationServices
+import ScreenCaptureKit
 
 let syntheticEventTag: Int64 = 0x4C47494F
 let syntheticSource = CGEventSource(stateID: .privateState)
@@ -526,6 +527,78 @@ case "monitor":
   CGEvent.tapEnable(tap: tap, enable: true)
   printJson(["ok": true, "event": "monitor-started"])
   CFRunLoopRun()
+
+case "screenshot":
+  if #available(macOS 12.3, *) {
+    let excludeAppNames: [String]
+    if args.count >= 3, let decoded = decodeBase64String(args[2]),
+       let data = decoded.data(using: .utf8),
+       let names = try? JSONSerialization.jsonObject(with: data) as? [String] {
+      excludeAppNames = names
+    } else {
+      excludeAppNames = []
+    }
+    let jpegQuality: Double
+    if args.count >= 4, let q = Double(args[3]) {
+      jpegQuality = max(0.1, min(q, 1.0))
+    } else {
+      jpegQuality = 0.8
+    }
+
+    let sem = DispatchSemaphore(value: 0)
+    var captureResult: [String: Any] = ["ok": false, "error": "timeout"]
+
+    Task {
+      do {
+        let content = try await SCShareableContent.current
+        guard let display = content.displays.first else {
+          captureResult = ["ok": false, "error": "No displays found"]
+          sem.signal()
+          return
+        }
+
+        let excludeSet = Set(excludeAppNames.map { $0.lowercased() })
+        let excludedWindows = content.windows.filter { window in
+          guard let appName = window.owningApplication?.applicationName else { return false }
+          return excludeSet.contains(appName.lowercased())
+        }
+
+        let filter = SCContentFilter(display: display, excludingWindows: excludedWindows)
+
+        let config = SCStreamConfiguration()
+        config.width = display.width
+        config.height = display.height
+        config.pixelFormat = kCVPixelFormatType_32BGRA
+        config.showsCursor = false
+
+        let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+
+        let bitmapRep = NSBitmapImageRep(cgImage: image)
+        guard let jpegData = bitmapRep.representation(using: .jpeg, properties: [.compressionFactor: NSNumber(value: jpegQuality)]) else {
+          captureResult = ["ok": false, "error": "JPEG encoding failed"]
+          sem.signal()
+          return
+        }
+
+        let base64 = jpegData.base64EncodedString()
+        captureResult = [
+          "ok": true,
+          "imageBase64": base64,
+          "width": display.width,
+          "height": display.height,
+        ]
+      } catch {
+        captureResult = ["ok": false, "error": error.localizedDescription]
+      }
+      sem.signal()
+    }
+
+    sem.wait()
+    printJson(captureResult)
+  } else {
+    printJson(["ok": false, "error": "ScreenCaptureKit requires macOS 12.3+"])
+    exit(1)
+  }
 
 default:
   printJson(["ok": false, "error": "Unknown command"])

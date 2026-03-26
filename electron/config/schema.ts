@@ -230,6 +230,7 @@ const computerUseConfigSchema = z.object({
     deniedApps: z.array(z.string()),
     allowedDisplays: z.array(z.string()),
     redactApps: z.array(z.string()),
+    captureExcludedApps: z.array(z.string()),
   }),
   isolated: z.object({
     browserProfileDir: z.string(),
