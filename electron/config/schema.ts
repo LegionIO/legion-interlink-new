@@ -8,7 +8,7 @@ const computerUseSupportSchema = z.enum([
   'none',
 ]);
 
-const computerUseTargetSchema = z.enum(['isolated-browser', 'local-macos', 'isolated-vm']);
+const computerUseTargetSchema = z.enum(['isolated-browser', 'local-macos']);
 
 const computerUseSurfaceSchema = z.enum(['docked', 'window']);
 
@@ -240,7 +240,6 @@ const computerUseConfigSchema = z.object({
     downloadDir: z.string(),
     allowedDomains: z.array(z.string()),
     persistentSession: z.boolean(),
-    remoteVmUrl: z.string().optional(),
   }),
   persistence: z.object({
     saveFrames: z.boolean(),

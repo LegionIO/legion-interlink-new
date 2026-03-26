@@ -7,7 +7,7 @@ type ComputerUseConfig = {
   showStepLog: boolean;
   toolSurface: 'both' | 'only-calls' | 'only-chat' | 'none';
   defaultSurface: 'docked' | 'window';
-  defaultTarget: 'isolated-browser' | 'local-macos' | 'isolated-vm';
+  defaultTarget: 'isolated-browser' | 'local-macos';
   approvalModeDefault: 'step' | 'goal' | 'autonomous';
   idleTimeoutSec: number;
   maxSessionDurationMin: number;
@@ -38,7 +38,6 @@ type ComputerUseConfig = {
     downloadDir: string;
     allowedDomains: string[];
     persistentSession: boolean;
-    remoteVmUrl?: string;
   };
   persistence: {
     saveFrames: boolean;
@@ -118,7 +117,6 @@ export const ComputerUseSettings: FC<SettingsProps> = ({ config, updateConfig })
             <select className={settingsSelectClass} value={computerUse.defaultTarget} onChange={(e) => updateConfig('computerUse.defaultTarget', e.target.value)}>
               <option value="isolated-browser">Isolated Browser</option>
               <option value="local-macos">Local Mac</option>
-              <option value="isolated-vm">Isolated VM</option>
             </select>
           </div>
           <div>
@@ -195,13 +193,7 @@ export const ComputerUseSettings: FC<SettingsProps> = ({ config, updateConfig })
       </fieldset>
 
       <fieldset className="rounded-lg border p-3 space-y-3">
-        <legend className="text-xs font-semibold px-1">Isolated Browser / VM</legend>
-        <TextField label="Remote VM URL" value={computerUse.isolated.remoteVmUrl ?? ''} onChange={(value) => updateConfig('computerUse.isolated.remoteVmUrl', value || undefined)} mono />
-        {!computerUse.isolated.remoteVmUrl?.trim() && (
-          <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-            Isolated VM sessions require a Remote VM URL.
-          </div>
-        )}
+        <legend className="text-xs font-semibold px-1">Isolated Browser</legend>
         <TextField label="Allowed Domains" value={joinList(computerUse.isolated.allowedDomains)} onChange={(value) => updateConfig('computerUse.isolated.allowedDomains', splitList(value))} hint="Comma-separated domains, or * for all" />
         <Toggle label="Persistent Browser Session" checked={computerUse.isolated.persistentSession} onChange={(value) => updateConfig('computerUse.isolated.persistentSession', value)} />
         <TextField label="Browser Profile Dir" value={computerUse.isolated.browserProfileDir} onChange={(value) => updateConfig('computerUse.isolated.browserProfileDir', value)} mono />

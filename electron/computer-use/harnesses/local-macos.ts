@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import { nativeImage } from 'electron';
 import type {
   ComputerActionProposal,
+  ComputerDisplayInfo,
   ComputerEnvironmentMetadata,
   ComputerFrame,
   ComputerSession,
@@ -10,6 +11,7 @@ import type {
 import { makeComputerUseId, nowIso } from '../../../shared/computer-use.js';
 import type { LegionConfig } from '../../config/schema.js';
 import {
+  buildDisplayLayout,
   getComputerUsePermissions,
   getLocalMacDesktopSize,
   getLocalMacPointerPosition,
@@ -265,21 +267,61 @@ export class LocalMacosHarness implements ComputerHarness {
     const config = this.getConfig();
     const excludeApps = config.computerUse.localMacos.captureExcludedApps ?? ['Electron', 'Interlink'];
     const jpegQuality = config.computerUse.capture.jpegQuality ?? 0.8;
+    const allowedDisplays = config.computerUse.localMacos.allowedDisplays;
 
     const excludeArg = Buffer.from(JSON.stringify(excludeApps)).toString('base64');
     const qualityArg = String(jpegQuality);
 
-    const result = await runLocalMacMouseCommand(
-      helperArgs(LOCAL_MACOS_HELPER_COMMANDS.screenshot, [excludeArg, qualityArg]),
+    // Capture the primary display (display index 0) as the main frame
+    const primaryResult = await runLocalMacMouseCommand(
+      helperArgs(LOCAL_MACOS_HELPER_COMMANDS.screenshot, [excludeArg, qualityArg, '0']),
     );
 
-    if (!result.imageBase64 || !result.width || !result.height) {
-      throw new Error(result.error ?? 'Screenshot capture failed');
+    if (!primaryResult.imageBase64 || !primaryResult.width || !primaryResult.height) {
+      throw new Error(primaryResult.error ?? 'Screenshot capture failed');
     }
 
-    const rawData = Buffer.from(result.imageBase64, 'base64');
-    const rawSize = { width: result.width, height: result.height };
+    const rawData = Buffer.from(primaryResult.imageBase64, 'base64');
+    const rawSize = { width: primaryResult.width, height: primaryResult.height };
     const frame = downscaleFrame(rawData, rawSize);
+
+    // Build display layout from the helper response
+    const displayLayout = buildDisplayLayout(
+      primaryResult.displays,
+      allowedDisplays && allowedDisplays.length > 0 ? allowedDisplays : undefined,
+    );
+
+    // Capture additional displays in parallel
+    const displayFrames: ComputerFrame['displayFrames'] = [{
+      displayIndex: 0,
+      displayName: displayLayout?.displays[0]?.name ?? 'Primary',
+      dataUrl: `data:image/jpeg;base64,${frame.data.toString('base64')}`,
+      width: frame.width,
+      height: frame.height,
+    }];
+
+    if (displayLayout && displayLayout.displays.length > 1) {
+      for (let i = 1; i < displayLayout.displays.length; i++) {
+        try {
+          const extraResult = await runLocalMacMouseCommand(
+            helperArgs(LOCAL_MACOS_HELPER_COMMANDS.screenshot, [excludeArg, qualityArg, String(i)]),
+          );
+          if (extraResult.imageBase64 && extraResult.width && extraResult.height) {
+            const extraRaw = Buffer.from(extraResult.imageBase64, 'base64');
+            const extraFrame = downscaleFrame(extraRaw, { width: extraResult.width, height: extraResult.height });
+            displayFrames.push({
+              displayIndex: i,
+              displayName: displayLayout.displays[i]?.name ?? `Display ${i + 1}`,
+              dataUrl: `data:image/jpeg;base64,${extraFrame.data.toString('base64')}`,
+              width: extraFrame.width,
+              height: extraFrame.height,
+            });
+          }
+        } catch {
+          // Non-fatal: skip displays that fail to capture
+        }
+      }
+    }
 
     return {
       id: makeComputerUseId('frame'),
@@ -290,6 +332,72 @@ export class LocalMacosHarness implements ComputerHarness {
       width: frame.width,
       height: frame.height,
       source: 'local-macos',
+      displayLayout,
+      displayFrames: displayFrames.length > 1 ? displayFrames : undefined,
+    };
+  }
+
+  /**
+   * Resolve the display-specific coordinate space for an action.
+   * If the action specifies a displayIndex, use that display's dimensions.
+   * Otherwise fall back to the primary display (existing single-display logic).
+   */
+  private resolveDisplayForAction(session: ComputerSession, action: ComputerActionProposal): {
+    display: ComputerDisplayInfo;
+    frameWidth: number;
+    frameHeight: number;
+  } | null {
+    const layout = session.displayLayout;
+    if (!layout || layout.displays.length <= 1) return null;
+
+    const displayIndex = action.displayIndex ?? 0;
+    const display = layout.displays[displayIndex] ?? layout.displays[0];
+
+    // Find the matching display frame for dimensions
+    const displayFrame = session.latestFrame?.displayFrames?.find((f) => f.displayIndex === displayIndex);
+    const frameWidth = displayFrame?.width ?? display.pixelWidth;
+    const frameHeight = displayFrame?.height ?? display.pixelHeight;
+
+    return { display, frameWidth, frameHeight };
+  }
+
+  /**
+   * Convert frame-space coordinates (within a specific display's image)
+   * to macOS global logical-point coordinates.
+   */
+  private displayFrameToGlobal(
+    point: { x: number; y: number },
+    display: ComputerDisplayInfo,
+    frameWidth: number,
+    frameHeight: number,
+  ): { x: number; y: number } {
+    // Map from frame coordinates to local logical coordinates on the display
+    const localLogicalX = (point.x / Math.max(frameWidth, 1)) * display.logicalWidth;
+    const localLogicalY = (point.y / Math.max(frameHeight, 1)) * display.logicalHeight;
+
+    // Convert to macOS global coordinates
+    return {
+      x: Math.round(display.globalX + localLogicalX),
+      y: Math.round(display.globalY + localLogicalY),
+    };
+  }
+
+  /**
+   * Convert macOS global logical-point coordinates back to frame-space
+   * coordinates for a specific display.
+   */
+  private globalToDisplayFrame(
+    point: { x: number; y: number },
+    display: ComputerDisplayInfo,
+    frameWidth: number,
+    frameHeight: number,
+  ): { x: number; y: number } {
+    const localLogicalX = Math.max(0, Math.min(point.x - display.globalX, display.logicalWidth - 1));
+    const localLogicalY = Math.max(0, Math.min(point.y - display.globalY, display.logicalHeight - 1));
+
+    return {
+      x: Math.round((localLogicalX / Math.max(display.logicalWidth, 1)) * frameWidth),
+      y: Math.round((localLogicalY / Math.max(display.logicalHeight, 1)) * frameHeight),
     };
   }
 
@@ -299,6 +407,17 @@ export class LocalMacosHarness implements ComputerHarness {
       y: Math.round(action.y ?? 0),
     };
     const movementPath = resolveMovementPath(action);
+    const displayCtx = this.resolveDisplayForAction(session, action);
+
+    if (displayCtx) {
+      const target = this.displayFrameToGlobal(requested, displayCtx.display, displayCtx.frameWidth, displayCtx.frameHeight);
+      const durationMs = Math.max(60, Math.min(action.waitMs ?? 180, 1200));
+      await runLocalMacMouseCommand(helperArgs(LOCAL_MACOS_HELPER_COMMANDS.move, [target.x, target.y, durationMs, 18, movementPath]));
+      const actual = this.globalToDisplayFrame(await resolveActualCursor(target), displayCtx.display, displayCtx.frameWidth, displayCtx.frameHeight);
+      return buildResult(summarizePointerAction('Moved pointer to', requested, actual, movementPath), actual);
+    }
+
+    // Single-display fallback
     const space = await resolveCoordinateSpace(session);
     const target = toDesktopPoint(requested, space);
     const durationMs = Math.max(60, Math.min(action.waitMs ?? 180, 1200));
@@ -313,6 +432,15 @@ export class LocalMacosHarness implements ComputerHarness {
       y: Math.round(action.y ?? 0),
     };
     const movementPath = resolveMovementPath(action);
+    const displayCtx = this.resolveDisplayForAction(session, action);
+
+    if (displayCtx) {
+      const target = this.displayFrameToGlobal(requested, displayCtx.display, displayCtx.frameWidth, displayCtx.frameHeight);
+      await runLocalMacMouseCommand(helperArgs(LOCAL_MACOS_HELPER_COMMANDS.click, [target.x, target.y, 120, movementPath]));
+      const actual = this.globalToDisplayFrame(await resolveActualCursor(target), displayCtx.display, displayCtx.frameWidth, displayCtx.frameHeight);
+      return buildResult(summarizePointerAction('Clicked at', requested, actual, movementPath), actual);
+    }
+
     const space = await resolveCoordinateSpace(session);
     const target = toDesktopPoint(requested, space);
     await runLocalMacMouseCommand(helperArgs(LOCAL_MACOS_HELPER_COMMANDS.click, [target.x, target.y, 120, movementPath]));
@@ -326,6 +454,15 @@ export class LocalMacosHarness implements ComputerHarness {
       y: Math.round(action.y ?? 0),
     };
     const movementPath = resolveMovementPath(action);
+    const displayCtx = this.resolveDisplayForAction(session, action);
+
+    if (displayCtx) {
+      const target = this.displayFrameToGlobal(requested, displayCtx.display, displayCtx.frameWidth, displayCtx.frameHeight);
+      await runLocalMacMouseCommand(helperArgs(LOCAL_MACOS_HELPER_COMMANDS.doubleClick, [target.x, target.y, 130, movementPath]));
+      const actual = this.globalToDisplayFrame(await resolveActualCursor(target), displayCtx.display, displayCtx.frameWidth, displayCtx.frameHeight);
+      return buildResult(summarizePointerAction('Double-clicked at', requested, actual, movementPath), actual);
+    }
+
     const space = await resolveCoordinateSpace(session);
     const target = toDesktopPoint(requested, space);
     await runLocalMacMouseCommand(helperArgs(LOCAL_MACOS_HELPER_COMMANDS.doubleClick, [target.x, target.y, 130, movementPath]));
@@ -343,6 +480,21 @@ export class LocalMacosHarness implements ComputerHarness {
       y: Math.round(action.endY ?? requestedStart.y),
     };
     const movementPath = resolveMovementPath(action);
+    const displayCtx = this.resolveDisplayForAction(session, action);
+
+    if (displayCtx) {
+      const start = this.displayFrameToGlobal(requestedStart, displayCtx.display, displayCtx.frameWidth, displayCtx.frameHeight);
+      const end = this.displayFrameToGlobal(requestedEnd, displayCtx.display, displayCtx.frameWidth, displayCtx.frameHeight);
+      const durationMs = Math.max(120, Math.min(action.waitMs ?? 320, 2400));
+      await runLocalMacMouseCommand(helperArgs(LOCAL_MACOS_HELPER_COMMANDS.drag, [start.x, start.y, end.x, end.y, durationMs, 28, movementPath]));
+      const actual = this.globalToDisplayFrame(await resolveActualCursor(end), displayCtx.display, displayCtx.frameWidth, displayCtx.frameHeight);
+      const pathSuffix = movementPath === 'direct' ? '' : ' via ' + movementPath;
+      const summary = actual.x === requestedEnd.x && actual.y === requestedEnd.y
+        ? `Dragged from ${requestedStart.x}, ${requestedStart.y} to ${requestedEnd.x}, ${requestedEnd.y}${pathSuffix}.`
+        : `Dragged from ${requestedStart.x}, ${requestedStart.y} to ${requestedEnd.x}, ${requestedEnd.y}${pathSuffix} (actual ${actual.x}, ${actual.y}).`;
+      return buildResult(summary, actual);
+    }
+
     const space = await resolveCoordinateSpace(session);
     const start = toDesktopPoint(requestedStart, space);
     const end = toDesktopPoint(requestedEnd, space);

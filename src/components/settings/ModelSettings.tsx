@@ -30,7 +30,7 @@ type CatalogEntry = {
   useResponsesApi?: boolean;
   computerUseSupport?: 'openai-responses' | 'anthropic-client-tool' | 'gemini-computer-use' | 'custom' | 'none';
   visionCapable?: boolean;
-  preferredTarget?: 'isolated-browser' | 'local-macos' | 'isolated-vm';
+  preferredTarget?: 'isolated-browser' | 'local-macos';
 };
 
 type AgentBackend = 'mastra' | 'legion-daemon';
@@ -485,7 +485,6 @@ const ModelForm: FC<{
           >
             <option value="isolated-browser">Isolated Browser</option>
             <option value="local-macos">Local Mac</option>
-            <option value="isolated-vm">Isolated VM</option>
           </select>
         </div>
       </div>

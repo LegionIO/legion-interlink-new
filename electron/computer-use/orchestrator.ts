@@ -11,7 +11,6 @@ import { anthropicPlanSession } from './provider-adapters/anthropic.js';
 import { geminiPlanSession } from './provider-adapters/gemini.js';
 import { openaiPlanSession } from './provider-adapters/openai.js';
 import { IsolatedBrowserHarness } from './harnesses/isolated-browser.js';
-import { IsolatedVmHarness } from './harnesses/isolated-vm.js';
 import { LocalMacosHarness } from './harnesses/local-macos.js';
 import type { ComputerHarness, ComputerHarnessActionResult } from './harnesses/shared.js';
 import { closeOverlayWindow } from './overlay-window.js';
@@ -22,13 +21,6 @@ type EventSink = (event: ComputerUseEvent) => void;
 
 function getHarness(config: LegionConfig, session: ComputerSession, getConfig: () => LegionConfig): ComputerHarness {
   if (session.target === 'local-macos') return new LocalMacosHarness(getConfig);
-  if (session.target === 'isolated-vm') {
-    const remoteVmUrl = config.computerUse.isolated.remoteVmUrl?.trim();
-    if (!remoteVmUrl) {
-      throw new Error('Isolated VM requires computerUse.isolated.remoteVmUrl in Settings > Computer Use.');
-    }
-    return new IsolatedVmHarness(remoteVmUrl);
-  }
   return new IsolatedBrowserHarness();
 }
 
@@ -203,6 +195,7 @@ export class ComputerUseOrchestrator {
           ...existing,
           latestFrame: frame,
           latestEnvironment: environment,
+          displayLayout: frame.displayLayout ?? existing.displayLayout,
           updatedAt: nowIso(),
         }));
         this.emitEvent({ type: 'frame', sessionId, frame });
@@ -432,17 +425,19 @@ export class ComputerUseOrchestrator {
                         ? harness.focusWindow(session, action, { signal })
                         : harness.waitForIdle(session, action, { signal }));
 
+    const actionDisplayIndex = action.displayIndex ?? 0;
     const cursor = result.cursor
       ? {
           x: result.cursor.x ?? this.readSession(sessionId)?.cursor?.x ?? action.endX ?? action.x ?? 0,
           y: result.cursor.y ?? this.readSession(sessionId)?.cursor?.y ?? action.endY ?? action.y ?? 0,
           visible: result.cursor.visible ?? true,
           clickedAt: action.kind === 'click' || action.kind === 'doubleClick' ? nowIso() : this.readSession(sessionId)?.cursor?.clickedAt ?? null,
+          displayIndex: actionDisplayIndex,
         }
       : action.kind === 'drag' && action.endX != null && action.endY != null
-        ? { x: action.endX, y: action.endY, visible: true, clickedAt: this.readSession(sessionId)?.cursor?.clickedAt ?? null }
+        ? { x: action.endX, y: action.endY, visible: true, clickedAt: this.readSession(sessionId)?.cursor?.clickedAt ?? null, displayIndex: actionDisplayIndex }
         : action.x != null && action.y != null
-          ? { x: action.x, y: action.y, visible: true, clickedAt: action.kind === 'click' || action.kind === 'doubleClick' ? nowIso() : this.readSession(sessionId)?.cursor?.clickedAt ?? null }
+          ? { x: action.x, y: action.y, visible: true, clickedAt: action.kind === 'click' || action.kind === 'doubleClick' ? nowIso() : this.readSession(sessionId)?.cursor?.clickedAt ?? null, displayIndex: actionDisplayIndex }
           : this.readSession(sessionId)?.cursor;
 
     const updated = this.mutateSession(sessionId, (existing) => ({

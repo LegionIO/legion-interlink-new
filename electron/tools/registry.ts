@@ -216,7 +216,7 @@ export async function buildToolRegistry(getConfig: () => LegionConfig, legionHom
       description: 'Start a long-lived computer-use session that can control a browser or local desktop with live viewport updates and approval handling.',
       inputSchema: z.object({
         goal: z.string().describe('The goal the computer-use session should accomplish.'),
-        target: z.enum(['isolated-browser', 'local-macos', 'isolated-vm']).optional(),
+        target: z.enum(['isolated-browser', 'local-macos']).optional(),
         surface: z.enum(['docked', 'window']).optional(),
         approvalMode: z.enum(['step', 'goal', 'autonomous']).optional(),
         modelKey: z.string().optional(),
@@ -226,7 +226,7 @@ export async function buildToolRegistry(getConfig: () => LegionConfig, legionHom
       execute: async (input, context) => {
         const payload = input as {
           goal: string;
-          target?: 'isolated-browser' | 'local-macos' | 'isolated-vm';
+          target?: 'isolated-browser' | 'local-macos';
           surface?: 'docked' | 'window';
           approvalMode?: 'step' | 'goal' | 'autonomous';
           modelKey?: string;

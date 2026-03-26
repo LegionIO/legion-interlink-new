@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import type {
+  ComputerDisplayInfo,
+  ComputerDisplayLayout,
   ComputerUsePermissionRequestResult,
   ComputerUsePermissionSection,
   ComputerUsePermissions,
@@ -71,6 +73,24 @@ export type LocalMacosHelperResponse = {
   width?: number;
   height?: number;
   error?: string;
+  /** Display index of the captured display */
+  displayIndex?: number;
+  /** Info for the captured display */
+  displayInfo?: Record<string, unknown>;
+  /** All connected displays metadata */
+  displays?: Array<{
+    displayId?: string;
+    name?: string;
+    pixelWidth?: number;
+    pixelHeight?: number;
+    logicalWidth?: number;
+    logicalHeight?: number;
+    globalX?: number;
+    globalY?: number;
+    scaleFactor?: number;
+    isPrimary?: boolean;
+  }>;
+  displayCount?: number;
 };
 
 async function runLocalMacHelper(args: string[]): Promise<LocalMacosHelperResponse> {
@@ -245,4 +265,65 @@ export async function getLocalMacDesktopSize(): Promise<{ width: number; height:
   const height = typeof result.desktopHeight === 'number' ? Math.max(1, Math.round(result.desktopHeight)) : null;
   if (!width || !height) return null;
   return { width, height };
+}
+
+/**
+ * Parse raw display info from the Swift helper response into typed ComputerDisplayInfo[].
+ */
+export function parseDisplayInfoArray(
+  raw: LocalMacosHelperResponse['displays'],
+  allowedDisplays?: string[],
+): ComputerDisplayInfo[] {
+  if (!Array.isArray(raw) || raw.length === 0) return [];
+
+  let displays: ComputerDisplayInfo[] = raw
+    .filter((d) => d && typeof d.pixelWidth === 'number' && d.pixelWidth > 0)
+    .map((d, index) => ({
+      displayId: String(d.displayId ?? ''),
+      name: String(d.name ?? 'Unknown'),
+      pixelWidth: Math.round(d.pixelWidth ?? 0),
+      pixelHeight: Math.round(d.pixelHeight ?? 0),
+      logicalWidth: Math.round(d.logicalWidth ?? d.pixelWidth ?? 0),
+      logicalHeight: Math.round(d.logicalHeight ?? d.pixelHeight ?? 0),
+      globalX: Math.round(d.globalX ?? 0),
+      globalY: Math.round(d.globalY ?? 0),
+      scaleFactor: typeof d.scaleFactor === 'number' ? d.scaleFactor : 1,
+      isPrimary: d.isPrimary === true,
+      displayIndex: index,
+    }));
+
+  // Filter by allowed displays (by ID or name) if specified
+  if (allowedDisplays && allowedDisplays.length > 0) {
+    const allowed = new Set(allowedDisplays.map((s) => s.toLowerCase()));
+    displays = displays.filter(
+      (d) => allowed.has(d.displayId.toLowerCase()) || allowed.has(d.name.toLowerCase()),
+    );
+    // Re-index after filtering
+    displays.forEach((d, i) => { d.displayIndex = i; });
+  }
+
+  return displays;
+}
+
+/**
+ * Build a ComputerDisplayLayout from a helper response.
+ */
+export function buildDisplayLayout(
+  raw: LocalMacosHelperResponse['displays'],
+  allowedDisplays?: string[],
+): ComputerDisplayLayout | undefined {
+  const displays = parseDisplayInfoArray(raw, allowedDisplays);
+  if (displays.length === 0) return undefined;
+  return { displays };
+}
+
+/**
+ * Get the full multi-display layout from the Swift helper.
+ */
+export async function getLocalMacDisplayLayout(
+  allowedDisplays?: string[],
+): Promise<ComputerDisplayLayout | undefined> {
+  const result = await runLocalMacHelper(['displays']);
+  if (!result.ok) return undefined;
+  return buildDisplayLayout(result.displays, allowedDisplays);
 }

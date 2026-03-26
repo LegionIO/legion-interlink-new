@@ -32,7 +32,6 @@ type ComputerSetupPanelProps = {
 const TARGET_LABELS: Record<ComputerUseTarget, string> = {
   'isolated-browser': 'Browser',
   'local-macos': 'Local Mac',
-  'isolated-vm': 'VM',
 };
 
 const APPROVAL_LABELS: Record<string, string> = {
@@ -93,9 +92,7 @@ export const ComputerSetupPanel: FC<ComputerSetupPanelProps> = ({
     && localPermissionState.screenRecordingGranted
     && localPermissionState.automationGranted;
   const showLocalMacPreflight = computerTarget === 'local-macos' && (showLocalPermissionSpinner || !localPermissionAuthorized);
-  const vmEndpointConfigured = Boolean(computerConfig?.isolated?.remoteVmUrl?.trim());
-  const vmEndpointMissing = computerTarget === 'isolated-vm' && !vmEndpointConfigured;
-  const canStart = Boolean(conversationId) && Boolean(computerGoal.trim()) && !vmEndpointMissing && !isStartingComputerSession;
+  const canStart = Boolean(conversationId) && Boolean(computerGoal.trim()) && !isStartingComputerSession;
 
   useEffect(() => {
     if (computerTarget !== 'local-macos') {
@@ -192,7 +189,7 @@ export const ComputerSetupPanel: FC<ComputerSetupPanelProps> = ({
   };
 
   const cycleTarget = () => {
-    const targets: ComputerUseTarget[] = ['isolated-browser', 'local-macos', 'isolated-vm'];
+    const targets: ComputerUseTarget[] = ['isolated-browser', 'local-macos'];
     setComputerTarget(targets[(targets.indexOf(computerTarget) + 1) % targets.length]);
   };
 
@@ -254,12 +251,6 @@ export const ComputerSetupPanel: FC<ComputerSetupPanelProps> = ({
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {vmEndpointMissing && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-          VM requires a Remote URL. Configure in Settings &gt; Computer Use.
         </div>
       )}
 
@@ -328,7 +319,7 @@ export const ComputerSetupPanel: FC<ComputerSetupPanelProps> = ({
           type="button"
           onClick={handleStart}
           disabled={!canStart}
-          title={!conversationId ? 'Select a conversation first' : !computerGoal.trim() ? 'Enter a goal first' : vmEndpointMissing ? 'Configure VM URL in settings' : isStartingComputerSession ? (canContinue ? 'Resuming...' : 'Starting...') : canContinue ? 'Continue session' : 'Start computer session'}
+          title={!conversationId ? 'Select a conversation first' : !computerGoal.trim() ? 'Enter a goal first' : isStartingComputerSession ? (canContinue ? 'Resuming...' : 'Starting...') : canContinue ? 'Continue session' : 'Start computer session'}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
         >
           {isStartingComputerSession ? (

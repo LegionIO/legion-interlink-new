@@ -1,8 +1,12 @@
 import { BrowserWindow, screen } from 'electron';
 import { join } from 'node:path';
-import type { ComputerOverlayState } from '../../shared/computer-use.js';
+import type { ComputerDisplayLayout, ComputerOverlayState } from '../../shared/computer-use.js';
 
-const overlayWindows = new Map<string, BrowserWindow>();
+/**
+ * Storage: sessionId → Map<displayKey, BrowserWindow>
+ * Each session can have one overlay per display.
+ */
+const overlayWindows = new Map<string, Map<string, BrowserWindow>>();
 
 function loadOverlayRoute(win: BrowserWindow, query: Record<string, string>): void {
   const rendererUrl = process.env.ELECTRON_RENDERER_URL;
@@ -30,27 +34,26 @@ function safelySend(win: BrowserWindow, channel: string, data: unknown): void {
   }
 }
 
-/**
- * Create a fullscreen overlay BrowserWindow that covers the entire display
- * (including menu bar and dock areas) so the cursor indicator can reach
- * any screen coordinate. Uses enableLargerThanScreen to bypass macOS
- * constraints that would otherwise clip the window to the work area.
- */
-export function createOverlayWindow(
+function getSessionWindows(sessionId: string): Map<string, BrowserWindow> {
+  let windowMap = overlayWindows.get(sessionId);
+  if (!windowMap) {
+    windowMap = new Map();
+    overlayWindows.set(sessionId, windowMap);
+  }
+  return windowMap;
+}
+
+function createSingleOverlay(
   sessionId: string,
-  _config: { position: 'top' | 'bottom'; heightPx: number; opacity: number },
+  displayKey: string,
+  bounds: { x: number; y: number; width: number; height: number },
 ): BrowserWindow {
-  closeOverlayWindow(sessionId);
-
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { x: screenX, y: screenY, width: screenWidth, height: screenHeight } = primaryDisplay.bounds;
-
   const preloadPath = join(__dirname, '../preload/index.mjs');
   const win = new BrowserWindow({
-    x: screenX,
-    y: screenY,
-    width: screenWidth,
-    height: screenHeight,
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
     frame: false,
     transparent: true,
     hasShadow: false,
@@ -78,82 +81,196 @@ export function createOverlayWindow(
   win.setAlwaysOnTop(true, 'screen-saver');
 
   // Force full-display bounds (bypass work area constraints)
-  win.setBounds({ x: screenX, y: screenY, width: screenWidth, height: screenHeight });
+  win.setBounds(bounds);
 
   // Exclude from window menu and app switcher
   win.excludedFromShownWindowsMenu = true;
 
-  loadOverlayRoute(win, { overlay: '1', sessionId });
+  loadOverlayRoute(win, { overlay: '1', sessionId, overlayDisplayId: displayKey });
 
   win.once('ready-to-show', () => {
     win.showInactive();
   });
 
   win.on('closed', () => {
-    overlayWindows.delete(sessionId);
+    const windowMap = overlayWindows.get(sessionId);
+    if (windowMap) {
+      windowMap.delete(displayKey);
+      if (windowMap.size === 0) overlayWindows.delete(sessionId);
+    }
   });
 
-  overlayWindows.set(sessionId, win);
   return win;
 }
 
 /**
- * Send updated session state to the overlay's renderer process.
+ * Create overlay window(s) for a session. When a displayLayout is provided,
+ * creates one overlay per display. Skips displays that already have an overlay.
+ * Falls back to primary display only when no layout is available.
+ */
+export function createOverlayWindow(
+  sessionId: string,
+  _config: { position: 'top' | 'bottom'; heightPx: number; opacity: number },
+  displayLayout?: ComputerDisplayLayout,
+): BrowserWindow {
+  const windowMap = getSessionWindows(sessionId);
+
+  if (displayLayout && displayLayout.displays.length > 1) {
+    // Multi-display: create one overlay per display, skipping existing ones
+    // Clean up any generic 'primary' overlay from initial single-display creation
+    const genericPrimary = windowMap.get('primary');
+    if (genericPrimary && !genericPrimary.isDestroyed()) {
+      genericPrimary.destroy();
+    }
+    windowMap.delete('primary');
+
+    let firstWin: BrowserWindow | null = null;
+    for (const d of displayLayout.displays) {
+      // Skip if overlay already exists for this display
+      const existing = windowMap.get(d.displayId);
+      if (existing && !existing.isDestroyed()) {
+        if (!firstWin) firstWin = existing;
+        continue;
+      }
+
+      const bounds = {
+        x: d.globalX,
+        y: d.globalY,
+        width: d.logicalWidth,
+        height: d.logicalHeight,
+      };
+      const win = createSingleOverlay(sessionId, d.displayId, bounds);
+      windowMap.set(d.displayId, win);
+      if (!firstWin) firstWin = win;
+    }
+    return firstWin!;
+  }
+
+  // Single display fallback: use primary display (only if no overlay exists yet)
+  const existingPrimary = windowMap.get('primary');
+  if (existingPrimary && !existingPrimary.isDestroyed()) {
+    return existingPrimary;
+  }
+
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { x: screenX, y: screenY, width: screenWidth, height: screenHeight } = primaryDisplay.bounds;
+  const win = createSingleOverlay(sessionId, 'primary', {
+    x: screenX,
+    y: screenY,
+    width: screenWidth,
+    height: screenHeight,
+  });
+  windowMap.set('primary', win);
+  return win;
+}
+
+/**
+ * Send updated session state to all overlay renderer processes for a session.
+ * Each overlay receives the state with its own overlayDisplayId set.
+ * Cursor is only shown on the overlay that matches the cursor's displayIndex.
+ * frameWidth/frameHeight in state already reflect the cursor's target display.
  */
 export function updateOverlayState(sessionId: string, state: ComputerOverlayState): void {
-  const win = overlayWindows.get(sessionId);
-  if (!win || win.isDestroyed()) return;
-  safelySend(win, 'computer-use:overlay-state', state);
-}
+  const windowMap = overlayWindows.get(sessionId);
+  if (!windowMap) return;
 
-/**
- * Hide the overlay window completely from the compositor.
- * This ensures screencapture will NOT capture it.
- * Returns a Promise that resolves after the compositor has processed the hide.
- */
-export async function hideOverlayForCapture(sessionId: string): Promise<void> {
-  const win = overlayWindows.get(sessionId);
-  if (!win || win.isDestroyed() || !win.isVisible()) return;
-  win.hide();
-  // Wait one+ compositor frame so the window is fully removed from macOS window server
-  await new Promise((resolve) => setTimeout(resolve, 32));
-}
+  const cursorDisplayIndex = state.cursor?.displayIndex ?? 0;
+  const displays = state.displayLayout?.displays;
 
-/**
- * Re-show the overlay after a screenshot capture completes.
- */
-export function showOverlayAfterCapture(sessionId: string): void {
-  const win = overlayWindows.get(sessionId);
-  if (!win || win.isDestroyed()) return;
-  win.showInactive();
-}
+  for (const [displayKey, win] of windowMap) {
+    if (win.isDestroyed()) continue;
 
-/**
- * Destroy an overlay window. Uses `win.destroy()` instead of `win.close()`
- * because the window is non-closable by the user (no close button).
- */
-export function closeOverlayWindow(sessionId: string): void {
-  const win = overlayWindows.get(sessionId);
-  overlayWindows.delete(sessionId);
-  if (win && !win.isDestroyed()) {
-    win.destroy();
+    // Find this overlay's display info
+    const thisDisplay = displays?.find((d) => d.displayId === displayKey);
+    const thisDisplayIndex = thisDisplay?.displayIndex ?? 0;
+
+    // Only show cursor on the overlay that matches the cursor's target display
+    const cursorForOverlay = state.cursor?.visible && cursorDisplayIndex === thisDisplayIndex
+      ? state.cursor
+      : state.cursor ? { ...state.cursor, visible: false } : undefined;
+
+    safelySend(win, 'computer-use:overlay-state', {
+      ...state,
+      overlayDisplayId: displayKey,
+      cursor: cursorForOverlay,
+      // frameWidth/frameHeight already match the cursor's display from pushOverlayState
+      // screenWidth/screenHeight should be this overlay's display dimensions
+      screenWidth: thisDisplay?.logicalWidth ?? state.screenWidth,
+      screenHeight: thisDisplay?.logicalHeight ?? state.screenHeight,
+    });
   }
 }
 
 /**
- * Destroy all overlay windows. Called during app quit to ensure
- * no orphaned overlay windows persist.
+ * Hide all overlay windows for a session completely from the compositor.
+ * This ensures screencapture will NOT capture them.
  */
-export function closeAllOverlayWindows(): void {
-  for (const [sessionId, win] of overlayWindows) {
-    overlayWindows.delete(sessionId);
+export async function hideOverlayForCapture(sessionId: string): Promise<void> {
+  const windowMap = overlayWindows.get(sessionId);
+  if (!windowMap) return;
+
+  let anyHidden = false;
+  for (const win of windowMap.values()) {
+    if (!win.isDestroyed() && win.isVisible()) {
+      win.hide();
+      anyHidden = true;
+    }
+  }
+
+  if (anyHidden) {
+    // Wait one+ compositor frame so the windows are fully removed from macOS window server
+    await new Promise((resolve) => setTimeout(resolve, 32));
+  }
+}
+
+/**
+ * Re-show all overlay windows after a screenshot capture completes.
+ */
+export function showOverlayAfterCapture(sessionId: string): void {
+  const windowMap = overlayWindows.get(sessionId);
+  if (!windowMap) return;
+
+  for (const win of windowMap.values()) {
+    if (!win.isDestroyed()) {
+      win.showInactive();
+    }
+  }
+}
+
+/**
+ * Destroy all overlay windows for a session.
+ */
+export function closeOverlayWindow(sessionId: string): void {
+  const windowMap = overlayWindows.get(sessionId);
+  overlayWindows.delete(sessionId);
+  if (!windowMap) return;
+
+  for (const win of windowMap.values()) {
     if (!win.isDestroyed()) {
       win.destroy();
     }
   }
 }
 
+/**
+ * Destroy all overlay windows across all sessions. Called during app quit.
+ */
+export function closeAllOverlayWindows(): void {
+  for (const [sessionId, windowMap] of overlayWindows) {
+    overlayWindows.delete(sessionId);
+    for (const win of windowMap.values()) {
+      if (!win.isDestroyed()) {
+        win.destroy();
+      }
+    }
+  }
+}
+
 export function hasOverlayWindow(sessionId: string): boolean {
-  const win = overlayWindows.get(sessionId);
-  return Boolean(win && !win.isDestroyed());
+  const windowMap = overlayWindows.get(sessionId);
+  if (!windowMap) return false;
+  for (const win of windowMap.values()) {
+    if (!win.isDestroyed()) return true;
+  }
+  return false;
 }

@@ -230,26 +230,46 @@ export const ComputerSessionPanel: FC<PanelProps> = ({ session }) => {
 
       {/* Viewport */}
       {latestFrame ? (
-        <div className="overflow-hidden rounded-2xl border border-border/60 bg-black/80">
-          <div className="flex justify-center">
-            <div className="relative inline-block">
-              <img src={latestFrame.dataUrl} alt="Live viewport" className="block max-h-[380px] max-w-full object-contain" />
-              {session.cursor?.visible && (
-                <>
-                  <div
-                    className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary bg-primary/20 shadow-[0_0_0_6px_rgba(148,163,184,0.12)] transition-[left,top] duration-300 ease-out"
-                    style={{ left: `${(session.cursor.x / Math.max(latestFrame.width, 1)) * 100}%`, top: `${(session.cursor.y / Math.max(latestFrame.height, 1)) * 100}%` }}
-                  />
-                  {cursorClickedRecently && (
-                    <div
-                      className="pointer-events-none absolute h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/70 animate-ping"
-                      style={{ left: `${(session.cursor.x / Math.max(latestFrame.width, 1)) * 100}%`, top: `${(session.cursor.y / Math.max(latestFrame.height, 1)) * 100}%` }}
-                    />
-                  )}
-                </>
-              )}
+        <div className="space-y-2">
+          {/* Multi-display: show each display as a separate labeled image */}
+          {latestFrame.displayFrames && latestFrame.displayFrames.length > 1 ? (
+            <div className="grid gap-2" style={{ gridTemplateColumns: latestFrame.displayFrames.length <= 2 ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)' }}>
+              {latestFrame.displayFrames.map((df) => (
+                <div key={df.displayIndex} className="overflow-hidden rounded-xl border border-border/60 bg-black/80">
+                  <div className="flex items-center gap-1.5 border-b border-border/40 px-2 py-1">
+                    <span className="text-[10px] font-medium text-muted-foreground">Display {df.displayIndex}</span>
+                    <span className="text-[10px] text-muted-foreground/60 truncate">{df.displayName}</span>
+                  </div>
+                  <div className="relative">
+                    <img src={df.dataUrl} alt={`Display ${df.displayIndex}: ${df.displayName}`} className="block max-h-[280px] w-full object-contain" />
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
+          ) : (
+            /* Single display: show as before */
+            <div className="overflow-hidden rounded-2xl border border-border/60 bg-black/80">
+              <div className="flex justify-center">
+                <div className="relative inline-block">
+                  <img src={latestFrame.dataUrl} alt="Live viewport" className="block max-h-[380px] max-w-full object-contain" />
+                  {session.cursor?.visible && (
+                    <>
+                      <div
+                        className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary bg-primary/20 shadow-[0_0_0_6px_rgba(148,163,184,0.12)] transition-[left,top] duration-300 ease-out"
+                        style={{ left: `${(session.cursor.x / Math.max(latestFrame.width, 1)) * 100}%`, top: `${(session.cursor.y / Math.max(latestFrame.height, 1)) * 100}%` }}
+                      />
+                      {cursorClickedRecently && (
+                        <div
+                          className="pointer-events-none absolute h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/70 animate-ping"
+                          style={{ left: `${(session.cursor.x / Math.max(latestFrame.width, 1)) * 100}%`, top: `${(session.cursor.y / Math.max(latestFrame.height, 1)) * 100}%` }}
+                        />
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div className="flex items-center justify-center rounded-2xl border border-dashed border-border/60 bg-card/20 py-6">

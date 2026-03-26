@@ -1,6 +1,6 @@
 export type ComputerUseSurface = 'docked' | 'window';
 
-export type ComputerUseTarget = 'isolated-browser' | 'local-macos' | 'isolated-vm';
+export type ComputerUseTarget = 'isolated-browser' | 'local-macos';
 
 export type ComputerUseApprovalMode = 'step' | 'goal' | 'autonomous';
 
@@ -58,6 +58,34 @@ export type ComputerUseCursorState = {
   y: number;
   visible: boolean;
   clickedAt?: string | null;
+  /** Which display the cursor is on (0-indexed). Coordinates are relative to this display's frame. */
+  displayIndex?: number;
+};
+
+export type ComputerDisplayInfo = {
+  /** macOS CGDirectDisplayID as string */
+  displayId: string;
+  /** Display name (e.g., "Built-in Retina Display") */
+  name: string;
+  /** Pixel dimensions (for screenshot image coordinates) */
+  pixelWidth: number;
+  pixelHeight: number;
+  /** Logical point dimensions (for macOS CGEvent mouse positioning) */
+  logicalWidth: number;
+  logicalHeight: number;
+  /** Position in macOS global coordinate space (logical points) */
+  globalX: number;
+  globalY: number;
+  /** Retina scale factor */
+  scaleFactor: number;
+  /** Whether this is the primary/main display */
+  isPrimary: boolean;
+  /** Index in the sorted display list (0-based) */
+  displayIndex: number;
+};
+
+export type ComputerDisplayLayout = {
+  displays: ComputerDisplayInfo[];
 };
 
 export type ComputerInteractiveElement = {
@@ -83,6 +111,16 @@ export type ComputerFrame = {
   source: ComputerUseTarget;
   summary?: string;
   diffScore?: number;
+  /** Display layout metadata when captured from multiple displays */
+  displayLayout?: ComputerDisplayLayout;
+  /** Per-display screenshots (base64 data URLs) indexed by display position */
+  displayFrames?: Array<{
+    displayIndex: number;
+    displayName: string;
+    dataUrl: string;
+    width: number;
+    height: number;
+  }>;
 };
 
 export type ComputerEnvironmentMetadata = {
@@ -123,6 +161,8 @@ export type ComputerActionProposal = {
   appName?: string;
   waitMs?: number;
   movementPath: ComputerUseMovementPath;
+  /** Which display the action targets (0-indexed). When omitted, defaults to primary (0). */
+  displayIndex?: number;
   resultSummary?: string;
   error?: string;
 };
@@ -212,6 +252,8 @@ export type ComputerSession = {
   guidanceMessages: ComputerGuidanceMessage[];
   /** Whether the user has viewed the completed session (clears the sidebar indicator) */
   completionSeen?: boolean;
+  /** Current multi-display layout (populated from frame capture) */
+  displayLayout?: ComputerDisplayLayout;
 };
 
 export type ComputerOverlayState = {
@@ -234,6 +276,22 @@ export type ComputerOverlayState = {
   /** Work area origin — offset from display origin to account for menu bar and dock. */
   workAreaX?: number;
   workAreaY?: number;
+  /** Multi-display layout for cursor positioning across monitors */
+  displayLayout?: ComputerDisplayLayout;
+  /** Which display this overlay window covers (set per-overlay-window) */
+  overlayDisplayId?: string;
+  /** Total number of actions taken so far */
+  actionCount?: number;
+  /** Number of completed actions */
+  completedActionCount?: number;
+  /** Summary of the last completed action */
+  lastActionSummary?: string;
+  /** High-level plan summary from the planner */
+  planSummary?: string;
+  /** Status message (e.g. recovery reason, error context) */
+  statusMessage?: string;
+  /** Session start time ISO string for elapsed timer */
+  sessionStartedAt?: string;
 };
 
 export type StartComputerSessionOptions = {

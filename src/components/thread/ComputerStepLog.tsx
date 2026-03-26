@@ -111,20 +111,63 @@ const ScreenshotThumbnail: FC<{
   /** Drag end coordinates (shows a second indicator connected by a line) */
   dragEndX?: number;
   dragEndY?: number;
-}> = ({ frame, cursorX, cursorY, dragEndX, dragEndY }) => {
+  /** Which display the action targeted (for multi-display) */
+  actionDisplayIndex?: number;
+}> = ({ frame, cursorX, cursorY, dragEndX, dragEndY, actionDisplayIndex }) => {
   const [expanded, setExpanded] = useState(false);
-  const hasCursor = cursorX != null && cursorY != null && frame.width > 0 && frame.height > 0;
-  const hasDragEnd = dragEndX != null && dragEndY != null;
+  const [selectedDisplayIndex, setSelectedDisplayIndex] = useState<number | null>(null);
+
+  // Default to the action's target display, allow user to switch
+  const activeDisplayIndex = selectedDisplayIndex ?? (actionDisplayIndex ?? 0);
+
+  // For multi-display, find the targeted display's frame
+  const displayFrames = frame.displayFrames;
+  const hasMultipleDisplays = displayFrames && displayFrames.length > 1;
+  const activeDisplayFrame = hasMultipleDisplays
+    ? displayFrames.find((df) => df.displayIndex === activeDisplayIndex) ?? displayFrames[0]
+    : null;
+
+  // Use the active display's image and dimensions for cursor positioning
+  const displayDataUrl = activeDisplayFrame?.dataUrl ?? frame.dataUrl;
+  const displayWidth = activeDisplayFrame?.width ?? frame.width;
+  const displayHeight = activeDisplayFrame?.height ?? frame.height;
+
+  // Only show cursor when viewing the action's target display
+  const showCursor = activeDisplayIndex === (actionDisplayIndex ?? 0);
+  const hasCursor = showCursor && cursorX != null && cursorY != null && displayWidth > 0 && displayHeight > 0;
+  const hasDragEnd = showCursor && dragEndX != null && dragEndY != null;
 
   return (
-    <div className="mt-2">
+    <div className="mt-2 space-y-1.5">
+      {/* Multi-display: show all display thumbnails in a row, highlight the active one */}
+      {hasMultipleDisplays && (
+        <div className="flex gap-1.5">
+          {displayFrames.map((df) => (
+            <button
+              key={df.displayIndex}
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setSelectedDisplayIndex(df.displayIndex); }}
+              className={`relative overflow-hidden rounded border transition-all ${df.displayIndex === activeDisplayIndex ? 'border-purple-400/60 ring-1 ring-purple-400/30' : 'border-border/30 opacity-60 hover:opacity-80 hover:border-border/50'}`}
+              style={{ flex: `0 0 ${Math.min(50, 100 / displayFrames.length)}%` }}
+            >
+              <img src={df.dataUrl} alt={df.displayName} className="block w-full max-h-[60px] object-contain bg-black/40" />
+              <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-1 py-0.5 text-[8px] text-white/60 truncate">
+                {df.displayIndex === (actionDisplayIndex ?? 0) && <span className="text-purple-300 mr-0.5">&#9654;</span>}
+                {df.displayName}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Main viewport — shows the targeted display's image with cursor overlay */}
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
         className="relative block overflow-hidden rounded-lg border border-border/50 transition-colors hover:border-border/80"
       >
         <img
-          src={frame.dataUrl}
+          src={displayDataUrl}
           alt="Viewport"
           className={`block w-full object-contain bg-black/60 ${expanded ? 'max-h-[400px]' : 'max-h-[180px]'}`}
         />
@@ -135,16 +178,16 @@ const ScreenshotThumbnail: FC<{
             <div
               className="pointer-events-none absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-purple-400/60 shadow-[0_0_8px_3px_rgba(168,85,247,0.25)]"
               style={{
-                left: `${(cursorX / frame.width) * 100}%`,
-                top: `${(cursorY / frame.height) * 100}%`,
+                left: `${(cursorX / displayWidth) * 100}%`,
+                top: `${(cursorY / displayHeight) * 100}%`,
               }}
             />
             {/* Inner dot */}
             <div
               className="pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-purple-500/70 border border-purple-300/80"
               style={{
-                left: `${(cursorX / frame.width) * 100}%`,
-                top: `${(cursorY / frame.height) * 100}%`,
+                left: `${(cursorX / displayWidth) * 100}%`,
+                top: `${(cursorY / displayHeight) * 100}%`,
               }}
             />
             {/* Drag end indicator */}
@@ -152,8 +195,8 @@ const ScreenshotThumbnail: FC<{
               <div
                 className="pointer-events-none absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-dashed border-purple-400/40"
                 style={{
-                  left: `${(dragEndX / frame.width) * 100}%`,
-                  top: `${(dragEndY / frame.height) * 100}%`,
+                  left: `${(dragEndX / displayWidth) * 100}%`,
+                  top: `${(dragEndY / displayHeight) * 100}%`,
                 }}
               />
             )}
@@ -260,6 +303,7 @@ const StepCard: FC<{
                 cursorY={action.resolvedY ?? action.y}
                 dragEndX={action.endX}
                 dragEndY={action.endY}
+                actionDisplayIndex={action.displayIndex}
               />
             </div>
           )}

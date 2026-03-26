@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { generateObject } from 'ai';
 import type {
   ComputerActionProposal,
+  ComputerDisplayLayout,
   ComputerPlannerState,
   ComputerSession,
   ComputerUseRole,
@@ -43,6 +44,7 @@ const actionSchema = z.object({
     appName: nullableString,
     waitMs: nullableNumber,
     movementPath: requiredMovementPath,
+    displayIndex: nullableNumber.describe('Which display/monitor this action targets (0-indexed). 0 = primary. Only needed for multi-monitor setups when targeting a non-primary display.'),
   })).max(3),
 });
 
@@ -208,6 +210,28 @@ export async function createPlannerState(goal: string, modelConfig: LLMModelConf
   };
 }
 
+function describeDisplayLayout(layout: ComputerDisplayLayout | undefined): string | undefined {
+  if (!layout || layout.displays.length <= 1) return undefined;
+
+  const lines: string[] = [
+    '--- MULTI-MONITOR SETUP ---',
+    `You are viewing ${layout.displays.length} separate monitor screenshots (one image per monitor).`,
+    '',
+  ];
+
+  for (let i = 0; i < layout.displays.length; i++) {
+    const d = layout.displays[i];
+    const primary = d.isPrimary ? ' (PRIMARY)' : '';
+    const position = `global position (${d.globalX}, ${d.globalY})`;
+    lines.push(`  Display ${i}${primary}: "${d.name}" — ${d.logicalWidth}x${d.logicalHeight} logical, ${position}`);
+  }
+
+  lines.push('');
+  lines.push('IMPORTANT: When specifying x/y coordinates for a pointer action (click, movePointer, doubleClick, drag), also set displayIndex to the display number (0-indexed) where the target element is visible. x/y are relative to THAT display\'s image, not a combined image. If you omit displayIndex or set it to 0, the action targets the primary display.');
+  lines.push('--- END MULTI-MONITOR SETUP ---');
+  return lines.join('\n');
+}
+
 export async function generateNextActions(params: {
   session: ComputerSession;
   modelConfig: LLMModelConfig;
@@ -296,6 +320,8 @@ export async function generateNextActions(params: {
     `Plan summary: ${plannerState.summary}`,
     `Current subgoal: ${currentSubgoal}`,
     `Success criteria: ${plannerState.successCriteria.join(' | ')}`,
+    // Display layout description (multi-monitor awareness)
+    describeDisplayLayout(session.displayLayout),
     // Focused window state block (always included — the model needs to know what window
     // is actually focused regardless of whether it is hidden)
     focusedWindowBlock,
@@ -330,9 +356,27 @@ export async function generateNextActions(params: {
     'The response schema is strict. Always include complete, summary, nextSubgoal, and every action field. Use null for any field that does not apply to a given action.',
   ].filter(Boolean).join('\n\n');
 
-  const message = imageInput
-    ? [{ role: 'user' as const, content: [{ type: 'text' as const, text: promptParts }, { type: 'image' as const, image: imageInput.image, mediaType: imageInput.mediaType }] }]
-    : [{ role: 'user' as const, content: [{ type: 'text' as const, text: promptParts }] }];
+  // Build message content with per-display images
+  const displayFrames = session.latestFrame?.displayFrames;
+  const contentParts: Array<{ type: 'text'; text: string } | { type: 'image'; image: Buffer | URL; mediaType?: string }> = [
+    { type: 'text' as const, text: promptParts },
+  ];
+
+  if (displayFrames && displayFrames.length > 1) {
+    // Multi-display: send labeled images for each display
+    for (const df of displayFrames) {
+      contentParts.push({ type: 'text' as const, text: `[Display ${df.displayIndex}: "${df.displayName}" — ${df.width}x${df.height}]` });
+      const img = toImageInput({ dataUrl: df.dataUrl, mimeType: 'image/jpeg' } as typeof frame);
+      if (img) {
+        contentParts.push({ type: 'image' as const, image: img.image, mediaType: img.mediaType });
+      }
+    }
+  } else if (imageInput) {
+    // Single display: send one image (original behavior)
+    contentParts.push({ type: 'image' as const, image: imageInput.image, mediaType: imageInput.mediaType });
+  }
+
+  const message = [{ role: 'user' as const, content: contentParts }];
 
   const result = await generateObject({
     model,
@@ -370,6 +414,7 @@ export async function generateNextActions(params: {
       appName: action.appName ?? undefined,
       waitMs: action.waitMs ?? undefined,
       movementPath: action.movementPath,
+      displayIndex: action.displayIndex ?? undefined,
     })),
   };
 }

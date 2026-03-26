@@ -22,6 +22,7 @@ import { closeOperatorWindow, openComputerSetupWindow, openOperatorWindow } from
 import {
   closeOverlayWindow,
   createOverlayWindow,
+  hasOverlayWindow,
   updateOverlayState,
 } from './overlay-window.js';
 import {
@@ -40,10 +41,6 @@ const SESSION_ALERT_SOUND_BY_KIND: Record<SessionAlertKind, string> = {
   failed: 'Basso',
   takeover: 'Ping',
 };
-
-function normalizeRemoteVmUrl(value?: string): string {
-  return value?.trim() ?? '';
-}
 
 function readActiveConversationId(legionHome: string): string | null {
   const storePath = join(legionHome, 'data', 'conversations.json');
@@ -209,6 +206,10 @@ export class ComputerUseSessionManager extends EventEmitter {
         if (next.status === 'completed' || next.status === 'failed' || next.status === 'stopped') {
           closeOverlayWindow(sessionId);
         } else {
+          // Recreate overlays when displayLayout newly appears (e.g., after first frame capture)
+          if (next.displayLayout && !current.displayLayout && hasOverlayWindow(sessionId)) {
+            this.openOverlayIfEnabled(next);
+          }
           this.pushOverlayState(next);
         }
 
@@ -268,6 +269,10 @@ export class ComputerUseSessionManager extends EventEmitter {
     if (session.status === 'completed' || session.status === 'failed' || session.status === 'stopped') {
       closeOverlayWindow(session.id);
     } else {
+      // Recreate overlays when displayLayout newly appears
+      if (session.displayLayout && !previous?.displayLayout && hasOverlayWindow(session.id)) {
+        this.openOverlayIfEnabled(session);
+      }
       this.pushOverlayState(session);
     }
 
@@ -283,7 +288,7 @@ export class ComputerUseSessionManager extends EventEmitter {
       position: config.computerUse.overlay.position ?? 'top',
       heightPx: config.computerUse.overlay.heightPx ?? 120,
       opacity: config.computerUse.overlay.opacity ?? 0.75,
-    });
+    }, session.displayLayout);
     this.pushOverlayState(session);
   }
 
@@ -300,6 +305,12 @@ export class ComputerUseSessionManager extends EventEmitter {
     const primaryDisplay = screen.getPrimaryDisplay();
     const { width: screenWidth, height: screenHeight } = primaryDisplay.bounds;
 
+    // Resolve frame dimensions for the cursor's display (may differ from primary)
+    const cursorDisplayIndex = session.cursor?.displayIndex ?? 0;
+    const cursorDisplayFrame = session.latestFrame?.displayFrames?.find((f) => f.displayIndex === cursorDisplayIndex);
+    const cursorFrameWidth = cursorDisplayFrame?.width ?? session.latestFrame?.width;
+    const cursorFrameHeight = cursorDisplayFrame?.height ?? session.latestFrame?.height;
+
     const state: ComputerOverlayState = {
       sessionId: session.id,
       modelDisplayName: modelEntry?.displayName ?? session.selectedModelKey ?? 'AI',
@@ -314,12 +325,19 @@ export class ComputerUseSessionManager extends EventEmitter {
       lastCaptureAt: cycleTiming?.lastCaptureAt,
       avgCycleDurationMs: cycleTiming?.avgCycleDurationMs,
       cursor: session.cursor,
-      frameWidth: session.latestFrame?.width,
-      frameHeight: session.latestFrame?.height,
+      frameWidth: cursorFrameWidth,
+      frameHeight: cursorFrameHeight,
       screenWidth,
       screenHeight,
       workAreaX: 0,
       workAreaY: 0,
+      displayLayout: session.displayLayout,
+      actionCount: session.actions.length,
+      completedActionCount: session.actions.filter((a) => a.status === 'completed').length,
+      lastActionSummary: session.actions.filter((a) => a.status === 'completed').slice(-1)[0]?.resultSummary,
+      planSummary: session.planSummary,
+      statusMessage: session.statusMessage,
+      sessionStartedAt: session.createdAt,
     };
     updateOverlayState(session.id, state);
   }
@@ -358,10 +376,6 @@ export class ComputerUseSessionManager extends EventEmitter {
         missing.push('Allow Automation for Interlink so it can drive System Events and read focused window metadata.');
       }
       return missing.length > 0 ? missing.join(' ') : null;
-    }
-
-    if (target === 'isolated-vm' && !normalizeRemoteVmUrl(this.getConfig().computerUse.isolated.remoteVmUrl)) {
-      return 'Set Settings > Computer Use > Remote VM URL before starting an Isolated VM session.';
     }
 
     return null;
