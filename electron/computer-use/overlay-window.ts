@@ -104,9 +104,10 @@ function createSingleOverlay(
 }
 
 /**
- * Create overlay window(s) for a session. When a displayLayout is provided,
- * creates one overlay per display. Skips displays that already have an overlay.
- * Falls back to primary display only when no layout is available.
+ * Create overlay window(s) for a session. Creates one overlay per connected
+ * display using Electron's screen API (always available, no frame capture needed).
+ * If a displayLayout is provided, uses its display IDs as keys; otherwise uses
+ * Electron display IDs. Skips displays that already have an overlay.
  */
 export function createOverlayWindow(
   sessionId: string,
@@ -115,53 +116,49 @@ export function createOverlayWindow(
 ): BrowserWindow {
   const windowMap = getSessionWindows(sessionId);
 
-  if (displayLayout && displayLayout.displays.length > 1) {
-    // Multi-display: create one overlay per display, skipping existing ones
-    // Clean up any generic 'primary' overlay from initial single-display creation
-    const genericPrimary = windowMap.get('primary');
-    if (genericPrimary && !genericPrimary.isDestroyed()) {
-      genericPrimary.destroy();
-    }
-    windowMap.delete('primary');
+  // Always create overlays for ALL connected displays using Electron's screen API
+  const electronDisplays = screen.getAllDisplays();
 
-    let firstWin: BrowserWindow | null = null;
-    for (const d of displayLayout.displays) {
-      // Skip if overlay already exists for this display
-      const existing = windowMap.get(d.displayId);
-      if (existing && !existing.isDestroyed()) {
-        if (!firstWin) firstWin = existing;
-        continue;
-      }
+  let firstWin: BrowserWindow | null = null;
+  for (let i = 0; i < electronDisplays.length; i++) {
+    const ed = electronDisplays[i];
+    // Use the Electron display ID as the key (same as CGDirectDisplayID on macOS)
+    const displayKey = String(ed.id);
 
-      const bounds = {
-        x: d.globalX,
-        y: d.globalY,
-        width: d.logicalWidth,
-        height: d.logicalHeight,
-      };
-      const win = createSingleOverlay(sessionId, d.displayId, bounds);
-      windowMap.set(d.displayId, win);
-      if (!firstWin) firstWin = win;
+    // Skip if overlay already exists for this display
+    const existing = windowMap.get(displayKey);
+    if (existing && !existing.isDestroyed()) {
+      if (!firstWin) firstWin = existing;
+      continue;
     }
-    return firstWin!;
+
+    const bounds = {
+      x: ed.bounds.x,
+      y: ed.bounds.y,
+      width: ed.bounds.width,
+      height: ed.bounds.height,
+    };
+    const win = createSingleOverlay(sessionId, displayKey, bounds);
+    windowMap.set(displayKey, win);
+    if (!firstWin) firstWin = win;
   }
 
-  // Single display fallback: use primary display (only if no overlay exists yet)
-  const existingPrimary = windowMap.get('primary');
-  if (existingPrimary && !existingPrimary.isDestroyed()) {
-    return existingPrimary;
+  // Clean up any orphaned overlays for displays that no longer exist
+  const currentDisplayKeys = new Set(electronDisplays.map((ed) => String(ed.id)));
+  for (const [key, win] of windowMap) {
+    if (!currentDisplayKeys.has(key) && !win.isDestroyed()) {
+      win.destroy();
+      windowMap.delete(key);
+    }
   }
 
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { x: screenX, y: screenY, width: screenWidth, height: screenHeight } = primaryDisplay.bounds;
-  const win = createSingleOverlay(sessionId, 'primary', {
-    x: screenX,
-    y: screenY,
-    width: screenWidth,
-    height: screenHeight,
-  });
-  windowMap.set('primary', win);
-  return win;
+  return firstWin ?? (() => {
+    // Absolute fallback: create on primary
+    const pd = screen.getPrimaryDisplay();
+    const win = createSingleOverlay(sessionId, 'primary', pd.bounds);
+    windowMap.set('primary', win);
+    return win;
+  })();
 }
 
 /**
@@ -176,27 +173,31 @@ export function updateOverlayState(sessionId: string, state: ComputerOverlayStat
 
   const cursorDisplayIndex = state.cursor?.displayIndex ?? 0;
   const displays = state.displayLayout?.displays;
+  const electronDisplays = screen.getAllDisplays();
 
   for (const [displayKey, win] of windowMap) {
     if (win.isDestroyed()) continue;
 
-    // Find this overlay's display info
+    // Find this overlay's display info from layout or Electron
     const thisDisplay = displays?.find((d) => d.displayId === displayKey);
-    const thisDisplayIndex = thisDisplay?.displayIndex ?? 0;
+    const thisElectronDisplay = electronDisplays.find((ed) => String(ed.id) === displayKey);
+    const thisDisplayIndex = thisDisplay?.displayIndex ?? electronDisplays.indexOf(thisElectronDisplay!);
 
     // Only show cursor on the overlay that matches the cursor's target display
     const cursorForOverlay = state.cursor?.visible && cursorDisplayIndex === thisDisplayIndex
       ? state.cursor
       : state.cursor ? { ...state.cursor, visible: false } : undefined;
 
+    // Screen dimensions for this overlay's display
+    const overlayScreenWidth = thisDisplay?.logicalWidth ?? thisElectronDisplay?.bounds.width ?? state.screenWidth;
+    const overlayScreenHeight = thisDisplay?.logicalHeight ?? thisElectronDisplay?.bounds.height ?? state.screenHeight;
+
     safelySend(win, 'computer-use:overlay-state', {
       ...state,
       overlayDisplayId: displayKey,
       cursor: cursorForOverlay,
-      // frameWidth/frameHeight already match the cursor's display from pushOverlayState
-      // screenWidth/screenHeight should be this overlay's display dimensions
-      screenWidth: thisDisplay?.logicalWidth ?? state.screenWidth,
-      screenHeight: thisDisplay?.logicalHeight ?? state.screenHeight,
+      screenWidth: overlayScreenWidth,
+      screenHeight: overlayScreenHeight,
     });
   }
 }

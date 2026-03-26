@@ -22,7 +22,6 @@ import { closeOperatorWindow, openComputerSetupWindow, openOperatorWindow } from
 import {
   closeOverlayWindow,
   createOverlayWindow,
-  hasOverlayWindow,
   updateOverlayState,
 } from './overlay-window.js';
 import {
@@ -206,10 +205,6 @@ export class ComputerUseSessionManager extends EventEmitter {
         if (next.status === 'completed' || next.status === 'failed' || next.status === 'stopped') {
           closeOverlayWindow(sessionId);
         } else {
-          // Recreate overlays when displayLayout newly appears (e.g., after first frame capture)
-          if (next.displayLayout && !current.displayLayout && hasOverlayWindow(sessionId)) {
-            this.openOverlayIfEnabled(next);
-          }
           this.pushOverlayState(next);
         }
 
@@ -269,10 +264,6 @@ export class ComputerUseSessionManager extends EventEmitter {
     if (session.status === 'completed' || session.status === 'failed' || session.status === 'stopped') {
       closeOverlayWindow(session.id);
     } else {
-      // Recreate overlays when displayLayout newly appears
-      if (session.displayLayout && !previous?.displayLayout && hasOverlayWindow(session.id)) {
-        this.openOverlayIfEnabled(session);
-      }
       this.pushOverlayState(session);
     }
 

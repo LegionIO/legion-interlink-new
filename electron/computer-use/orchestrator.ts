@@ -339,13 +339,6 @@ export class ComputerUseOrchestrator {
       if (getTerminalStatus(latest)) {
         closeOverlayWindow(sessionId);
         await harness.dispose(sessionId).catch(() => {});
-      } else if (latest) {
-        // Run finished without a terminal status (e.g., loop exhausted).
-        // Close the overlay unless the session is in a resumable state.
-        const status = (latest as ComputerSession).status;
-        if (status !== 'paused' && status !== 'awaiting-approval') {
-          closeOverlayWindow(sessionId);
-        }
       }
     }
   }
