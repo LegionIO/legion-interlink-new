@@ -6,6 +6,7 @@ import { BrowseTab } from './BrowseTab';
 import { IngestTab } from './IngestTab';
 import { MonitorsTab } from './MonitorsTab';
 import { HealthTab } from './HealthTab';
+import { KnowledgeDropZone } from './KnowledgeDropZone';
 
 type KnowledgeTab = 'query' | 'browse' | 'ingest' | 'monitors' | 'health';
 
@@ -40,6 +41,7 @@ export function KnowledgePanel({ onClose }: Props) {
   useEffect(() => { checkDaemon(); }, [checkDaemon]);
 
   return (
+    <KnowledgeDropZone>
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border/50 px-6 py-4">
@@ -110,5 +112,6 @@ export function KnowledgePanel({ onClose }: Props) {
         )}
       </div>
     </div>
+    </KnowledgeDropZone>
   );
 }

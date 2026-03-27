@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback, type FC } from 'react';
-import { PlusIcon, SearchIcon, Trash2Icon, MessageSquareIcon, LoaderIcon, XIcon, PanelTopOpenIcon, SlidersHorizontalIcon, MonitorIcon } from 'lucide-react';
+import { PlusIcon, SearchIcon, Trash2Icon, MessageSquareIcon, LoaderIcon, XIcon, PanelTopOpenIcon, SlidersHorizontalIcon, MonitorIcon, PinIcon } from 'lucide-react';
 import { legion } from '@/lib/ipc-client';
 import { EditableInput } from '@/components/EditableInput';
 import { useComputerUse } from '@/providers/ComputerUseProvider';
@@ -131,7 +131,19 @@ export const ConversationList: FC<ConversationListProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('legion:pinned-conversations') || '[]')); } catch { return new Set(); }
+  });
   const { sessionsByConversation } = useComputerUse();
+
+  const togglePin = useCallback((id: string) => {
+    setPinnedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      localStorage.setItem('legion:pinned-conversations', JSON.stringify([...next]));
+      return next;
+    });
+  }, []);
 
   /** Get the computer-use session status for a conversation */
   const getComputerStatus = useCallback((conversationId: string): 'running' | 'completed' | null => {
@@ -296,56 +308,83 @@ export const ConversationList: FC<ConversationListProps> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto px-3">
-        {filteredConversations.map((conv) => {
-          const isActive = conv.id === activeConversationId;
-          const isRunning = conv.runStatus === 'running';
-          const hasUnread = conv.hasUnread && !isActive;
-          const isRemoving = removingIds.has(conv.id);
-          const computerStatus = getComputerStatus(conv.id);
+        {(() => {
+          const pinned = filteredConversations.filter((c) => pinnedIds.has(c.id));
+          const unpinned = filteredConversations.filter((c) => !pinnedIds.has(c.id));
+          const sections: Array<{ label?: string; items: ConversationSummary[] }> = [];
+          if (pinned.length > 0) sections.push({ label: 'Pinned', items: pinned });
+          sections.push({ items: unpinned });
 
-          return (
-            <div
-              key={conv.id}
-              className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                isRemoving ? 'max-h-0 opacity-0 mb-0' : 'max-h-24 opacity-100 mb-1.5'
-              }`}
-            >
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => handleClearUnread(conv.id)}
-              onKeyDown={(e) => e.key === 'Enter' && handleClearUnread(conv.id)}
-              className={`
-                flex w-full items-start gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition-all group cursor-pointer relative
-                ${isActive ? 'shadow-[inset_0_0_0_1px_var(--legion-active-item-ring)]' : 'hover:bg-sidebar-accent/65'}
-                ${hasUnread && !isActive ? 'bg-sidebar-accent/45' : ''}
-              `}
-              style={isActive ? { backgroundColor: 'var(--legion-active-item)' } : undefined}
-            >
-              <MessageSquareIcon className={`mt-0.5 h-4 w-4 shrink-0 ${hasUnread ? 'text-primary' : 'text-muted-foreground'}`} />
-              <div className="flex-1 min-w-0">
-                <span className={`line-clamp-2 text-sm ${hasUnread ? 'font-semibold text-sidebar-foreground' : 'font-medium text-sidebar-foreground/95'}`}>
-                  {getDisplayTitle(conv, sessionsByConversation.get(conv.id))}
-                </span>
-                <span className="mt-1 block text-[12px] text-muted-foreground">
-                  {isRunning ? 'Running now' : formatRelativeTime(conv.lastAssistantUpdateAt ?? conv.lastMessageAt)}
-                  {conv.messageCount > 0 && ` · ${conv.messageCount} msgs`}
-                </span>
-              </div>
-              <div className="ml-1 flex shrink-0 flex-col items-center gap-1">
-                {hasUnread && <div className="h-2 w-2 rounded-full bg-primary shadow-[0_0_10px_rgba(197,194,245,0.38)]" />}
-                {isRunning && <TypingBubble />}
-                {computerStatus === 'running' && <ComputerActiveIndicator />}
-                {computerStatus === 'completed' && !(isActive && activeThreadMode === 'computer') && <ComputerCompletedIndicator />}
-                <ConversationDeleteButton
-                  onDelete={() => handleDelete(conv.id)}
-                  isDeleting={deletingId === conv.id}
-                />
-              </div>
+          return sections.map((section, si) => (
+            <div key={si}>
+              {section.label && (
+                <div className="flex items-center gap-2 px-1 pb-1 pt-2">
+                  <PinIcon className="h-2.5 w-2.5 text-primary/60" />
+                  <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">{section.label}</span>
+                </div>
+              )}
+              {section.items.map((conv) => {
+                const isActive = conv.id === activeConversationId;
+                const isRunning = conv.runStatus === 'running';
+                const hasUnread = conv.hasUnread && !isActive;
+                const isRemoving = removingIds.has(conv.id);
+                const computerStatus = getComputerStatus(conv.id);
+                const isPinned = pinnedIds.has(conv.id);
+
+                return (
+                  <div
+                    key={conv.id}
+                    className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                      isRemoving ? 'max-h-0 opacity-0 mb-0' : 'max-h-24 opacity-100 mb-1.5'
+                    }`}
+                  >
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleClearUnread(conv.id)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleClearUnread(conv.id)}
+                    className={`
+                      flex w-full items-start gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition-all group cursor-pointer relative
+                      ${isActive ? 'shadow-[inset_0_0_0_1px_var(--legion-active-item-ring)]' : 'hover:bg-sidebar-accent/65'}
+                      ${hasUnread && !isActive ? 'bg-sidebar-accent/45' : ''}
+                    `}
+                    style={isActive ? { backgroundColor: 'var(--legion-active-item)' } : undefined}
+                  >
+                    <MessageSquareIcon className={`mt-0.5 h-4 w-4 shrink-0 ${hasUnread ? 'text-primary' : 'text-muted-foreground'}`} />
+                    <div className="flex-1 min-w-0">
+                      <span className={`line-clamp-2 text-sm ${hasUnread ? 'font-semibold text-sidebar-foreground' : 'font-medium text-sidebar-foreground/95'}`}>
+                        {getDisplayTitle(conv, sessionsByConversation.get(conv.id))}
+                      </span>
+                      <span className="mt-1 block text-[12px] text-muted-foreground">
+                        {isRunning ? 'Running now' : formatRelativeTime(conv.lastAssistantUpdateAt ?? conv.lastMessageAt)}
+                        {conv.messageCount > 0 && ` · ${conv.messageCount} msgs`}
+                      </span>
+                    </div>
+                    <div className="ml-1 flex shrink-0 flex-col items-center gap-1">
+                      {hasUnread && <div className="h-2 w-2 rounded-full bg-primary shadow-[0_0_10px_rgba(197,194,245,0.38)]" />}
+                      {isRunning && <TypingBubble />}
+                      {computerStatus === 'running' && <ComputerActiveIndicator />}
+                      {computerStatus === 'completed' && !(isActive && activeThreadMode === 'computer') && <ComputerCompletedIndicator />}
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); togglePin(conv.id); }}
+                        className={`shrink-0 rounded p-0.5 transition-all ${isPinned ? 'opacity-100 text-primary' : 'opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-primary'}`}
+                        title={isPinned ? 'Unpin' : 'Pin to top'}
+                      >
+                        <PinIcon className="h-3 w-3" />
+                      </button>
+                      <ConversationDeleteButton
+                        onDelete={() => handleDelete(conv.id)}
+                        isDeleting={deletingId === conv.id}
+                      />
+                    </div>
+                  </div>
+                  </div>
+                );
+              })}
             </div>
-            </div>
-          );
-        })}
+          ));
+        })()}
 
         {filteredConversations.length === 0 && (
           <p className="text-xs text-muted-foreground p-3 text-center">

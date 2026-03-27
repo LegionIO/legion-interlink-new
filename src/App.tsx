@@ -17,6 +17,9 @@ import { MarketplacePanel } from '@/components/marketplace/MarketplacePanel';
 import { CommandBar } from '@/components/CommandBar';
 import { NotificationPanel } from '@/components/notifications/NotificationPanel';
 import { DashboardPanel } from '@/components/dashboard/DashboardPanel';
+import { KeyboardShortcutsOverlay } from '@/components/KeyboardShortcutsOverlay';
+import { ExportDialog } from '@/components/conversations/ExportDialog';
+import { SubAgentDashboard } from '@/components/subagents/SubAgentDashboard';
 import { ToastContainer } from '@/components/notifications/ToastContainer';
 import { NotificationProvider, useNotifications } from '@/providers/NotificationProvider';
 import { PluginProvider } from '@/providers/PluginProvider';
@@ -24,7 +27,7 @@ import { PluginBannerSlot } from '@/components/plugins/PluginBannerSlot';
 import { PluginModalHost } from '@/components/plugins/PluginModalHost';
 import { ComputerUseProvider, useComputerUse } from '@/providers/ComputerUseProvider';
 import { OverlayShell } from '@/components/overlay/OverlayShell';
-import { BellIcon, BookOpenIcon, CpuIcon, GaugeIcon, GitBranchIcon, PuzzleIcon, SettingsIcon } from 'lucide-react';
+import { BellIcon, BookOpenIcon, BotIcon, CpuIcon, DownloadIcon, GaugeIcon, GitBranchIcon, PuzzleIcon, SettingsIcon } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import type { ReasoningEffort } from '@/components/thread/ReasoningEffortSelector';
 import { legion } from '@/lib/ipc-client';
@@ -341,7 +344,7 @@ async function cleanupEmptyConversations(
   }
 }
 
-type AppView = 'chat' | 'dashboard' | 'settings' | 'knowledge' | 'github' | 'marketplace' | 'notifications';
+type AppView = 'chat' | 'dashboard' | 'settings' | 'knowledge' | 'github' | 'marketplace' | 'notifications' | 'subagents';
 
 function AppShell() {
   const { unreadCount } = useNotifications();
@@ -358,6 +361,8 @@ function AppShell() {
   // restore it when auto-routing is re-enabled.
   const [profilePrimaryModelKey, setProfilePrimaryModelKey] = useState<string | null>(null);
   const [commandBarOpen, setCommandBarOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [dragState, setDragState] = useState<{ startX: number; startWidth: number } | null>(null);
   const { config, updateConfig } = useConfig();
@@ -526,12 +531,18 @@ function AppShell() {
     setActiveView('settings');
   }, [cleanupAbandonedConversation]);
 
-  // Cmd+K command bar
+  // Global keyboard shortcuts
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setCommandBarOpen((v) => !v);
+      if (!(e.metaKey || e.ctrlKey)) return;
+      switch (e.key) {
+        case 'k': e.preventDefault(); setCommandBarOpen((v) => !v); break;
+        case '?': e.preventDefault(); setShortcutsOpen((v) => !v); break;
+        case '1': e.preventDefault(); setActiveView((v) => v === 'dashboard' ? 'chat' : 'dashboard'); break;
+        case '2': e.preventDefault(); setActiveView((v) => v === 'knowledge' ? 'chat' : 'knowledge'); break;
+        case '3': e.preventDefault(); setActiveView((v) => v === 'github' ? 'chat' : 'github'); break;
+        case '4': e.preventDefault(); setActiveView((v) => v === 'marketplace' ? 'chat' : 'marketplace'); break;
+        case '5': e.preventDefault(); setActiveView((v) => v === 'notifications' ? 'chat' : 'notifications'); break;
       }
     };
     window.addEventListener('keydown', handleKey);
@@ -628,6 +639,8 @@ function AppShell() {
       <RealtimeProvider>
         <PluginModalHost />
         <CommandBar open={commandBarOpen} onClose={() => setCommandBarOpen(false)} />
+        <KeyboardShortcutsOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+        <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} conversationId={activeConversationId} />
         <ToastContainer />
         <div className="flex h-screen overflow-hidden bg-transparent text-foreground">
           {/* Sidebar */}
@@ -698,6 +711,14 @@ function AppShell() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setActiveView(activeView === 'subagents' ? 'chat' : 'subagents')}
+                  className={`rounded-md p-1.5 transition-colors hover:bg-sidebar-accent/80 ${activeView === 'subagents' ? 'bg-primary/15 text-primary' : 'text-muted-foreground'}`}
+                  title="Sub-Agents"
+                >
+                  <BotIcon className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
                   onClick={() => setActiveView(activeView === 'notifications' ? 'chat' : 'notifications')}
                   className={`relative rounded-md p-1.5 transition-colors hover:bg-sidebar-accent/80 ${activeView === 'notifications' ? 'bg-primary/15 text-primary' : 'text-muted-foreground'}`}
                   title="Notifications"
@@ -745,12 +766,24 @@ function AppShell() {
                   <span className="text-sm font-medium text-foreground">Notifications</span>
                 ) : activeView === 'dashboard' ? (
                   <span className="text-sm font-medium text-foreground">Dashboard</span>
+                ) : activeView === 'subagents' ? (
+                  <span className="text-sm font-medium text-foreground">Sub-Agents</span>
                 ) : (
                   <span className="block truncate text-sm font-medium text-foreground">
                     {activeConversationTitle}
                   </span>
                 )}
               </div>
+              {activeView === 'chat' && activeConversationId && (
+                <button
+                  type="button"
+                  onClick={() => setExportOpen(true)}
+                  className="titlebar-no-drag rounded-md p-1.5 text-muted-foreground hover:bg-muted/40 transition-colors"
+                  title="Export conversation"
+                >
+                  <DownloadIcon className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
             <PluginBannerSlot />
             <div className="min-h-0 flex-1 overflow-hidden">
@@ -766,6 +799,8 @@ function AppShell() {
                 <NotificationPanel onClose={() => setActiveView('chat')} />
               ) : activeView === 'dashboard' ? (
                 <DashboardPanel onClose={() => setActiveView('chat')} />
+              ) : activeView === 'subagents' ? (
+                <SubAgentDashboard onClose={() => setActiveView('chat')} />
               ) : (
                 <ThreadOrSubAgent
                   mode={threadMode}
