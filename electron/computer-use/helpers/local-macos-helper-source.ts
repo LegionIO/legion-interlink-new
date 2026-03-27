@@ -591,9 +591,9 @@ case "monitor":
   CFRunLoopRun()
 
 case "screenshot":
-  // args: screenshot <base64ExcludeApps> <jpegQuality> [displayIndex]
+  // args: screenshot <base64ExcludeApps> <jpegQuality> [displayIndex] [excludePid]
   // When displayIndex is provided, capture only that display (0-indexed from allDisplaysSorted).
-  // When omitted, capture the primary display (backward compatible).
+  // When excludePid is provided, exclude all windows owned by that process (and its children).
   if #available(macOS 12.3, *) {
     let excludeAppNames: [String]
     if args.count >= 3, let decoded = decodeBase64String(args[2]),
@@ -610,6 +610,7 @@ case "screenshot":
       jpegQuality = 0.8
     }
     let requestedDisplayIndex: Int? = args.count >= 5 ? Int(args[4]) : nil
+    let excludePid: pid_t? = args.count >= 6 ? pid_t(args[5]) : nil
 
     let sem = DispatchSemaphore(value: 0)
     var captureResult: [String: Any] = ["ok": false, "error": "timeout"]
@@ -634,8 +635,13 @@ case "screenshot":
 
         let excludeSet = Set(excludeAppNames.map { $0.lowercased() })
         let excludedWindows = content.windows.filter { window in
-          guard let appName = window.owningApplication?.applicationName else { return false }
-          return excludeSet.contains(appName.lowercased())
+          guard let app = window.owningApplication else { return false }
+          // Exclude by PID (our own process and its windows)
+          if let pid = excludePid, app.processID == pid {
+            return true
+          }
+          // Exclude by app name
+          return excludeSet.contains(app.applicationName.lowercased())
         }
 
         let filter = SCContentFilter(display: targetDisplay, excludingWindows: excludedWindows)

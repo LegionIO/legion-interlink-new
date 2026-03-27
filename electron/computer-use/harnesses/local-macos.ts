@@ -271,10 +271,12 @@ export class LocalMacosHarness implements ComputerHarness {
 
     const excludeArg = Buffer.from(JSON.stringify(excludeApps)).toString('base64');
     const qualityArg = String(jpegQuality);
+    // Always exclude our own process's windows regardless of app name
+    const selfPid = String(process.pid);
 
     // Capture the primary display (display index 0) as the main frame
     const primaryResult = await runLocalMacMouseCommand(
-      helperArgs(LOCAL_MACOS_HELPER_COMMANDS.screenshot, [excludeArg, qualityArg, '0']),
+      helperArgs(LOCAL_MACOS_HELPER_COMMANDS.screenshot, [excludeArg, qualityArg, '0', selfPid]),
     );
 
     if (!primaryResult.imageBase64 || !primaryResult.width || !primaryResult.height) {
@@ -304,7 +306,7 @@ export class LocalMacosHarness implements ComputerHarness {
       for (let i = 1; i < displayLayout.displays.length; i++) {
         try {
           const extraResult = await runLocalMacMouseCommand(
-            helperArgs(LOCAL_MACOS_HELPER_COMMANDS.screenshot, [excludeArg, qualityArg, String(i)]),
+            helperArgs(LOCAL_MACOS_HELPER_COMMANDS.screenshot, [excludeArg, qualityArg, String(i), selfPid]),
           );
           if (extraResult.imageBase64 && extraResult.width && extraResult.height) {
             const extraRaw = Buffer.from(extraResult.imageBase64, 'base64');
