@@ -653,20 +653,17 @@ case "screenshot":
         let excludeSet = Set(excludeAppNames.map { $0.lowercased() })
         let excludedWindows = content.windows.filter { window in
           guard let app = window.owningApplication else { return false }
-          // Preserve menu bar and status bar items so the AI can see and
-          // interact with the macOS menu bar. Menu bar windows live at
-          // kCGMainMenuWindowLevel (24) and status items at
-          // kCGStatusWindowLevel (25). Excluding those causes
-          // ScreenCaptureKit to hide the entire menu bar area.
-          // All other layers (normal windows at 0, our overlays at
-          // screen-saver level, etc.) are eligible for exclusion.
-          let layer = window.windowLayer
-          if layer >= 24 && layer <= 25 { return false }
-          // Exclude by PID (our own process and its windows)
+          // Always exclude our own process's windows at ANY layer — this
+          // covers both normal windows (layer 0) and our overlays (high
+          // layers like screen-saver level).
           if let pid = excludePid, app.processID == pid {
             return true
           }
-          // Exclude by app name
+          // For other apps, only exclude normal-level windows (layer 0).
+          // Menu bar (layer 24), status items (layer 25), popup/dropdown
+          // menus, and other system UI live at higher layers — excluding
+          // those causes ScreenCaptureKit to hide the menu bar and menus.
+          if window.windowLayer != 0 { return false }
           return excludeSet.contains(app.applicationName.lowercased())
         }
 
