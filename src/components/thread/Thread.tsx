@@ -44,6 +44,7 @@ import { SearchBar } from './SearchBar';
 import { ModelSelector } from './ModelSelector';
 import { ReasoningEffortSelector, type ReasoningEffort } from './ReasoningEffortSelector';
 import { ProfileSelector } from './ProfileSelector';
+import { KnowledgeComposerPopover } from '../knowledge/KnowledgeComposerPopover';
 import { FallbackToggle } from './FallbackToggle';
 import { FallbackBanner } from './FallbackBanner';
 import { CallOverlay } from './CallOverlay';
@@ -1231,6 +1232,7 @@ const Composer: FC<{
                       value={reasoningEffort}
                       onChange={onChangeReasoningEffort}
                     />
+                    <KnowledgeComposerPopover />
                   </div>
                   <ThreadPrimitive.If running={false}>
                     <ComposerPrimitive.Send asChild>

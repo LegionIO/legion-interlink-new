@@ -174,6 +174,9 @@ export function registerDaemonApiHandlers(
   ipcMain.handle('daemon:task-delete', async (_e, id: string) =>
     daemonDelete(cfg(), legionHome, `/api/tasks/${id}`));
 
+  ipcMain.handle('daemon:task-graph', async (_e, filters?: Record<string, string>) =>
+    daemonGet(cfg(), legionHome, '/api/tasks/graph', filters));
+
   // ── Workers ──
   ipcMain.handle('daemon:workers', async (_e, filters?: Record<string, string>) =>
     daemonGet(cfg(), legionHome, '/api/workers', filters));
@@ -375,6 +378,94 @@ export function registerDaemonApiHandlers(
 
   ipcMain.handle('daemon:sub-agent-status', async (_e, taskId: string) =>
     daemonGet(cfg(), legionHome, `/api/tasks/${taskId}`));
+
+  // ── Natural Language Routing ──
+  ipcMain.handle('daemon:do', async (_e, input: string) =>
+    daemonPost(cfg(), legionHome, '/api/do', { input }));
+
+  ipcMain.handle('daemon:capabilities', async () =>
+    daemonGet(cfg(), legionHome, '/api/capabilities'));
+
+  // ── Memory Inspector ──
+  ipcMain.handle('daemon:memory-entries', async (_e, filters?: Record<string, string>) =>
+    daemonGet(cfg(), legionHome, '/api/memory/entries', filters));
+
+  ipcMain.handle('daemon:memory-entry', async (_e, id: string) =>
+    daemonGet(cfg(), legionHome, `/api/memory/entries/${id}`));
+
+  ipcMain.handle('daemon:memory-entry-update', async (_e, id: string, body: unknown) =>
+    daemonPut(cfg(), legionHome, `/api/memory/entries/${id}`, body));
+
+  ipcMain.handle('daemon:memory-entry-delete', async (_e, id: string) =>
+    daemonDelete(cfg(), legionHome, `/api/memory/entries/${id}`));
+
+  ipcMain.handle('daemon:memory-stats', async () =>
+    daemonGet(cfg(), legionHome, '/api/memory/stats'));
+
+  // ── Marketplace ──
+  ipcMain.handle('daemon:marketplace', async (_e, filters?: Record<string, string>) =>
+    daemonGet(cfg(), legionHome, '/api/extensions/available', filters));
+
+  ipcMain.handle('daemon:extension-install', async (_e, id: string) =>
+    daemonPost(cfg(), legionHome, `/api/extensions/${id}/install`, {}));
+
+  ipcMain.handle('daemon:extension-uninstall', async (_e, id: string) =>
+    daemonPost(cfg(), legionHome, `/api/extensions/${id}/uninstall`, {}));
+
+  ipcMain.handle('daemon:extension-enable', async (_e, id: string) =>
+    daemonPost(cfg(), legionHome, `/api/extensions/${id}/enable`, {}));
+
+  ipcMain.handle('daemon:extension-disable', async (_e, id: string) =>
+    daemonPost(cfg(), legionHome, `/api/extensions/${id}/disable`, {}));
+
+  ipcMain.handle('daemon:extension-config', async (_e, id: string) =>
+    daemonGet(cfg(), legionHome, `/api/extensions/${id}/config`));
+
+  ipcMain.handle('daemon:extension-config-update', async (_e, id: string, body: unknown) =>
+    daemonPut(cfg(), legionHome, `/api/extensions/${id}/config`, body));
+
+  // ── GitHub ──
+  ipcMain.handle('daemon:github-status', async () =>
+    daemonGet(cfg(), legionHome, '/api/github/status'));
+
+  ipcMain.handle('daemon:github-repos', async () =>
+    daemonGet(cfg(), legionHome, '/api/github/repos'));
+
+  ipcMain.handle('daemon:github-pulls', async (_e, filters?: Record<string, string>) =>
+    daemonGet(cfg(), legionHome, '/api/github/pulls', filters));
+
+  ipcMain.handle('daemon:github-pull', async (_e, repo: string, number: number) =>
+    daemonGet(cfg(), legionHome, `/api/github/pulls/${number}`, { repo }));
+
+  ipcMain.handle('daemon:github-issues', async (_e, filters?: Record<string, string>) =>
+    daemonGet(cfg(), legionHome, '/api/github/issues', filters));
+
+  ipcMain.handle('daemon:github-commits', async (_e, filters?: Record<string, string>) =>
+    daemonGet(cfg(), legionHome, '/api/github/commits', filters));
+
+  // ── GAIA ──
+  ipcMain.handle('daemon:gaia-status', async () =>
+    daemonGet(cfg(), legionHome, '/api/gaia/status'));
+
+  ipcMain.handle('daemon:gaia-events', async (_e, filters?: { limit?: string }) =>
+    daemonGet(cfg(), legionHome, '/api/gaia/events', filters));
+
+  // ── Cost / Metering ──
+  ipcMain.handle('daemon:metering', async (_e, filters?: Record<string, string>) =>
+    daemonGet(cfg(), legionHome, '/api/metering', filters));
+
+  ipcMain.handle('daemon:metering-rollup', async (_e, filters?: Record<string, string>) =>
+    daemonGet(cfg(), legionHome, '/api/metering/rollup', filters));
+
+  ipcMain.handle('daemon:metering-by-model', async (_e, filters?: Record<string, string>) =>
+    daemonGet(cfg(), legionHome, '/api/metering/by_model', filters));
+
+  // ── Mesh / Nodes ──
+  ipcMain.handle('daemon:mesh-status', async () =>
+    daemonGet(cfg(), legionHome, '/api/mesh/status'));
+
+  ipcMain.handle('daemon:mesh-peers', async () =>
+    daemonGet(cfg(), legionHome, '/api/mesh/peers'));
 
   // ── Health / Doctor / Metrics ──
   ipcMain.handle('daemon:health', async () =>

@@ -241,6 +241,11 @@ function getDefaultConfig() {
       enabled: false,
       modelKeys: [] as string[],
     },
+    knowledge: {
+      ragEnabled: true,
+      captureEnabled: false,
+      scope: 'all' as const,
+    },
   };
 }
 

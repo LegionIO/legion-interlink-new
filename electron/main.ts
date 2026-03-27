@@ -20,6 +20,7 @@ import { registerLiveSttHandlers } from './audio/live-stt.js';
 import { registerRealtimeHandlers, updateActiveRealtimeSessionTools } from './ipc/realtime.js';
 import type { LegionConfig } from './config/schema.js';
 import { registerComputerUseHandlers } from './ipc/computer-use.js';
+import { registerKnowledgeHandlers } from './ipc/knowledge.js';
 import { closeAllOverlayWindows } from './computer-use/overlay-window.js';
 
 const LEGION_HOME = join(homedir(), '.legionio');
@@ -379,6 +380,7 @@ if (gotSingleInstanceLock) {
     registerMicRecorderHandlers(ipcMain);
     registerLiveSttHandlers(ipcMain);
     registerComputerUseHandlers(ipcMain, LEGION_HOME, getConfig);
+    registerKnowledgeHandlers(ipcMain, LEGION_HOME, getConfig);
 
     // Plugin system
     const pluginManager = new PluginManager(
