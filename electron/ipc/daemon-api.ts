@@ -47,6 +47,12 @@ function authHeaders(config: LegionConfig, legionHome: string): Record<string, s
   };
 }
 
+const DAEMON_TIMEOUT_MS = 5000;
+
+function withTimeout(ms = DAEMON_TIMEOUT_MS): { signal: AbortSignal } {
+  return { signal: AbortSignal.timeout(ms) };
+}
+
 async function daemonGet<T = unknown>(
   config: LegionConfig,
   legionHome: string,
@@ -62,7 +68,7 @@ async function daemonGet<T = unknown>(
   }
 
   try {
-    const resp = await fetch(url.toString(), { headers: authHeaders(config, legionHome) });
+    const resp = await fetch(url.toString(), { headers: authHeaders(config, legionHome), ...withTimeout() });
     if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}` };
     const body = await resp.json() as { data?: T };
     return { ok: true, data: (body.data ?? body) as T };
@@ -83,6 +89,7 @@ async function daemonPost<T = unknown>(
       method: 'POST',
       headers: { 'content-type': 'application/json', ...authHeaders(config, legionHome) },
       body: JSON.stringify(body),
+      ...withTimeout(),
     });
     if (!resp.ok) {
       const errBody = await resp.json().catch(() => ({})) as { error?: { message?: string } };
@@ -107,6 +114,7 @@ async function daemonPut<T = unknown>(
       method: 'PUT',
       headers: { 'content-type': 'application/json', ...authHeaders(config, legionHome) },
       body: JSON.stringify(body),
+      ...withTimeout(),
     });
     if (!resp.ok) {
       const errBody = await resp.json().catch(() => ({})) as { error?: { message?: string } };
@@ -129,6 +137,7 @@ async function daemonDelete(
     const resp = await fetch(new URL(path, base).toString(), {
       method: 'DELETE',
       headers: authHeaders(config, legionHome),
+      ...withTimeout(),
     });
     if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}` };
     return { ok: true };
@@ -299,12 +308,15 @@ export function registerDaemonApiHandlers(
     const token = resolveAuthToken(cfg(), legionHome);
 
     try {
+      // Use a short connection timeout, then hand off to the persistent abort controller
+      const connectTimeout = AbortSignal.timeout(DAEMON_TIMEOUT_MS);
+      const combined = AbortSignal.any([connectTimeout, eventsAbort.signal]);
       const resp = await fetch(url, {
         headers: {
           'accept': 'text/event-stream',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        signal: eventsAbort.signal,
+        signal: combined,
       });
 
       if (!resp.ok || !resp.body) {
@@ -484,6 +496,7 @@ export function registerDaemonApiHandlers(
           'accept': 'application/json, text/plain',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
+        ...withTimeout(),
       });
       if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}` };
       const contentType = resp.headers.get('content-type') ?? '';

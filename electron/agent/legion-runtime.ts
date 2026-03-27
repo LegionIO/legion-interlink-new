@@ -241,7 +241,9 @@ async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator
 
   let readyResponse: Response;
   try {
-    readyResponse = await fetch(readyUrl, { signal: options.abortSignal });
+    readyResponse = await fetch(readyUrl, {
+      signal: options.abortSignal ?? AbortSignal.timeout(5000),
+    });
   } catch (error) {
     yield {
       conversationId: options.conversationId,
@@ -636,7 +638,7 @@ async function runDaemonHealthCheck(config: LegionConfig): Promise<LegionStatus[
   const readyUrl = new URL('/api/ready', daemonUrl).toString();
 
   try {
-    const response = await fetch(readyUrl);
+    const response = await fetch(readyUrl, { signal: AbortSignal.timeout(5000) });
     let details: unknown = null;
     try {
       details = await response.json();
