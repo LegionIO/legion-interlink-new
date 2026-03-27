@@ -1,13 +1,22 @@
-import { app, BrowserWindow, ipcMain, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeImage, screen } from 'electron';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ComputerDisplayLayout, ComputerOverlayState } from '../../shared/computer-use.js';
 
-/** Ensure the app dock icon stays visible on macOS. */
+// Resolve the app icon once — same path as electron/main.ts
+const APP_ICON = join(__dirname, '../../build/icon.png');
+
+/** Ensure the app dock icon stays visible on macOS with the correct custom icon. */
 function ensureDockVisible(): void {
   try {
-    if (process.platform === 'darwin' && app.dock) {
-      void app.dock.show();
-    }
+    const dock = process.platform === 'darwin' ? app.dock : undefined;
+    if (!dock) return;
+    void dock.show().then(() => {
+      // dock.show() resets to the default Electron icon — re-apply our custom icon
+      if (existsSync(APP_ICON)) {
+        dock.setIcon(nativeImage.createFromPath(APP_ICON));
+      }
+    });
   } catch {
     // Dock API may not be available in all environments
   }
