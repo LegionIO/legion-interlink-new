@@ -28,6 +28,7 @@ import {
   getComputerUsePermissions,
   openLocalMacosPrivacySettings as openLocalMacosPrivacySettingsExternal,
   requestLocalMacosPermissions as requestLocalMacosPermissionsFlow,
+  requestSinglePermission as requestSinglePermissionExternal,
 } from './permissions.js';
 import { startLocalMacosTakeoverMonitor, stopLocalMacosTakeoverMonitor, type LocalMacosTakeoverEvent } from './takeover-monitor.js';
 
@@ -339,6 +340,7 @@ export class ComputerUseSessionManager extends EventEmitter {
       accessibilityTrusted: true,
       screenRecordingGranted: true,
       automationGranted: true,
+      inputMonitoringGranted: true,
       helperReady: true,
     };
   }
@@ -366,6 +368,9 @@ export class ComputerUseSessionManager extends EventEmitter {
       if (!permissions.automationGranted) {
         missing.push('Allow Automation for Interlink so it can drive System Events and read focused window metadata.');
       }
+      if (!permissions.inputMonitoringGranted) {
+        missing.push('Enable Input Monitoring for Interlink in System Settings > Privacy & Security > Input Monitoring so it can detect when you take over control.');
+      }
       return missing.length > 0 ? missing.join(' ') : null;
     }
 
@@ -376,6 +381,7 @@ export class ComputerUseSessionManager extends EventEmitter {
     if (!permissions.accessibilityTrusted) return 'accessibility';
     if (!permissions.screenRecordingGranted) return 'screen-recording';
     if (!permissions.automationGranted) return 'automation';
+    if (!permissions.inputMonitoringGranted) return 'input-monitoring';
     return null;
   }
 
@@ -419,6 +425,11 @@ export class ComputerUseSessionManager extends EventEmitter {
     });
     await this.syncLocalMacPermissionState(result);
     return result;
+  }
+
+  async requestSingleLocalMacosPermission(section: ComputerUsePermissionSection): Promise<ComputerUsePermissions> {
+    const openSettings = this.getConfig().computerUse.localMacos.autoOpenPrivacySettings;
+    return requestSinglePermissionExternal(section, { openSettings });
   }
 
   async getLocalMacosPermissions(): Promise<ComputerUsePermissions> {
@@ -564,6 +575,8 @@ export class ComputerUseSessionManager extends EventEmitter {
       approvalMode,
       selectedModelKey: options.modelKey ?? null,
       selectedProfileKey: options.profileKey ?? null,
+      fallbackEnabled: options.fallbackEnabled ?? false,
+      reasoningEffort: options.reasoningEffort ?? undefined,
       status: blocker ? 'failed' : 'starting',
       providerAdapter: 'hybrid',
       createdAt: nowIso(),
@@ -658,6 +671,27 @@ export class ComputerUseSessionManager extends EventEmitter {
     });
     void this.orchestrator.cleanupSession(sessionId);
     return next;
+  }
+
+  updateSessionSettings(sessionId: string, settings: {
+    modelKey?: string | null;
+    profileKey?: string | null;
+    fallbackEnabled?: boolean;
+    reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
+  }): ComputerSession | null {
+    const session = this.sessions.get(sessionId);
+    if (!session) return null;
+    // Don't update terminal sessions
+    if (session.status === 'completed' || session.status === 'stopped' || session.status === 'failed') return null;
+
+    return this.upsertSession({
+      ...session,
+      ...(settings.modelKey !== undefined ? { selectedModelKey: settings.modelKey } : {}),
+      ...(settings.profileKey !== undefined ? { selectedProfileKey: settings.profileKey } : {}),
+      ...(settings.fallbackEnabled !== undefined ? { fallbackEnabled: settings.fallbackEnabled } : {}),
+      ...(settings.reasoningEffort !== undefined ? { reasoningEffort: settings.reasoningEffort } : {}),
+      updatedAt: nowIso(),
+    });
   }
 
   async sendGuidance(sessionId: string, text: string): Promise<ComputerSession | null> {

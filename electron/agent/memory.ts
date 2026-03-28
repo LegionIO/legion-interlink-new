@@ -7,6 +7,8 @@ import { mkdirSync, existsSync } from 'fs';
 import { dirname } from 'path';
 import type { LegionConfig } from '../config/schema.js';
 
+type MemoryConfig = ConstructorParameters<typeof Memory>[0];
+
 const RESOURCE_ID = 'legion-local-user';
 
 let sharedMemory: Memory | null | undefined;
@@ -250,7 +252,7 @@ export function getSharedMemory(config: LegionConfig, dbPath: string): Memory | 
       memoryConfig.embedder = semanticRecallConfig.embedder;
     }
 
-    sharedMemory = new Memory(memoryConfig as any);
+    sharedMemory = new Memory(memoryConfig as MemoryConfig);
   } catch (error) {
     console.error('[Memory] Failed to initialize:', error);
     sharedMemory = null;

@@ -6,6 +6,7 @@ import {
   CheckCircle2Icon,
   AlertCircleIcon,
   LoaderIcon,
+  ScissorsIcon,
 } from 'lucide-react';
 
 type ToolCallPart = {
@@ -18,6 +19,15 @@ type ToolCallPart = {
   isError?: boolean;
   startedAt?: string;
   finishedAt?: string;
+  /** Original (pre-compaction) result — present when tool output was compacted */
+  originalResult?: unknown;
+  /** Tool compaction metadata */
+  compactionMeta?: {
+    wasCompacted: boolean;
+    extractionDurationMs: number;
+  };
+  /** Live compaction phase — 'start' while AI summarization is running */
+  compactionPhase?: 'start' | 'complete' | null;
   liveOutput?: {
     stdout?: string;
     stderr?: string;
@@ -40,10 +50,14 @@ export const ToolGroup: FC<{ parts: ToolCallPart[] }> = ({ parts }) => {
 
 export const ToolCallDisplay: FC<{ part: ToolCallPart }> = ({ part }) => {
   const [expanded, setExpanded] = useState(false);
+  const [showOriginal, setShowOriginal] = useState(false);
   const hasResult = part.result !== undefined;
   const isError = part.isError || (hasResult && isErrorResult(part.result));
   const isRunning = !hasResult;
   const hasLiveOutput = Boolean(part.liveOutput?.stdout || part.liveOutput?.stderr);
+  const wasCompacted = Boolean(part.compactionMeta?.wasCompacted);
+  const canShowOriginal = wasCompacted && part.originalResult !== undefined;
+  const isSummarizing = part.compactionPhase === 'start';
 
   return (
     <div className="rounded-lg border bg-card text-sm overflow-hidden">
@@ -59,6 +73,8 @@ export const ToolCallDisplay: FC<{ part: ToolCallPart }> = ({ part }) => {
           <ChevronRightIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
         )}
         <StatusBadge isRunning={isRunning} isError={isError} />
+        {wasCompacted && <CompactedBadge />}
+        {isSummarizing && <SummarizingBadge />}
         <span className="font-mono text-xs font-semibold truncate">{part.toolName}</span>
         <span className="text-[10px] text-muted-foreground ml-1 truncate">
           {getToolSummary(part)}
@@ -81,11 +97,21 @@ export const ToolCallDisplay: FC<{ part: ToolCallPart }> = ({ part }) => {
           </ToolSection>
 
           {/* Pre-extraction / In-progress indicator */}
-          {isRunning && (
+          {isRunning && !isSummarizing && (
             <div className="px-3 py-2 border-t bg-blue-500/5">
               <div className="flex items-center gap-2">
                 <LoaderIcon className="h-3.5 w-3.5 animate-spin text-blue-500" />
                 <span className="text-xs text-blue-600 dark:text-blue-400">Executing tool...</span>
+              </div>
+            </div>
+          )}
+
+          {/* AI summarization in progress */}
+          {isSummarizing && (
+            <div className="px-3 py-2 border-t bg-amber-500/5">
+              <div className="flex items-center gap-2">
+                <ScissorsIcon className="h-3.5 w-3.5 animate-pulse text-amber-500" />
+                <span className="text-xs text-amber-600 dark:text-amber-400">Summarizing large output...</span>
               </div>
             </div>
           )}
@@ -96,11 +122,17 @@ export const ToolCallDisplay: FC<{ part: ToolCallPart }> = ({ part }) => {
             </ToolSection>
           )}
 
-          {/* Result section */}
+          {/* Result section — with compacted/original toggle when available */}
           {hasResult && (
-            <ToolSection title={isError ? 'Error' : 'Result'} defaultOpen>
+            <ToolSection
+              title={isError ? 'Error' : 'Result'}
+              defaultOpen
+              badge={canShowOriginal ? (
+                <CompactionToggle showOriginal={showOriginal} onToggle={() => setShowOriginal(!showOriginal)} />
+              ) : undefined}
+            >
               <CodeBlock
-                code={formatResult(part.result)}
+                code={formatResult(canShowOriginal && showOriginal ? part.originalResult : part.result)}
                 language="json"
                 isError={isError}
               />
@@ -111,6 +143,12 @@ export const ToolCallDisplay: FC<{ part: ToolCallPart }> = ({ part }) => {
           <div className="px-3 py-1.5 border-t bg-muted/30 flex items-center gap-3 text-[10px] text-muted-foreground">
             <span>ID: {part.toolCallId?.slice(0, 12)}...</span>
             {hasResult && <span>{isError ? 'Failed' : 'Completed'}</span>}
+            {wasCompacted && part.compactionMeta && (
+              <span className="flex items-center gap-1">
+                <ScissorsIcon className="h-2.5 w-2.5" />
+                Compacted{part.compactionMeta.extractionDurationMs > 0 ? ` in ${formatElapsed(part.compactionMeta.extractionDurationMs)}` : ''}
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -127,6 +165,33 @@ const StatusBadge: FC<{ isRunning: boolean; isError: boolean }> = ({ isRunning, 
   }
   return <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-500/10 text-green-600 dark:text-green-400">DONE</span>;
 };
+
+const CompactedBadge: FC = () => (
+  <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400">
+    <ScissorsIcon className="h-2.5 w-2.5" />
+    COMPACTED
+  </span>
+);
+
+const SummarizingBadge: FC = () => (
+  <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 animate-pulse">
+    <ScissorsIcon className="h-2.5 w-2.5" />
+    SUMMARIZING
+  </span>
+);
+
+const CompactionToggle: FC<{ showOriginal: boolean; onToggle: () => void }> = ({ showOriginal, onToggle }) => (
+  <span
+    role="switch"
+    aria-checked={showOriginal}
+    tabIndex={0}
+    className="ml-auto text-[10px] font-medium px-1.5 py-0.5 rounded border border-amber-500/30 bg-amber-500/5 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 transition-colors cursor-pointer select-none"
+    onClick={(e) => { e.stopPropagation(); onToggle(); }}
+    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); onToggle(); } }}
+  >
+    {showOriginal ? 'Show Compacted' : 'Show Original'}
+  </span>
+);
 
 const ToolStatusIcon: FC<{ isRunning: boolean; isError: boolean }> = ({ isRunning, isError }) => {
   if (isRunning) {
@@ -183,7 +248,7 @@ const ToolElapsedBadge: FC<{
   );
 };
 
-const ToolSection: FC<{ title: string; defaultOpen?: boolean; children: React.ReactNode }> = ({ title, defaultOpen = false, children }) => {
+const ToolSection: FC<{ title: string; defaultOpen?: boolean; badge?: React.ReactNode; children: React.ReactNode }> = ({ title, defaultOpen = false, badge, children }) => {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="border-t">
@@ -194,6 +259,7 @@ const ToolSection: FC<{ title: string; defaultOpen?: boolean; children: React.Re
       >
         {open ? <ChevronDownIcon className="h-2.5 w-2.5" /> : <ChevronRightIcon className="h-2.5 w-2.5" />}
         {title}
+        {badge}
       </button>
       {open && <div className="px-3 pb-2">{children}</div>}
     </div>
@@ -242,7 +308,7 @@ function formatResult(result: unknown): string {
 function sanitizeResultForDisplay(result: unknown): unknown {
   if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
   const record = result as Record<string, unknown>;
-  const internalKeys = new Set(['observer', 'modelStream']);
+  const internalKeys = new Set(['observer', 'modelStream', '__compaction', '__executeToolCallId']);
   const visibleEntries = Object.entries(record).filter(([key]) => !internalKeys.has(key));
   const visible = Object.fromEntries(visibleEntries);
 

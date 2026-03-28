@@ -11,9 +11,12 @@
 
 import type {
   SpeechSynthesisAdapter,
-  SpeechSynthesisAdapterTypes,
+  SpeechSynthesisStatus,
+  SpeechSynthesisUtterance,
   DictationAdapter,
-  DictationAdapterTypes,
+  DictationResult,
+  DictationSession,
+  DictationStatus,
 } from './speech-adapters';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -82,9 +85,9 @@ function mimeForOutputFormat(fmt: string): string {
 
 export function createAzureSpeechAdapter(config: AzureTtsConfig): SpeechSynthesisAdapter {
   return {
-    speak(text: string): SpeechSynthesisAdapterTypes.Utterance {
+    speak(text: string): SpeechSynthesisUtterance {
       const listeners = new Set<() => void>();
-      let status: SpeechSynthesisAdapterTypes.Status = { type: 'starting' };
+      let status: SpeechSynthesisStatus = { type: 'starting' };
       const notify = () => listeners.forEach((cb) => cb());
 
       // Validate credentials
@@ -227,15 +230,15 @@ export function createAzureSpeechAdapter(config: AzureTtsConfig): SpeechSynthesi
 
 export function createAzureDictationAdapter(config: AzureSttConfig): DictationAdapter {
   return {
-    listen(): DictationAdapterTypes.Session {
+    listen(): DictationSession {
       if (!config.subscriptionKey) {
         throw new Error('Azure subscription key not configured for STT');
       }
 
-      let status: DictationAdapterTypes.Status = { type: 'starting' };
+      let status: DictationStatus = { type: 'starting' };
       const speechStartListeners = new Set<() => void>();
-      const speechEndListeners = new Set<(result: DictationAdapterTypes.Result) => void>();
-      const speechListeners = new Set<(result: DictationAdapterTypes.Result) => void>();
+      const speechEndListeners = new Set<(result: DictationResult) => void>();
+      const speechListeners = new Set<(result: DictationResult) => void>();
       const errorListeners = new Set<(error: string) => void>();
 
       let stopRequested = false;
@@ -367,7 +370,7 @@ export function createAzureDictationAdapter(config: AzureSttConfig): DictationAd
           errorListeners.add(callback);
           return () => errorListeners.delete(callback);
         },
-      } as DictationAdapterTypes.Session & {
+      } as DictationSession & {
         onError: (callback: (error: string) => void) => Unsubscribe;
       };
     },

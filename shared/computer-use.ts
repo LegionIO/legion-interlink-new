@@ -4,7 +4,7 @@ export type ComputerUseTarget = 'isolated-browser' | 'local-macos';
 
 export type ComputerUseApprovalMode = 'step' | 'goal' | 'autonomous';
 
-export type ComputerUsePermissionSection = 'accessibility' | 'screen-recording' | 'automation';
+export type ComputerUsePermissionSection = 'accessibility' | 'screen-recording' | 'automation' | 'input-monitoring';
 
 export type ComputerUseSupport =
   | 'openai-responses'
@@ -199,6 +199,8 @@ export type ComputerUsePermissions = {
   accessibilityTrusted: boolean;
   screenRecordingGranted: boolean;
   automationGranted: boolean;
+  /** Whether Input Monitoring permission is granted (required for the takeover monitor event tap). */
+  inputMonitoringGranted: boolean;
   helperReady: boolean;
   message?: string;
 };
@@ -227,6 +229,8 @@ export type ComputerSession = {
   approvalMode: ComputerUseApprovalMode;
   selectedModelKey: string | null;
   selectedProfileKey?: string | null;
+  fallbackEnabled?: boolean;
+  reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
   status: ComputerUseSessionStatus;
   providerAdapter: string;
   createdAt: string;
@@ -301,6 +305,8 @@ export type StartComputerSessionOptions = {
   approvalMode?: ComputerUseApprovalMode;
   modelKey?: string | null;
   profileKey?: string | null;
+  fallbackEnabled?: boolean;
+  reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
   contextSummary?: string;
 };
 
@@ -313,6 +319,7 @@ export type ComputerUseEvent =
   | { type: 'guidance-sent'; sessionId: string; message: ComputerGuidanceMessage }
   | { type: 'session-removed'; sessionId: string }
   | { type: 'error'; sessionId: string; error: string }
+  | { type: 'model-fallback'; sessionId: string; fromModel: string; toModel: string; toModelKey: string; error: string }
   | { type: 'overlay-state'; state: ComputerOverlayState };
 
 export function supportsComputerUse(support?: ComputerUseSupport | null): boolean {

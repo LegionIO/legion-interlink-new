@@ -19,6 +19,7 @@ export const CompactionSettings: FC<SettingsProps> = ({ config, updateConfig }) 
         <NumberField label="Trigger threshold (tokens)" value={compaction.tool.triggerTokens} onChange={(v) => updateConfig('compaction.tool.triggerTokens', v)} />
         <NumberField label="Max output tokens" value={compaction.tool.outputMaxTokens} onChange={(v) => updateConfig('compaction.tool.outputMaxTokens', v)} />
         <NumberField label="Truncate min chars" value={compaction.tool.truncateMinChars} onChange={(v) => updateConfig('compaction.tool.truncateMinChars', v)} />
+        <NumberField label="Truncate min tail chars" value={compaction.tool.truncateMinTailChars} onChange={(v) => updateConfig('compaction.tool.truncateMinTailChars', v)} />
         <SliderField label={headTailLabel('Head ratio', compaction.tool.truncateHeadRatio)} value={compaction.tool.truncateHeadRatio} min={0.1} max={0.9} step={0.05} onChange={(v) => updateConfig('compaction.tool.truncateHeadRatio', v)} />
       </fieldset>
 
@@ -41,6 +42,7 @@ export const CompactionSettings: FC<SettingsProps> = ({ config, updateConfig }) 
         <NumberField label="Ignore recent user messages" value={compaction.conversation.ignoreRecentUserMessages} onChange={(v) => updateConfig('compaction.conversation.ignoreRecentUserMessages', v)} />
         <NumberField label="Ignore recent assistant messages" value={compaction.conversation.ignoreRecentAssistantMessages} onChange={(v) => updateConfig('compaction.conversation.ignoreRecentAssistantMessages', v)} />
         <NumberField label="Summary max tokens" value={compaction.conversation.outputMaxTokens} onChange={(v) => updateConfig('compaction.conversation.outputMaxTokens', v)} />
+        <NumberField label="Prompt reserve tokens" value={compaction.conversation.promptReserveTokens} onChange={(v) => updateConfig('compaction.conversation.promptReserveTokens', v)} />
       </fieldset>
     </div>
   );

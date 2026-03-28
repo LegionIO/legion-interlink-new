@@ -23,6 +23,15 @@ type ContentPart =
     isError?: boolean;
     startedAt?: string;
     finishedAt?: string;
+    /** Original (pre-compaction) result content — present only when tool output was compacted */
+    originalResult?: unknown;
+    /** Tool compaction metadata — present only when tool output was compacted */
+    compactionMeta?: {
+      wasCompacted: boolean;
+      extractionDurationMs: number;
+    };
+    /** Live compaction phase — 'start' while AI summarization is running, cleared on complete */
+    compactionPhase?: 'start' | 'complete' | null;
     liveOutput?: {
       stdout?: string;
       stderr?: string;
@@ -87,12 +96,28 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function summarizeToolParts(parts: ContentPart[]): Array<Record<string, unknown>> {
+  return parts
+    .filter((part) => part.type === 'tool-call')
+    .map((part) => ({
+      toolCallId: part.toolCallId,
+      toolName: part.toolName,
+      hasResult: part.result !== undefined,
+      compactionPhase: part.compactionPhase ?? null,
+      wasCompacted: part.compactionMeta?.wasCompacted ?? false,
+    }));
+}
+
+function logRuntimeToolDebug(stage: string, details: Record<string, unknown>): void {
+  console.info(`[RuntimeToolDebug] ${stage} ${JSON.stringify(details)}`);
+}
+
 function msgId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function toStoredContent(parts: ContentPart[]): ThreadMessageLike['content'] {
-  return parts as any;
+  return parts as unknown as ThreadMessageLike['content'];
 }
 
 function extractUserText(messages: ThreadMessageLike[]): string {
@@ -268,6 +293,7 @@ function applyToolCall(
   const { msg, idx } = getOrCreateAssistantInAcc(acc);
   const content = (Array.isArray(msg.content) ? [...msg.content] : []) as ContentPart[];
   const existingIdx = content.findIndex((p) => p.type === 'tool-call' && p.toolCallId === e.toolCallId);
+  const matchMode = existingIdx >= 0 ? 'exact' : 'new';
   if (existingIdx >= 0) {
     const existing = content[existingIdx] as ContentPart & { type: 'tool-call' };
     content[existingIdx] = {
@@ -289,6 +315,12 @@ function applyToolCall(
       liveOutput: { stdout: '', stderr: '', truncated: false, stopped: false },
     });
   }
+  logRuntimeToolDebug('apply-tool-call', {
+    toolCallId: e.toolCallId,
+    toolName: e.toolName,
+    matchMode,
+    toolParts: summarizeToolParts(content),
+  });
   acc.messages[idx] = { ...msg, content: toStoredContent(content) };
 }
 
@@ -308,8 +340,10 @@ function applyToolProgress(
   const { msg, idx } = getOrCreateAssistantInAcc(acc);
   const content = (Array.isArray(msg.content) ? [...msg.content] : []) as ContentPart[];
   let tcIdx = -1;
+  let matchMode: 'exact' | 'fallback' | 'orphan' = 'orphan';
   if (e.toolCallId) {
     tcIdx = content.findIndex((p) => p.type === 'tool-call' && p.toolCallId === e.toolCallId);
+    if (tcIdx >= 0) matchMode = 'exact';
   }
   if (tcIdx < 0) {
     // Some runtimes emit progress before call metadata or without call id.
@@ -320,11 +354,17 @@ function applyToolProgress(
       if (part.result !== undefined) continue;
       if (e.toolName && part.toolName !== e.toolName) continue;
       tcIdx = i;
+      matchMode = 'fallback';
       break;
     }
   }
   if (tcIdx < 0) {
     // Ignore orphan progress without a resolvable tool call to avoid duplicate cards.
+    logRuntimeToolDebug('apply-tool-progress-orphan', {
+      toolCallId: e.toolCallId ?? null,
+      toolName: e.toolName ?? null,
+      toolParts: summarizeToolParts(content),
+    });
     return;
   }
 
@@ -342,18 +382,34 @@ function applyToolProgress(
   liveOutput.truncated = Boolean(liveOutput.truncated || e.data?.truncated);
   liveOutput.stopped = Boolean(liveOutput.stopped || e.data?.stopped);
   content[tcIdx] = { ...existing, liveOutput };
+  logRuntimeToolDebug('apply-tool-progress', {
+    toolCallId: e.toolCallId ?? null,
+    toolName: e.toolName ?? null,
+    matchMode,
+    toolParts: summarizeToolParts(content),
+  });
   acc.messages[idx] = { ...msg, content: toStoredContent(content) };
 }
 
-function applyToolResult(
+function applyToolCompaction(
   acc: { messages: StoredMessage[]; headId: string | null },
-  e: { toolCallId?: string; toolName?: string; result: unknown; startedAt?: string; finishedAt?: string },
+  e: {
+    toolCallId?: string;
+    toolName?: string;
+    data?: {
+      phase?: 'start' | 'complete' | 'error' | null;
+      originalContent?: string;
+      extractionDurationMs?: number;
+    };
+  },
 ): void {
   const { msg, idx } = getOrCreateAssistantInAcc(acc);
   const content = (Array.isArray(msg.content) ? [...msg.content] : []) as ContentPart[];
   let tcIdx = -1;
+  let matchMode: 'exact' | 'fallback' | 'created' = 'created';
   if (e.toolCallId) {
     tcIdx = content.findIndex((p) => p.type === 'tool-call' && p.toolCallId === e.toolCallId);
+    if (tcIdx >= 0) matchMode = 'exact';
   }
   if (tcIdx < 0) {
     for (let i = content.length - 1; i >= 0; i--) {
@@ -362,6 +418,96 @@ function applyToolResult(
       if (part.result !== undefined) continue;
       if (e.toolName && part.toolName !== e.toolName) continue;
       tcIdx = i;
+      matchMode = 'fallback';
+      break;
+    }
+  }
+  if (tcIdx < 0) {
+    if (!e.toolCallId) return;
+    content.push({
+      type: 'tool-call',
+      toolCallId: e.toolCallId,
+      toolName: e.toolName ?? 'unknown',
+      args: {},
+      argsText: '{}',
+      startedAt: nowIso(),
+      liveOutput: { stdout: '', stderr: '', truncated: false, stopped: false },
+    });
+    tcIdx = content.length - 1;
+    matchMode = 'created';
+  }
+
+  const existing = content[tcIdx] as ContentPart & { type: 'tool-call' };
+  if (e.data?.phase === 'start') {
+    content[tcIdx] = {
+      ...existing,
+      compactionPhase: 'start',
+      ...(typeof e.data.originalContent === 'string' && e.data.originalContent.length > 0
+        ? { originalResult: existing.originalResult ?? e.data.originalContent }
+        : {}),
+    };
+  } else if (e.data?.phase === 'complete') {
+    content[tcIdx] = {
+      ...existing,
+      compactionPhase: 'complete',
+      ...(typeof e.data.originalContent === 'string' && e.data.originalContent.length > 0
+        ? { originalResult: existing.originalResult ?? e.data.originalContent }
+        : {}),
+      compactionMeta: {
+        wasCompacted: true,
+        extractionDurationMs: e.data.extractionDurationMs ?? existing.compactionMeta?.extractionDurationMs ?? 0,
+      },
+    };
+  } else {
+    content[tcIdx] = {
+      ...existing,
+      compactionPhase: null,
+    };
+  }
+
+  logRuntimeToolDebug('apply-tool-compaction', {
+    toolCallId: e.toolCallId ?? null,
+    toolName: e.toolName ?? null,
+    phase: e.data?.phase ?? null,
+    matchMode,
+    hasOriginalContent: typeof e.data?.originalContent === 'string' && e.data.originalContent.length > 0,
+    extractionDurationMs: e.data?.extractionDurationMs ?? null,
+    toolParts: summarizeToolParts(content),
+  });
+  acc.messages[idx] = { ...msg, content: toStoredContent(content) };
+}
+
+function applyToolResult(
+  acc: { messages: StoredMessage[]; headId: string | null },
+  e: {
+    toolCallId?: string;
+    toolName?: string;
+    result: unknown;
+    startedAt?: string;
+    finishedAt?: string;
+    compaction?: {
+      originalContent: string;
+      wasCompacted: boolean;
+      extractionDurationMs: number;
+    };
+  },
+): void {
+  const { msg, idx } = getOrCreateAssistantInAcc(acc);
+  const content = (Array.isArray(msg.content) ? [...msg.content] : []) as ContentPart[];
+  let tcIdx = -1;
+  let matchMode: 'exact' | 'fallback' | 'created' = 'created';
+  if (e.toolCallId) {
+    tcIdx = content.findIndex((p) => p.type === 'tool-call' && p.toolCallId === e.toolCallId);
+    if (tcIdx >= 0) matchMode = 'exact';
+  }
+  if (tcIdx < 0) {
+    for (let i = content.length - 1; i >= 0; i--) {
+      const part = content[i];
+      if (part.type !== 'tool-call') continue;
+      if (part.result !== undefined) continue;
+      if (e.toolName && part.toolName !== e.toolName) continue;
+      tcIdx = i;
+      matchMode = 'fallback';
       break;
     }
   }
@@ -377,17 +523,42 @@ function applyToolResult(
       liveOutput: { stdout: '', stderr: '', truncated: false, stopped: false },
     });
     tcIdx = content.length - 1;
+    matchMode = 'created';
   }
   if (tcIdx >= 0) {
     const existing = content[tcIdx] as ContentPart & { type: 'tool-call' };
     const finishedAt = e.finishedAt ?? nowIso();
+
+    // If compaction metadata was injected by the main process, apply it
+    const compactionFields: Partial<ContentPart & { type: 'tool-call' }> = e.compaction?.wasCompacted
+      ? {
+          originalResult: e.compaction.originalContent,
+          compactionMeta: {
+            wasCompacted: true,
+            extractionDurationMs: e.compaction.extractionDurationMs,
+          },
+          compactionPhase: 'complete' as const,
+        }
+      : {};
+
     content[tcIdx] = {
       ...existing,
       result: e.result,
       startedAt: e.startedAt ?? existing.startedAt ?? finishedAt,
       finishedAt,
+      ...(!e.compaction?.wasCompacted && existing.compactionPhase === 'start'
+        ? { compactionPhase: existing.compactionMeta?.wasCompacted ? 'complete' as const : null }
+        : {}),
+      ...compactionFields,
     };
   }
+  logRuntimeToolDebug('apply-tool-result', {
+    toolCallId: e.toolCallId ?? null,
+    toolName: e.toolName ?? null,
+    matchMode,
+    hasCompaction: Boolean(e.compaction?.wasCompacted),
+    toolParts: summarizeToolParts(content),
+  });
   acc.messages[idx] = { ...msg, content: toStoredContent(content) };
 }
 
@@ -781,6 +952,11 @@ export function RuntimeProvider({
         toolCallId?: string; toolName?: string; args?: unknown;
         result?: unknown; error?: string;
         startedAt?: string; finishedAt?: string;
+        compaction?: {
+          originalContent: string;
+          wasCompacted: boolean;
+          extractionDurationMs: number;
+        };
         data?: unknown;
         // Sub-agent fields
         subAgentConversationId?: string;
@@ -906,6 +1082,19 @@ export function RuntimeProvider({
 
       const acc = streamAccumulators.get(convId)!;
 
+      if (e.type === 'tool-call' || e.type === 'tool-result' || e.type === 'tool-compaction') {
+        logRuntimeToolDebug('stream-event', {
+          conversationId: convId,
+          eventType: e.type,
+          toolCallId: e.toolCallId ?? null,
+          toolName: e.toolName ?? null,
+          compactionPhase: e.type === 'tool-compaction'
+            ? ((e.data as { phase?: string } | undefined)?.phase ?? null)
+            : null,
+          hasResultCompaction: e.type === 'tool-result' ? Boolean(e.compaction?.wasCompacted) : false,
+        });
+      }
+
       if (e.type === 'text-delta') {
         // If a new realtime call started, force a fresh assistant message
         if (forceNewAssistant.has(convId)) {
@@ -928,7 +1117,6 @@ export function RuntimeProvider({
       } else if (e.type === 'realtime-user-transcript') {
         // Realtime audio: create/update a user message for spoken text
         const itemId = (e as { itemId?: string }).itemId ?? msgId();
-        const isFinal = (e as { isFinal?: boolean }).isFinal ?? true;
         const text = e.text ?? '';
         const existingIdx = acc.messages.findIndex((m) => m.id === `rt-user-${itemId}`);
         if (existingIdx >= 0) {
@@ -1003,12 +1191,44 @@ export function RuntimeProvider({
           result: e.result,
           startedAt: e.startedAt,
           finishedAt: e.finishedAt,
+          compaction: e.compaction,
         });
       } else if (e.type === 'tool-progress') {
-        applyToolProgress(acc, {
+        const toolProgressData = e.data as {
+          type?: string;
+          stream?: 'stdout' | 'stderr';
+          output?: string;
+          truncated?: boolean;
+          stopped?: boolean;
+          content?: string;
+          duration_ms?: number;
+        } | undefined;
+        if (toolProgressData?.type === 'extraction_start' || toolProgressData?.type === 'extraction_complete') {
+          applyToolCompaction(acc, {
+            toolCallId: e.toolCallId,
+            toolName: e.toolName,
+            data: {
+              phase: toolProgressData.type === 'extraction_start' ? 'start' : 'complete',
+              originalContent: toolProgressData.type === 'extraction_start' ? toolProgressData.content : undefined,
+              extractionDurationMs: toolProgressData.duration_ms,
+            },
+          });
+        } else {
+          applyToolProgress(acc, {
+            toolCallId: e.toolCallId,
+            toolName: e.toolName,
+            data: toolProgressData,
+          });
+        }
+      } else if (e.type === 'tool-compaction') {
+        applyToolCompaction(acc, {
           toolCallId: e.toolCallId,
           toolName: e.toolName,
-          data: e.data as { stream?: 'stdout' | 'stderr'; output?: string; truncated?: boolean; stopped?: boolean } | undefined,
+          data: e.data as {
+            phase?: 'start' | 'complete' | 'error' | null;
+            originalContent?: string;
+            extractionDurationMs?: number;
+          } | undefined,
         });
       } else if (e.type === 'model-fallback') {
         const fbData = e.data as {

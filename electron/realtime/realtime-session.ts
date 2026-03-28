@@ -11,6 +11,9 @@ import { BrowserWindow } from 'electron';
 import WebSocket from 'ws';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { LegionConfig } from '../config/schema.js';
+import { resolveModelForThread } from '../agent/model-catalog.js';
+import { compactToolResult, estimateToolTokens } from '../agent/compaction.js';
+import type { ToolCompactionConfig } from '../agent/compaction.js';
 import { findToolByName } from '../tools/naming.js';
 import type { ToolDefinition } from '../tools/types.js';
 import type { ComputerUseEvent } from '../../shared/computer-use.js';
@@ -41,7 +44,35 @@ export type RealtimeStreamEvent =
   | { type: 'text-delta'; conversationId: string; text: string; source: 'realtime' }
   | { type: 'realtime-interrupt'; conversationId: string; spokenText: string; unspokenText: string }
   | { type: 'tool-call'; conversationId: string; toolCallId: string; toolName: string; args: unknown; startedAt: string; source: 'realtime' }
-  | { type: 'tool-result'; conversationId: string; toolCallId: string; toolName: string; result: unknown; isError?: boolean; startedAt: string; finishedAt: string; source: 'realtime' }
+  | {
+    type: 'tool-result';
+    conversationId: string;
+    toolCallId: string;
+    toolName: string;
+    result: unknown;
+    isError?: boolean;
+    startedAt: string;
+    finishedAt: string;
+    source: 'realtime';
+    compaction?: {
+      originalContent: string;
+      wasCompacted: boolean;
+      extractionDurationMs: number;
+    };
+  }
+  | {
+    type: 'tool-compaction';
+    conversationId: string;
+    toolCallId: string;
+    toolName: string;
+    source: 'realtime';
+    data: {
+      phase: 'start' | 'complete';
+      originalContent?: string;
+      extractionDurationMs?: number;
+      timestamp: string;
+    };
+  }
   | { type: 'realtime-status'; conversationId: string; status: RealtimeSessionStatus; error?: string }
   | { type: 'done'; conversationId: string; source: 'realtime' };
 
@@ -806,6 +837,102 @@ export class RealtimeSession {
 
   /* ── Tool Execution ── */
 
+  private stringifyToolResult(result: unknown): string {
+    if (typeof result === 'string') return result;
+    if (result == null) return '';
+    try {
+      return JSON.stringify(result);
+    } catch {
+      return String(result);
+    }
+  }
+
+  private latestUserQuery(): string {
+    const entries = Array.from(this.userTranscriptBuffers.values());
+    return entries.at(-1)?.trim() ?? '';
+  }
+
+  private async maybeCompactToolOutput(
+    callId: string,
+    toolName: string,
+    result: unknown,
+  ): Promise<{
+    result: unknown;
+    compaction?: {
+      originalContent: string;
+      wasCompacted: boolean;
+      extractionDurationMs: number;
+    };
+  }> {
+    const fullConfig = this.getFullConfig();
+    const toolCompaction = fullConfig.compaction?.tool as ToolCompactionConfig | undefined;
+    if (!toolCompaction?.enabled) {
+      return { result };
+    }
+
+    const originalText = this.stringifyToolResult(result);
+    const modelEntry = resolveModelForThread(fullConfig, null);
+    const modelName = modelEntry?.modelConfig.modelName;
+    const shouldAttemptCompaction = originalText.length > 0
+      && estimateToolTokens(originalText, modelName) > toolCompaction.triggerTokens;
+
+    if (!shouldAttemptCompaction) {
+      return { result };
+    }
+
+    this.broadcastStreamEvent({
+      type: 'tool-compaction',
+      conversationId: this.conversationId,
+      toolCallId: callId,
+      toolName,
+      source: 'realtime',
+      data: {
+        phase: 'start',
+        originalContent: originalText,
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    try {
+      const compacted = await compactToolResult(
+        originalText,
+        toolName,
+        this.latestUserQuery(),
+        toolCompaction,
+        modelEntry?.modelConfig,
+        modelName,
+      );
+
+      if (compacted.wasCompacted) {
+        this.broadcastStreamEvent({
+          type: 'tool-compaction',
+          conversationId: this.conversationId,
+          toolCallId: callId,
+          toolName,
+          source: 'realtime',
+          data: {
+            phase: 'complete',
+            extractionDurationMs: compacted.extractionDurationMs ?? 0,
+            timestamp: new Date().toISOString(),
+          },
+        });
+
+        return {
+          result: compacted.content,
+          compaction: {
+            originalContent: originalText,
+            wasCompacted: true,
+            extractionDurationMs: compacted.extractionDurationMs ?? 0,
+          },
+        };
+      }
+    } catch (error) {
+      console.warn('[RealtimeSession] Tool compaction failed for', toolName, ':', error);
+    }
+
+    return { result };
+  }
+
   private async executeTool(callId: string, toolName: string, argsJson: string): Promise<void> {
     const pending = this.pendingToolCalls.get(callId);
     const startedAt = pending?.startedAt ?? new Date().toISOString();
@@ -829,14 +956,16 @@ export class RealtimeSession {
 
     try {
       const args = safeParseJSON(argsJson);
-      const result = await tool.execute(args, {
+      const rawResult = await tool.execute(args, {
         toolCallId: callId,
         conversationId: this.conversationId,
       });
-      this.finishToolCall(callId, toolName, result, false, startedAt);
+      const compacted = await this.maybeCompactToolOutput(callId, toolName, rawResult);
+      this.finishToolCall(callId, toolName, compacted.result, false, startedAt, compacted.compaction);
     } catch (err) {
-      const errorResult = { error: err instanceof Error ? err.message : String(err) };
-      this.finishToolCall(callId, toolName, errorResult, true, startedAt);
+      const rawErrorResult = { error: err instanceof Error ? err.message : String(err) };
+      const compacted = await this.maybeCompactToolOutput(callId, toolName, rawErrorResult);
+      this.finishToolCall(callId, toolName, compacted.result, true, startedAt, compacted.compaction);
     }
   }
 
@@ -846,6 +975,11 @@ export class RealtimeSession {
     result: unknown,
     isError: boolean,
     startedAt: string,
+    compaction?: {
+      originalContent: string;
+      wasCompacted: boolean;
+      extractionDurationMs: number;
+    },
   ): void {
     const finishedAt = new Date().toISOString();
     this.pendingToolCalls.delete(callId);
@@ -864,6 +998,7 @@ export class RealtimeSession {
       startedAt,
       finishedAt,
       source: 'realtime',
+      ...(compaction ? { compaction } : {}),
     });
 
     // Send result back to the Realtime API

@@ -8,7 +8,8 @@ import { getLegionStatus, resolveAgentBackend, streamLegionAgent } from '../agen
 import { createLanguageModelFromConfig } from '../agent/language-model.js';
 import type { LegionConfig } from '../config/schema.js';
 import { readEffectiveConfig } from './config.js';
-import { shouldCompact, compactConversationPrefix } from '../agent/compaction.js';
+import { shouldCompact, compactConversationPrefix, compactToolResult, estimateToolTokens } from '../agent/compaction.js';
+import type { ToolCompactionConfig } from '../agent/compaction.js';
 import type { ToolDefinition, ToolExecutionContext } from '../tools/types.js';
 import { ensureSafeToolDefinitions, findToolByName } from '../tools/naming.js';
 import {
@@ -67,6 +68,34 @@ function withObserverAugmentation(result: unknown, augmentation: Record<string, 
   };
 }
 
+/**
+ * Stringify a tool result into a flat text representation suitable for
+ * token counting and compaction.
+ */
+function stringifyToolResult(result: unknown): string {
+  if (typeof result === 'string') return result;
+  if (result == null) return '';
+  try {
+    return JSON.stringify(result);
+  } catch {
+    return String(result);
+  }
+}
+
+/**
+ * Extract the latest user query text from the message list.
+ * Used to give the AI compactor context about what the user asked.
+ */
+function extractLatestUserQuery(messages: unknown[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i] as { role?: string; content?: unknown } | undefined;
+    if (msg?.role !== 'user') continue;
+    const text = extractMessageText(msg.content);
+    if (text) return text;
+  }
+  return '';
+}
+
 function extractMessageText(content: unknown): string {
   if (!Array.isArray(content)) return '';
   return content
@@ -98,6 +127,14 @@ function buildTitleGenerationInput(messages: unknown[]): string {
     .slice(-8);
 
   return normalized.join('\n');
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function logToolCompactionDebug(stage: string, details: Record<string, unknown>): void {
+  console.info(`[ToolCompactionDebug] ${stage} ${JSON.stringify(details)}`);
 }
 
 function normalizeGeneratedTitle(rawTitle: string | null): string | null {
@@ -327,6 +364,248 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
       const pendingObserverToolExecutions = new Set<Promise<void>>();
       let observerLaunchesEnabled = true;
       let observer: ToolObserverManager | null = null;
+      // Compaction metadata keyed by execute-side toolCallId.
+      // Populated in augmentToolResult, consumed when the matching
+      // tool-result stream event is broadcast.
+      const compactionByExecuteId = new Map<string, {
+        originalContent: string;
+        wasCompacted: boolean;
+        extractionDurationMs: number;
+      }>();
+      type PendingToolCompactionEvent = {
+        toolName: string;
+        data: {
+          phase: 'start' | 'complete';
+          originalContent?: string;
+          extractionDurationMs?: number;
+          timestamp: string;
+        };
+      };
+      const pendingExecIdsByToolName = new Map<string, string[]>();
+      const pendingStreamIdsByToolName = new Map<string, string[]>();
+      const streamToolCallIdByExecId = new Map<string, string>();
+      const execToolCallIdByStreamId = new Map<string, string>();
+      const pendingToolCompactionByExecId = new Map<string, PendingToolCompactionEvent[]>();
+
+      const enqueueByToolName = (map: Map<string, string[]>, toolName: string, id: string): void => {
+        const queue = map.get(toolName) ?? [];
+        queue.push(id);
+        map.set(toolName, queue);
+      };
+
+      const shiftByToolName = (map: Map<string, string[]>, toolName: string): string | null => {
+        const queue = map.get(toolName);
+        if (!queue || queue.length === 0) return null;
+        const value = queue.shift() ?? null;
+        if (queue.length === 0) {
+          map.delete(toolName);
+        }
+        return value;
+      };
+
+      const queueOrBroadcastToolCompaction = (
+        executeToolCallId: string,
+        toolName: string,
+        data: PendingToolCompactionEvent['data'],
+        mode: 'defer-until-stream-id' | 'direct',
+      ): void => {
+        if (mode === 'direct') {
+          logToolCompactionDebug('broadcast-tool-compaction', {
+            conversationId,
+            toolCallId: executeToolCallId,
+            toolName,
+            phase: data.phase,
+            mode,
+            hasOriginalContent: typeof data.originalContent === 'string' && data.originalContent.length > 0,
+            extractionDurationMs: data.extractionDurationMs ?? null,
+          });
+          broadcastStreamEvent({
+            conversationId,
+            type: 'tool-compaction',
+            toolCallId: executeToolCallId,
+            toolName,
+            data,
+          });
+          return;
+        }
+
+        const streamToolCallId = streamToolCallIdByExecId.get(executeToolCallId);
+        if (streamToolCallId) {
+          logToolCompactionDebug('broadcast-tool-compaction-after-pair', {
+            conversationId,
+            toolCallId: executeToolCallId,
+            streamToolCallId,
+            toolName,
+            phase: data.phase,
+            mode,
+            hasOriginalContent: typeof data.originalContent === 'string' && data.originalContent.length > 0,
+            extractionDurationMs: data.extractionDurationMs ?? null,
+          });
+          broadcastStreamEvent({
+            conversationId,
+            type: 'tool-compaction',
+            toolCallId: streamToolCallId,
+            toolName,
+            data,
+          });
+          return;
+        }
+
+        const pending = pendingToolCompactionByExecId.get(executeToolCallId) ?? [];
+        pending.push({ toolName, data });
+        pendingToolCompactionByExecId.set(executeToolCallId, pending);
+        logToolCompactionDebug('queue-tool-compaction', {
+          conversationId,
+          toolCallId: executeToolCallId,
+          toolName,
+          phase: data.phase,
+          mode,
+          queueLength: pending.length,
+          hasOriginalContent: typeof data.originalContent === 'string' && data.originalContent.length > 0,
+          extractionDurationMs: data.extractionDurationMs ?? null,
+        });
+      };
+
+      const flushPendingToolCompaction = (executeToolCallId: string): void => {
+        const streamToolCallId = streamToolCallIdByExecId.get(executeToolCallId);
+        const pending = pendingToolCompactionByExecId.get(executeToolCallId);
+        if (!streamToolCallId || !pending || pending.length === 0) return;
+
+        pendingToolCompactionByExecId.delete(executeToolCallId);
+        for (const event of pending) {
+          logToolCompactionDebug('flush-tool-compaction', {
+            conversationId,
+            toolCallId: executeToolCallId,
+            streamToolCallId,
+            toolName: event.toolName,
+            phase: event.data.phase,
+            queueLength: pending.length,
+            hasOriginalContent: typeof event.data.originalContent === 'string' && event.data.originalContent.length > 0,
+            extractionDurationMs: event.data.extractionDurationMs ?? null,
+          });
+          broadcastStreamEvent({
+            conversationId,
+            type: 'tool-compaction',
+            toolCallId: streamToolCallId,
+            toolName: event.toolName,
+            data: event.data,
+          });
+        }
+      };
+
+      const pairExecuteAndStreamToolCallIds = (toolName: string): string | null => {
+        const executeToolCallId = shiftByToolName(pendingExecIdsByToolName, toolName);
+        const streamToolCallId = shiftByToolName(pendingStreamIdsByToolName, toolName);
+        if (!executeToolCallId || !streamToolCallId) {
+          if (executeToolCallId) enqueueByToolName(pendingExecIdsByToolName, toolName, executeToolCallId);
+          if (streamToolCallId) enqueueByToolName(pendingStreamIdsByToolName, toolName, streamToolCallId);
+          return null;
+        }
+
+        streamToolCallIdByExecId.set(executeToolCallId, streamToolCallId);
+        execToolCallIdByStreamId.set(streamToolCallId, executeToolCallId);
+        logToolCompactionDebug('pair-tool-call-ids', {
+          conversationId,
+          toolName,
+          executeToolCallId,
+          streamToolCallId,
+        });
+        flushPendingToolCompaction(executeToolCallId);
+        return executeToolCallId;
+      };
+
+      const maybeCompactToolOutput = async (
+        toolCallId: string,
+        toolName: string,
+        result: unknown,
+        lifecycleMode: 'defer-until-stream-id' | 'direct',
+      ): Promise<{
+        result: unknown;
+        compaction?: {
+          originalContent: string;
+          wasCompacted: boolean;
+          extractionDurationMs: number;
+        };
+      }> => {
+        const toolCompaction = config.compaction?.tool as ToolCompactionConfig | undefined;
+        if (!toolCompaction?.enabled || controller.signal.aborted) {
+          return { result };
+        }
+
+        const originalText = stringifyToolResult(result);
+        const userQuery = extractLatestUserQuery(messages);
+        const shouldAttemptCompaction = originalText.length > 0
+          && estimateToolTokens(originalText, modelEntry?.modelConfig.modelName) > toolCompaction.triggerTokens;
+
+        logToolCompactionDebug('evaluate-tool-output', {
+          conversationId,
+          toolCallId,
+          toolName,
+          lifecycleMode,
+          originalLength: originalText.length,
+          triggerTokens: toolCompaction.triggerTokens,
+          modelName: modelEntry?.modelConfig.modelName ?? null,
+          shouldAttemptCompaction,
+        });
+
+        if (!shouldAttemptCompaction) {
+          return { result };
+        }
+
+        queueOrBroadcastToolCompaction(toolCallId, toolName, {
+          phase: 'start',
+          originalContent: originalText,
+          timestamp: nowIso(),
+        }, lifecycleMode);
+
+        try {
+          const compactionResult = await compactToolResult(
+            originalText,
+            toolName,
+            userQuery,
+            toolCompaction,
+            modelEntry?.modelConfig,
+            modelEntry?.modelConfig.modelName,
+          );
+
+          if (compactionResult.wasCompacted && !controller.signal.aborted) {
+            queueOrBroadcastToolCompaction(toolCallId, toolName, {
+              phase: 'complete',
+              extractionDurationMs: compactionResult.extractionDurationMs ?? 0,
+              timestamp: nowIso(),
+            }, lifecycleMode);
+
+            logToolCompactionDebug('compaction-complete', {
+              conversationId,
+              toolCallId,
+              toolName,
+              lifecycleMode,
+              compactedLength: typeof compactionResult.content === 'string' ? compactionResult.content.length : null,
+              extractionDurationMs: compactionResult.extractionDurationMs ?? 0,
+            });
+
+            return {
+              result: compactionResult.content,
+              compaction: {
+                originalContent: originalText,
+                wasCompacted: true,
+                extractionDurationMs: compactionResult.extractionDurationMs ?? 0,
+              },
+            };
+          }
+        } catch (compactionError) {
+          logToolCompactionDebug('compaction-error', {
+            conversationId,
+            toolCallId,
+            toolName,
+            lifecycleMode,
+            error: compactionError instanceof Error ? compactionError.message : String(compactionError),
+          });
+          console.warn('[Agent] Tool compaction failed for', toolName, ':', compactionError);
+        }
+
+        return { result };
+      };
 
       const waitForObserverToolExecutions = async (): Promise<void> => {
         while (pendingObserverToolExecutions.size > 0) {
@@ -379,6 +658,7 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
           toolName,
           args,
           startedAt,
+          observerInitiated: true,
         });
 
         const runObserverToolExecution = async (): Promise<void> => {
@@ -408,7 +688,13 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
 
             const rawResult = await tool.execute(args, context);
             observer?.onToolExecutionResult(toolCallId, toolName, rawResult);
-            const augmented = withObserverAugmentation(rawResult, observer?.getToolAugmentation(toolCallId));
+            const observerAugmented = withObserverAugmentation(rawResult, observer?.getToolAugmentation(toolCallId));
+            const compacted = await maybeCompactToolOutput(
+              toolCallId,
+              toolName,
+              observerAugmented,
+              'direct',
+            );
             const finishedAt = new Date().toISOString();
 
             if (activeObserverSessions.get(conversationId) === observerSessionId && !controller.signal.aborted) {
@@ -417,9 +703,11 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
                 type: 'tool-result',
                 toolCallId,
                 toolName,
-                result: augmented,
+                result: compacted.result,
                 startedAt,
                 finishedAt,
+                observerInitiated: true,
+                ...(compacted.compaction ? { compaction: compacted.compaction } : {}),
               });
             }
           } catch (error) {
@@ -428,7 +716,13 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
               error: error instanceof Error ? error.message : String(error),
             };
             observer?.onToolExecutionResult(toolCallId, toolName, errorResult);
-            const augmented = withObserverAugmentation(errorResult, observer?.getToolAugmentation(toolCallId));
+            const observerAugmented = withObserverAugmentation(errorResult, observer?.getToolAugmentation(toolCallId));
+            const compacted = await maybeCompactToolOutput(
+              toolCallId,
+              toolName,
+              observerAugmented,
+              'direct',
+            );
             const finishedAt = new Date().toISOString();
 
             if (activeObserverSessions.get(conversationId) === observerSessionId && !controller.signal.aborted) {
@@ -437,9 +731,11 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
                 type: 'tool-result',
                 toolCallId,
                 toolName,
-                result: augmented,
+                result: compacted.result,
                 startedAt,
                 finishedAt,
+                observerInitiated: true,
+                ...(compacted.compaction ? { compaction: compacted.compaction } : {}),
               });
             }
           } finally {
@@ -569,6 +865,8 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
             },
             onToolExecutionStart: (state: { toolCallId: string; toolName: string; args: unknown; cancel: () => void }) => {
               toolCancels.set(state.toolCallId, state.cancel);
+              enqueueByToolName(pendingExecIdsByToolName, state.toolName, state.toolCallId);
+              pairExecuteAndStreamToolCallIds(state.toolName);
               observer?.onToolExecutionStart(state);
             },
             onToolExecutionEnd: ({ toolCallId }: { toolCallId: string; toolName: string }) => {
@@ -578,7 +876,17 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
             augmentToolResult: async ({ toolCallId, toolName, result }: { toolCallId: string; toolName: string; args: unknown; result: unknown }) => {
               await observer?.waitForLinkedLaunchedTools(toolCallId);
               observer?.onToolExecutionResult(toolCallId, toolName, result);
-              return withObserverAugmentation(result, observer?.getToolAugmentation(toolCallId));
+              const observerAugmented = withObserverAugmentation(result, observer?.getToolAugmentation(toolCallId));
+              const compacted = await maybeCompactToolOutput(
+                toolCallId,
+                toolName,
+                observerAugmented,
+                'defer-until-stream-id',
+              );
+              if (compacted.compaction) {
+                compactionByExecuteId.set(toolCallId, compacted.compaction);
+              }
+              return compacted.result;
             },
           };
 
@@ -615,8 +923,45 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
             );
 
         for await (const event of stream) {
+          if (event.type === 'tool-call' || event.type === 'tool-result' || event.type === 'tool-compaction') {
+            logToolCompactionDebug('stream-event', {
+              conversationId,
+              eventType: event.type,
+              toolCallId: event.toolCallId ?? null,
+              toolName: event.toolName ?? null,
+              hasCompaction: 'compaction' in event && Boolean(event.compaction),
+              compactionPhase: event.type === 'tool-compaction'
+                ? ((event.data as { phase?: string } | undefined)?.phase ?? null)
+                : null,
+            });
+          }
+          if (event.type === 'tool-call' && event.toolCallId && event.toolName) {
+            enqueueByToolName(pendingStreamIdsByToolName, event.toolName, event.toolCallId);
+            pairExecuteAndStreamToolCallIds(event.toolName);
+          }
           if (event.type === 'tool-result' && event.toolCallId) {
             observer?.onToolExecutionEnd(event.toolCallId);
+            // Inject compaction metadata into the event's data field
+            const execId = execToolCallIdByStreamId.get(event.toolCallId) ?? event.toolCallId;
+            const compaction = execId ? compactionByExecuteId.get(execId) : undefined;
+            if (compaction) {
+              compactionByExecuteId.delete(execId!);
+              // Attach as a data field the renderer will pick up
+              (event as Record<string, unknown>).compaction = compaction;
+              logToolCompactionDebug('attach-result-compaction', {
+                conversationId,
+                toolCallId: event.toolCallId,
+                executeToolCallId: execId,
+                toolName: event.toolName ?? null,
+                extractionDurationMs: compaction.extractionDurationMs,
+                originalLength: compaction.originalContent.length,
+              });
+            }
+            if (execId) {
+              streamToolCallIdByExecId.delete(execId);
+            }
+            execToolCallIdByStreamId.delete(event.toolCallId);
+            pendingToolCompactionByExecId.delete(execId);
           }
           if (event.type === 'done' && !controller.signal.aborted) {
             observerLaunchesEnabled = false;
@@ -692,6 +1037,7 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
     try {
       const { Agent } = await import('@mastra/core/agent');
       const model = await createLanguageModelFromConfig(modelEntry.modelConfig);
+      type AgentConfig = ConstructorParameters<typeof Agent>[0];
 
       const agent = new Agent({
         id: `title-gen-${Date.now()}`,
@@ -703,7 +1049,7 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
           'Avoid apologies, disclaimers, or copied response text.',
           'Return only the title text with no quotes or formatting.',
         ].join(' '),
-        model: model as any,
+        model: model as AgentConfig['model'],
       });
 
       const titleInput = buildTitleGenerationInput(messages);

@@ -11,6 +11,89 @@ import { makeComputerUseId } from '../../../shared/computer-use.js';
 import type { LLMModelConfig } from '../../agent/model-catalog.js';
 import { createLanguageModelFromConfig } from '../../agent/language-model.js';
 
+// ── Model chain + fallback types ───────────────────────────────────────────────
+
+export type ModelChainEntry = {
+  key: string;
+  modelConfig: LLMModelConfig;
+  displayName: string;
+};
+
+export type FallbackCallbacks = {
+  onRetry?: (attempt: number, model: string, error: string) => void;
+  onFallback?: (fromModel: string, toModel: string, toModelKey: string, error: string) => void;
+  onModelStart?: (model: string, modelIndex: number, totalModels: number) => void;
+};
+
+// ── Parse-error classification ─────────────────────────────────────────────────
+
+function isRetryableParseError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const lower = message.toLowerCase();
+  return lower.includes('could not parse')
+    || lower.includes('no object generated')
+    || lower.includes('ai_noobjectgeneratederror')
+    || (error instanceof Error && error.constructor.name === 'NoObjectGeneratedError');
+}
+
+// ── generateObjectWithFallback ─────────────────────────────────────────────────
+
+export type GenerateObjectResult<T> = {
+  object: T;
+  /** Index into the model chain of the model that succeeded. */
+  modelIndex: number;
+};
+
+async function generateObjectWithFallback<T extends z.ZodType>(
+  chain: ModelChainEntry[],
+  maxRetries: number,
+  buildRequest: (model: unknown) => Omit<Parameters<typeof generateObject>[0], 'model'>,
+  callbacks?: FallbackCallbacks,
+): Promise<GenerateObjectResult<z.infer<T>>> {
+  let lastError: unknown = new Error('No models in chain');
+
+  for (let modelIndex = 0; modelIndex < chain.length; modelIndex++) {
+    const entry = chain[modelIndex];
+    callbacks?.onModelStart?.(entry.displayName, modelIndex, chain.length);
+    const model = await createModel(entry.modelConfig);
+    const retryLimit = Math.max(0, maxRetries);
+
+    for (let attempt = 0; attempt <= retryLimit; attempt++) {
+      try {
+        const request = buildRequest(model);
+        const result = await generateObject({ ...request, model } as Parameters<typeof generateObject>[0]);
+        return { object: (result as { object: z.infer<T> }).object, modelIndex };
+      } catch (error) {
+        lastError = error;
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        if (isRetryableParseError(error) && attempt < retryLimit) {
+          callbacks?.onRetry?.(attempt + 1, entry.displayName, errorMessage);
+          continue;
+        }
+
+        // Non-retryable or out of retries — try next model
+        if (modelIndex < chain.length - 1) {
+          const nextEntry = chain[modelIndex + 1];
+          callbacks?.onFallback?.(entry.displayName, nextEntry.displayName, nextEntry.key, errorMessage);
+        }
+        break;
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+/**
+ * Reorder a model chain so that the model at `startIndex` is first,
+ * followed by the remaining models in their original order.
+ */
+export function reorderChain(chain: ModelChainEntry[], startIndex: number): ModelChainEntry[] {
+  if (startIndex <= 0 || startIndex >= chain.length) return chain;
+  return [...chain.slice(startIndex), ...chain.slice(0, startIndex)];
+}
+
 const plannerSchema = z.object({
   summary: z.string().min(1),
   subgoals: z.array(z.string().min(1)).min(1).max(6),
@@ -183,12 +266,17 @@ function buildLoopAlert(session: ComputerSession): string | undefined {
   return `Loop alert: the action \"${describeAction(repeatedAction)}\" was attempted ${sameActions.length} times recently${failedCount > 0 ? ` (${failedCount} failed)` : ''}. Do not propose that same action again unless the UI clearly changed and you explain why repeating it is now safe.${suffix}`;
 }
 
-async function createModel(modelConfig: LLMModelConfig): Promise<any> {
+async function createModel(modelConfig: LLMModelConfig): Promise<Awaited<ReturnType<typeof createLanguageModelFromConfig>>> {
   return createLanguageModelFromConfig(modelConfig);
 }
 
-export async function createPlannerState(goal: string, modelConfig: LLMModelConfig, conversationContext?: string): Promise<ComputerPlannerState> {
-  const model = await createModel(modelConfig);
+export async function createPlannerState(
+  goal: string,
+  modelChain: ModelChainEntry[],
+  maxRetries: number,
+  conversationContext?: string,
+  callbacks?: FallbackCallbacks,
+): Promise<{ state: ComputerPlannerState; modelIndex: number }> {
   const prompt = [
     'You are planning a computer-use session. Create a short task graph for the goal below.',
     '',
@@ -196,17 +284,24 @@ export async function createPlannerState(goal: string, modelConfig: LLMModelConf
     conversationContext ? `Conversation context to resolve references like "that fix":\n${conversationContext}` : undefined,
     'Keep it concise and executable.',
   ].filter(Boolean).join('\n\n');
-  const result = await generateObject({
-    model,
-    output: 'object',
-    schema: plannerSchema,
-    prompt,
-  });
+  const result = await generateObjectWithFallback(
+    modelChain,
+    maxRetries,
+    () => ({
+      output: 'object' as const,
+      schema: plannerSchema,
+      prompt,
+    }),
+    callbacks,
+  );
   return {
-    summary: result.object.summary,
-    subgoals: result.object.subgoals,
-    successCriteria: result.object.successCriteria,
-    activeSubgoalIndex: 0,
+    state: {
+      summary: result.object.summary,
+      subgoals: result.object.subgoals,
+      successCriteria: result.object.successCriteria,
+      activeSubgoalIndex: 0,
+    },
+    modelIndex: result.modelIndex,
   };
 }
 
@@ -234,12 +329,13 @@ function describeDisplayLayout(layout: ComputerDisplayLayout | undefined): strin
 
 export async function generateNextActions(params: {
   session: ComputerSession;
-  modelConfig: LLMModelConfig;
+  modelChain: ModelChainEntry[];
+  maxRetries: number;
   role: ComputerUseRole;
   captureExcludedApps?: string[];
+  callbacks?: FallbackCallbacks;
 }): Promise<PlannedActions> {
-  const { session, modelConfig, role, captureExcludedApps } = params;
-  const model = await createModel(modelConfig);
+  const { session, modelChain, maxRetries, role, captureExcludedApps, callbacks } = params;
   const plannerState = session.plannerState ?? {
     summary: session.goal,
     subgoals: [session.goal],
@@ -380,19 +476,23 @@ export async function generateNextActions(params: {
 
   const message = [{ role: 'user' as const, content: contentParts }];
 
-  const result = await generateObject({
-    model,
-    output: 'object',
-    schema: actionSchema,
-    messages: message,
-  });
+  const result = await generateObjectWithFallback(
+    modelChain,
+    maxRetries,
+    () => ({
+      output: 'object' as const,
+      schema: actionSchema,
+      messages: message,
+    }),
+    callbacks,
+  );
 
   return {
     plannerState,
     summary: result.object.summary,
     complete: result.object.complete,
     currentSubgoal: result.object.nextSubgoal ?? currentSubgoal,
-    actions: result.object.actions.map((action) => ({
+    actions: result.object.actions.map((action: z.infer<typeof actionSchema>['actions'][number]) => ({
       id: makeComputerUseId('action'),
       sessionId: session.id,
       createdAt: new Date().toISOString(),

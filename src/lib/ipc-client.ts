@@ -174,14 +174,25 @@ type LegionAPI = {
     getSession: (sessionId: string) => Promise<unknown>;
     setSurface: (sessionId: string, surface: ComputerUseSurface) => Promise<unknown>;
     sendGuidance: (sessionId: string, text: string) => Promise<unknown>;
+    updateSessionSettings: (sessionId: string, settings: { modelKey?: string | null; profileKey?: string | null; fallbackEnabled?: boolean; reasoningEffort?: string }) => Promise<unknown>;
     continueSession: (sessionId: string, newGoal: string) => Promise<unknown>;
     markSessionsSeen: (conversationId: string) => Promise<unknown>;
     openSetupWindow: (conversationId?: string | null) => Promise<unknown>;
     getLocalMacosPermissions: () => Promise<ComputerUsePermissions>;
     requestLocalMacosPermissions: () => Promise<ComputerUsePermissionRequestResult>;
+    requestSingleLocalMacosPermission: (section: ComputerUsePermissionSection) => Promise<ComputerUsePermissions>;
     openLocalMacosPrivacySettings: (section?: ComputerUsePermissionSection) => Promise<{ opened: ComputerUsePermissionSection | null }>;
+    probeInputMonitoring: (timeoutMs?: number) => Promise<{ inputMonitoringGranted: boolean }>;
+    checkFullScreenApps: () => Promise<{ apps: string[]; problematicApps: string[] }>;
+    exitFullScreenApps: (appNames: string[]) => Promise<{ exited: string[]; failed: string[] }>;
+    listRunningApps: () => Promise<{ apps: string[] }>;
+    listDisplays: () => Promise<{ displays: Array<{ name: string; displayId: string; pixelWidth: number; pixelHeight: number; isPrimary: boolean }> }>;
+    focusSession: (sessionId: string) => Promise<unknown>;
+    overlayMouseEnter: () => void;
+    overlayMouseLeave: () => void;
     onEvent: (callback: (event: ComputerUseEvent) => void) => () => void;
     onOverlayState: (callback: (state: unknown) => void) => () => void;
+    onFocusThread: (callback: () => void) => () => void;
   };
   mic: {
     listDevices: () => Promise<Array<{ deviceId: string; label: string }>>;

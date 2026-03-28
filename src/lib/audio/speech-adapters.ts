@@ -15,44 +15,40 @@ import {
 
 type Unsubscribe = () => void;
 
-export namespace SpeechSynthesisAdapterTypes {
-  export type Status =
-    | { type: 'starting' | 'running' }
-    | { type: 'ended'; reason: 'finished' | 'cancelled' | 'error'; error?: unknown };
+export type SpeechSynthesisStatus =
+  | { type: 'starting' | 'running' }
+  | { type: 'ended'; reason: 'finished' | 'cancelled' | 'error'; error?: unknown };
 
-  export type Utterance = {
-    status: Status;
-    cancel: () => void;
-    subscribe: (callback: () => void) => Unsubscribe;
-  };
-}
-
-export type SpeechSynthesisAdapter = {
-  speak: (text: string) => SpeechSynthesisAdapterTypes.Utterance;
+export type SpeechSynthesisUtterance = {
+  status: SpeechSynthesisStatus;
+  cancel: () => void;
+  subscribe: (callback: () => void) => Unsubscribe;
 };
 
-export namespace DictationAdapterTypes {
-  export type Status =
-    | { type: 'starting' | 'running' }
-    | { type: 'ended'; reason: 'stopped' | 'cancelled' | 'error' };
+export type SpeechSynthesisAdapter = {
+  speak: (text: string) => SpeechSynthesisUtterance;
+};
 
-  export type Result = {
-    transcript: string;
-    isFinal?: boolean;
-  };
+export type DictationStatus =
+  | { type: 'starting' | 'running' }
+  | { type: 'ended'; reason: 'stopped' | 'cancelled' | 'error' };
 
-  export type Session = {
-    status: Status;
-    stop: () => Promise<void>;
-    cancel: () => void;
-    onSpeechStart: (callback: () => void) => Unsubscribe;
-    onSpeechEnd: (callback: (result: Result) => void) => Unsubscribe;
-    onSpeech: (callback: (result: Result) => void) => Unsubscribe;
-  };
-}
+export type DictationResult = {
+  transcript: string;
+  isFinal?: boolean;
+};
+
+export type DictationSession = {
+  status: DictationStatus;
+  stop: () => Promise<void>;
+  cancel: () => void;
+  onSpeechStart: (callback: () => void) => Unsubscribe;
+  onSpeechEnd: (callback: (result: DictationResult) => void) => Unsubscribe;
+  onSpeech: (callback: (result: DictationResult) => void) => Unsubscribe;
+};
 
 export type DictationAdapter = {
-  listen: () => DictationAdapterTypes.Session;
+  listen: () => DictationSession;
   disableInputDuringDictation?: boolean;
 };
 
@@ -78,9 +74,9 @@ type DictationConfig = {
 
 export function createSpeechAdapter(config: TtsConfig): SpeechSynthesisAdapter {
   return {
-    speak(text: string): SpeechSynthesisAdapterTypes.Utterance {
+    speak(text: string): SpeechSynthesisUtterance {
       const listeners = new Set<() => void>();
-      let status: SpeechSynthesisAdapterTypes.Status = { type: 'starting' };
+      let status: SpeechSynthesisStatus = { type: 'starting' };
 
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = config.rate ?? 1;
@@ -164,7 +160,7 @@ export function isDictationSupported(): boolean {
 
 export function createDictationAdapter(config: DictationConfig): DictationAdapter {
   return {
-    listen(): DictationAdapterTypes.Session {
+    listen(): DictationSession {
       const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognitionClass) {
         throw new Error('Speech recognition is not supported in this browser.');
@@ -175,10 +171,10 @@ export function createDictationAdapter(config: DictationConfig): DictationAdapte
       recognition.continuous = config.continuous ?? true;
       recognition.interimResults = true;
 
-      let status: DictationAdapterTypes.Status = { type: 'starting' };
+      let status: DictationStatus = { type: 'starting' };
       const speechStartListeners = new Set<() => void>();
-      const speechEndListeners = new Set<(result: DictationAdapterTypes.Result) => void>();
-      const speechListeners = new Set<(result: DictationAdapterTypes.Result) => void>();
+      const speechEndListeners = new Set<(result: DictationResult) => void>();
+      const speechListeners = new Set<(result: DictationResult) => void>();
       const errorListeners = new Set<(error: string) => void>();
 
       recognition.addEventListener('start', () => {
@@ -275,7 +271,7 @@ export function createDictationAdapter(config: DictationConfig): DictationAdapte
           errorListeners.add(callback);
           return () => errorListeners.delete(callback);
         },
-      } as DictationAdapterTypes.Session & { onError: (callback: (error: string) => void) => Unsubscribe };
+      } as DictationSession & { onError: (callback: (error: string) => void) => Unsubscribe };
     },
   };
 }

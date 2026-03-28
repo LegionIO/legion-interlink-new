@@ -18,7 +18,6 @@ import {
   resolveToolObserverConfig,
   summarizeLatestUserRequest,
   summarizeThreadContext,
-  type LaunchToolCallResult,
 } from './tool-observer.js';
 
 export type SubAgentEvent =

@@ -13,7 +13,6 @@ const ACTIVE_HIGHLIGHT_CLASS = 'search-highlight-active';
 
 export const SearchBar: FC<SearchBarProps> = ({ visible, onClose, viewportRef }) => {
   const [query, setQuery] = useState('');
-  const [matches, setMatches] = useState<Range[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const highlightEls = useRef<HTMLElement[]>([]);
@@ -25,7 +24,6 @@ export const SearchBar: FC<SearchBarProps> = ({ visible, onClose, viewportRef })
     } else {
       clearHighlights();
       setQuery('');
-      setMatches([]);
       setActiveIndex(0);
     }
   }, [visible]);
@@ -43,7 +41,6 @@ export const SearchBar: FC<SearchBarProps> = ({ visible, onClose, viewportRef })
 
   const performSearch = useCallback((searchText: string) => {
     clearHighlights();
-    setMatches([]);
     setActiveIndex(0);
 
     if (!searchText.trim() || !viewportRef.current) return;
@@ -103,7 +100,6 @@ export const SearchBar: FC<SearchBarProps> = ({ visible, onClose, viewportRef })
     }
 
     highlightEls.current = newHighlights;
-    setMatches(newHighlights.map(() => new Range())); // dummy ranges, we use els directly
     if (newHighlights.length > 0) {
       setActiveIndex(0);
       scrollToHighlight(newHighlights[0]);

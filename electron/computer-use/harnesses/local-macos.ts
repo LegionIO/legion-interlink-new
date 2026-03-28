@@ -1,6 +1,6 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { promisify } from 'node:util';
-import { nativeImage } from 'electron';
+import { BrowserWindow, nativeImage } from 'electron';
 import type {
   ComputerActionProposal,
   ComputerDisplayInfo,
@@ -12,9 +12,11 @@ import { makeComputerUseId, nowIso } from '../../../shared/computer-use.js';
 import type { LegionConfig } from '../../config/schema.js';
 import {
   buildDisplayLayout,
+  buildSwiftFallbackEnv,
   getComputerUsePermissions,
   getLocalMacDesktopSize,
   getLocalMacPointerPosition,
+  resolveCompiledHelperBinary,
   resolveMaterializedHelperPath,
   runLocalMacMouseCommand,
 } from '../permissions.js';
@@ -28,10 +30,11 @@ const execFileAsync = promisify(execFile);
  * that smaller space.  By resizing to a known size up-front we ensure the
  * model's coordinate output matches the frame dimensions stored in the session,
  * and the existing toDesktopPoint() math correctly scales them back to the real
- * desktop resolution.  1920 is chosen because it matches common display widths
- * where computer-use is already known to work reliably.
+ * desktop resolution.  The default (1920) is chosen because it matches common
+ * display widths where computer-use is already known to work reliably.
+ * Configurable via `computerUse.capture.maxDimension`.
  */
-const MAX_FRAME_DIMENSION = 1920;
+const DEFAULT_MAX_FRAME_DIMENSION = 1920;
 
 const LOCAL_MACOS_HELPER_COMMANDS = {
   permissions: 'permissions',
@@ -60,10 +63,6 @@ export type LocalMacosTakeoverEvent = {
   deltaY?: number;
   timestampMs: number;
 };
-
-function resolveMonitorHelperPath(): string {
-  return resolveMaterializedHelperPath();
-}
 
 function parseMonitorLine(line: string): LocalMacosTakeoverEvent | null {
   if (!line.trim()) return null;
@@ -107,10 +106,21 @@ export function startLocalMacosTakeoverMonitor(params: {
   onEvent: (event: LocalMacosTakeoverEvent) => void;
   onError?: (error: string) => void;
 }): LocalMacosTakeoverMonitorHandle {
-  const helperPath = resolveMonitorHelperPath();
-  const child = spawn('xcrun', ['swift', helperPath, LOCAL_MACOS_HELPER_COMMANDS.monitor], {
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
+  // Prefer the pre-compiled binary; fall back to xcrun swift interpretation
+  const binaryPath = resolveCompiledHelperBinary();
+  let child: ChildProcessWithoutNullStreams;
+
+  if (binaryPath) {
+    child = spawn(binaryPath, [LOCAL_MACOS_HELPER_COMMANDS.monitor], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } else {
+    const helperPath = resolveMaterializedHelperPath();
+    child = spawn('xcrun', ['swift', helperPath, LOCAL_MACOS_HELPER_COMMANDS.monitor], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: buildSwiftFallbackEnv(),
+    });
+  }
 
   let stdoutBuffer = '';
   child.stdout.on('data', (chunk) => {
@@ -223,13 +233,15 @@ function toFramePoint(point: { x: number; y: number }, space: LocalMacCoordinate
 function downscaleFrame(
   data: Buffer,
   originalSize: { width: number; height: number },
+  maxFrameDimension?: number,
 ): { data: Buffer; width: number; height: number } {
+  const maxDim = maxFrameDimension ?? DEFAULT_MAX_FRAME_DIMENSION;
   const longest = Math.max(originalSize.width, originalSize.height);
-  if (longest <= MAX_FRAME_DIMENSION) {
+  if (longest <= maxDim) {
     return { data, width: originalSize.width, height: originalSize.height };
   }
 
-  const scale = MAX_FRAME_DIMENSION / longest;
+  const scale = maxDim / longest;
   const targetWidth = Math.round(originalSize.width * scale);
   const targetHeight = Math.round(originalSize.height * scale);
 
@@ -257,6 +269,22 @@ export class LocalMacosHarness implements ComputerHarness {
     if (!permissions.helperReady) {
       throw new Error(permissions.message ?? 'Local macOS helper is unavailable.');
     }
+
+    // If any of our own windows are full-screened, exit full-screen first.
+    // macOS creates a dedicated Space for full-screen apps, and since we
+    // exclude our own PID from screenshots, the capture would be blank.
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed() && win.isFullScreen()) {
+        win.setFullScreen(false);
+        // Wait for the full-screen exit animation to complete
+        await new Promise<void>((resolve) => {
+          const onLeave = () => { resolve(); };
+          win.once('leave-full-screen', onLeave);
+          // Safety timeout in case the event doesn't fire
+          setTimeout(() => { win.removeListener('leave-full-screen', onLeave); resolve(); }, 2000);
+        });
+      }
+    }
   }
 
   async dispose(_sessionId: string): Promise<void> {
@@ -264,9 +292,23 @@ export class LocalMacosHarness implements ComputerHarness {
   }
 
   async captureFrame(session: ComputerSession): Promise<ComputerFrame> {
+    // If our app got full-screened mid-session (e.g. the AI did it),
+    // exit full-screen so screenshots aren't blank.
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed() && win.isFullScreen()) {
+        win.setFullScreen(false);
+        await new Promise<void>((resolve) => {
+          const onLeave = () => { resolve(); };
+          win.once('leave-full-screen', onLeave);
+          setTimeout(() => { win.removeListener('leave-full-screen', onLeave); resolve(); }, 2000);
+        });
+      }
+    }
+
     const config = this.getConfig();
-    const excludeApps = config.computerUse.localMacos.captureExcludedApps ?? ['Electron', 'Interlink'];
+    const excludeApps = config.computerUse.localMacos.captureExcludedApps ?? ['Electron'];
     const jpegQuality = config.computerUse.capture.jpegQuality ?? 0.8;
+    const maxDimension = config.computerUse.capture.maxDimension ?? DEFAULT_MAX_FRAME_DIMENSION;
     const allowedDisplays = config.computerUse.localMacos.allowedDisplays;
 
     const excludeArg = Buffer.from(JSON.stringify(excludeApps)).toString('base64');
@@ -285,7 +327,7 @@ export class LocalMacosHarness implements ComputerHarness {
 
     const rawData = Buffer.from(primaryResult.imageBase64, 'base64');
     const rawSize = { width: primaryResult.width, height: primaryResult.height };
-    const frame = downscaleFrame(rawData, rawSize);
+    const frame = downscaleFrame(rawData, rawSize, maxDimension);
 
     // Build display layout from the helper response
     const displayLayout = buildDisplayLayout(
@@ -310,7 +352,7 @@ export class LocalMacosHarness implements ComputerHarness {
           );
           if (extraResult.imageBase64 && extraResult.width && extraResult.height) {
             const extraRaw = Buffer.from(extraResult.imageBase64, 'base64');
-            const extraFrame = downscaleFrame(extraRaw, { width: extraResult.width, height: extraResult.height });
+            const extraFrame = downscaleFrame(extraRaw, { width: extraResult.width, height: extraResult.height }, maxDimension);
             displayFrames.push({
               displayIndex: i,
               displayName: displayLayout.displays[i]?.name ?? `Display ${i + 1}`,

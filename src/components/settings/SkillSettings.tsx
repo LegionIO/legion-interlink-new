@@ -44,7 +44,7 @@ const typeLabels: Record<string, string> = {
   composite: 'Composite',
 };
 
-export const SkillSettings: FC<SettingsProps> = ({ config, updateConfig }) => {
+export const SkillSettings: FC<SettingsProps> = ({ config, updateConfig: _updateConfig }) => {
   const [skills, setSkills] = useState<SkillEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
