@@ -564,6 +564,8 @@ export class ComputerUseSessionManager extends EventEmitter {
       approvalMode,
       selectedModelKey: options.modelKey ?? null,
       selectedProfileKey: options.profileKey ?? null,
+      fallbackEnabled: options.fallbackEnabled ?? false,
+      reasoningEffort: options.reasoningEffort ?? undefined,
       status: blocker ? 'failed' : 'starting',
       providerAdapter: 'hybrid',
       createdAt: nowIso(),
@@ -658,6 +660,27 @@ export class ComputerUseSessionManager extends EventEmitter {
     });
     void this.orchestrator.cleanupSession(sessionId);
     return next;
+  }
+
+  updateSessionSettings(sessionId: string, settings: {
+    modelKey?: string | null;
+    profileKey?: string | null;
+    fallbackEnabled?: boolean;
+    reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
+  }): ComputerSession | null {
+    const session = this.sessions.get(sessionId);
+    if (!session) return null;
+    // Don't update terminal sessions
+    if (session.status === 'completed' || session.status === 'stopped' || session.status === 'failed') return null;
+
+    return this.upsertSession({
+      ...session,
+      ...(settings.modelKey !== undefined ? { selectedModelKey: settings.modelKey } : {}),
+      ...(settings.profileKey !== undefined ? { selectedProfileKey: settings.profileKey } : {}),
+      ...(settings.fallbackEnabled !== undefined ? { fallbackEnabled: settings.fallbackEnabled } : {}),
+      ...(settings.reasoningEffort !== undefined ? { reasoningEffort: settings.reasoningEffort } : {}),
+      updatedAt: nowIso(),
+    });
   }
 
   async sendGuidance(sessionId: string, text: string): Promise<ComputerSession | null> {

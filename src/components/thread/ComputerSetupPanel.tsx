@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback, type FC, type KeyboardEvent } from 'react';
-import { ExternalLinkIcon, LoaderIcon, MonitorIcon, ShieldCheckIcon, ShieldAlertIcon } from 'lucide-react';
+import { ExternalLinkIcon, LoaderIcon, MonitorIcon, ShieldCheckIcon, ShieldAlertIcon, MaximizeIcon } from 'lucide-react';
 import { useConfig } from '@/providers/ConfigProvider';
 import { useComputerUse } from '@/providers/ComputerUseProvider';
+import { legion } from '@/lib/ipc-client';
 import { ModelSelector } from './ModelSelector';
 import { ProfileSelector } from './ProfileSelector';
 import { FallbackToggle } from './FallbackToggle';
@@ -70,6 +71,8 @@ export const ComputerSetupPanel: FC<ComputerSetupPanelProps> = ({
   const [isCheckingLocalPermissions, setIsCheckingLocalPermissions] = useState(false);
   const [showLocalPermissionSpinner, setShowLocalPermissionSpinner] = useState(false);
   const [isRequestingLocalPermissions, setIsRequestingLocalPermissions] = useState(false);
+  const [fullScreenApps, setFullScreenApps] = useState<string[]>([]);
+  const [isExitingFullScreen, setIsExitingFullScreen] = useState(false);
   const goalRef = useRef<HTMLTextAreaElement>(null);
 
   const computerConfig = (config as Record<string, unknown> | null)?.computerUse as {
@@ -144,6 +147,34 @@ export const ComputerSetupPanel: FC<ComputerSetupPanelProps> = ({
     };
   }, [activeComputerSession?.permissionState, checkLocalMacosPermissions, computerTarget]);
 
+  // Check for full-screen apps when local-macos target is selected
+  useEffect(() => {
+    if (computerTarget !== 'local-macos') {
+      setFullScreenApps([]);
+      return;
+    }
+    let cancelled = false;
+    void legion.computerUse.checkFullScreenApps().then(({ problematicApps }) => {
+      if (!cancelled) setFullScreenApps(problematicApps);
+    }).catch(() => {
+      if (!cancelled) setFullScreenApps([]);
+    });
+    return () => { cancelled = true; };
+  }, [computerTarget]);
+
+  const handleExitFullScreenApps = async () => {
+    if (isExitingFullScreen || fullScreenApps.length === 0) return;
+    setIsExitingFullScreen(true);
+    try {
+      await legion.computerUse.exitFullScreenApps(fullScreenApps);
+      // Re-check after exiting
+      const { problematicApps } = await legion.computerUse.checkFullScreenApps();
+      setFullScreenApps(problematicApps);
+    } finally {
+      setIsExitingFullScreen(false);
+    }
+  };
+
   const handleRequestLocalPermissions = async () => {
     if (isRequestingLocalPermissions) return;
     setIsRequestingLocalPermissions(true);
@@ -172,6 +203,8 @@ export const ComputerSetupPanel: FC<ComputerSetupPanelProps> = ({
           approvalMode: computerApprovalMode,
           modelKey: selectedModelKey,
           profileKey: selectedProfileKey,
+          fallbackEnabled,
+          reasoningEffort,
         });
 
     void promise.then(() => {
@@ -251,6 +284,33 @@ export const ComputerSetupPanel: FC<ComputerSetupPanelProps> = ({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Full-screen app warning — only for local-macos target */}
+      {computerTarget === 'local-macos' && fullScreenApps.length > 0 && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-border/60 bg-card/40 px-3 py-2 text-xs text-muted-foreground">
+          <div className="flex-1">
+            <div className="inline-flex items-center gap-1.5 font-medium">
+              <MaximizeIcon className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+              <span>Full-screen apps detected</span>
+            </div>
+            <p className="mt-1 text-[11px] text-muted-foreground/80">
+              <span className="font-medium text-foreground">{fullScreenApps.join(', ')}</span> {fullScreenApps.length === 1 ? 'is' : 'are'} in
+              full-screen mode. Screenshots may appear blank, which can cause the AI to get stuck.
+            </p>
+            <div className="mt-1.5">
+              <button
+                type="button"
+                onClick={() => { void handleExitFullScreenApps(); }}
+                disabled={isExitingFullScreen}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-border/70 bg-card/70 px-2.5 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isExitingFullScreen ? <LoaderIcon className="h-3 w-3 animate-spin" /> : <MaximizeIcon className="h-3 w-3" />}
+                <span>{isExitingFullScreen ? 'Exiting full-screen...' : `Exit full-screen for ${fullScreenApps.length === 1 ? fullScreenApps[0] : 'all'}`}</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

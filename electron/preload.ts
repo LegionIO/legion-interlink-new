@@ -279,12 +279,20 @@ const legionAPI = {
     getSession: (sessionId: string) => ipcRenderer.invoke('computer-use:get-session', sessionId),
     setSurface: (sessionId: string, surface: ComputerUseSurface) => ipcRenderer.invoke('computer-use:set-surface', sessionId, surface),
     sendGuidance: (sessionId: string, text: string) => ipcRenderer.invoke('computer-use:send-guidance', sessionId, text),
+    updateSessionSettings: (sessionId: string, settings: { modelKey?: string | null; profileKey?: string | null; fallbackEnabled?: boolean; reasoningEffort?: string }) => ipcRenderer.invoke('computer-use:update-session-settings', sessionId, settings),
     continueSession: (sessionId: string, newGoal: string) => ipcRenderer.invoke('computer-use:continue-session', sessionId, newGoal),
     markSessionsSeen: (conversationId: string) => ipcRenderer.invoke('computer-use:mark-sessions-seen', conversationId),
     openSetupWindow: (conversationId?: string | null) => ipcRenderer.invoke('computer-use:open-setup-window', conversationId),
     getLocalMacosPermissions: () => ipcRenderer.invoke('computer-use:get-local-macos-permissions'),
     requestLocalMacosPermissions: () => ipcRenderer.invoke('computer-use:request-local-macos-permissions'),
     openLocalMacosPrivacySettings: (section?: ComputerUsePermissionSection) => ipcRenderer.invoke('computer-use:open-local-macos-privacy-settings', section),
+    checkFullScreenApps: () => ipcRenderer.invoke('computer-use:check-fullscreen-apps') as Promise<{ apps: string[]; problematicApps: string[] }>,
+    exitFullScreenApps: (appNames: string[]) => ipcRenderer.invoke('computer-use:exit-fullscreen-apps', appNames) as Promise<{ exited: string[]; failed: string[] }>,
+    listRunningApps: () => ipcRenderer.invoke('computer-use:list-running-apps') as Promise<{ apps: string[] }>,
+    listDisplays: () => ipcRenderer.invoke('computer-use:list-displays') as Promise<{ displays: Array<{ name: string; displayId: string; pixelWidth: number; pixelHeight: number; isPrimary: boolean }> }>,
+    focusSession: (sessionId: string) => ipcRenderer.invoke('computer-use:focus-session', sessionId),
+    overlayMouseEnter: () => ipcRenderer.send('computer-use:overlay-set-ignore-mouse', false),
+    overlayMouseLeave: () => ipcRenderer.send('computer-use:overlay-set-ignore-mouse', true),
     onEvent: (callback: (event: ComputerUseEvent) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, data: ComputerUseEvent) => callback(data);
       ipcRenderer.on('computer-use:event', handler);
@@ -294,6 +302,11 @@ const legionAPI = {
       const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
       ipcRenderer.on('computer-use:overlay-state', handler);
       return () => ipcRenderer.removeListener('computer-use:overlay-state', handler);
+    },
+    onFocusThread: (callback: () => void) => {
+      const handler = () => callback();
+      ipcRenderer.on('computer-use:focus-thread', handler);
+      return () => ipcRenderer.removeListener('computer-use:focus-thread', handler);
     },
   },
 

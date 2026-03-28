@@ -10,6 +10,7 @@ import { resolveModelCatalog, resolveModelForThread, type ModelCatalogEntry } fr
 import { anthropicPlanSession } from './provider-adapters/anthropic.js';
 import { geminiPlanSession } from './provider-adapters/gemini.js';
 import { openaiPlanSession } from './provider-adapters/openai.js';
+import type { ModelChainEntry, FallbackCallbacks } from './provider-adapters/shared.js';
 import { IsolatedBrowserHarness } from './harnesses/isolated-browser.js';
 import { LocalMacosHarness } from './harnesses/local-macos.js';
 import type { ComputerHarness, ComputerHarnessActionResult } from './harnesses/shared.js';
@@ -38,6 +39,49 @@ function getEntryForRole(config: LegionConfig, session: ComputerSession, role: '
     return catalog.byKey.get(overrideKey) ?? null;
   }
   return resolveModelForThread(config, session.selectedModelKey ?? null);
+}
+
+function getModelChainForRole(config: LegionConfig, session: ComputerSession, role: 'planner' | 'driver' | 'verifier' | 'recovery'): ModelChainEntry[] {
+  const primaryEntry = getEntryForRole(config, session, role)
+    ?? getEntryForRole(config, session, 'driver');
+  if (!primaryEntry) return [];
+
+  const primary: ModelChainEntry = {
+    key: primaryEntry.key,
+    modelConfig: primaryEntry.modelConfig,
+    displayName: primaryEntry.displayName,
+  };
+
+  // If fallback is not enabled on the session, return only primary
+  if (!session.fallbackEnabled) return [primary];
+
+  // Build fallback chain: profile fallbacks → global fallback
+  const catalog = resolveModelCatalog(config);
+  const profileKey = session.selectedProfileKey ?? config.defaultProfileKey ?? null;
+  const profile = profileKey
+    ? (config.profiles ?? []).find((p) => p.key === profileKey)
+    : undefined;
+  const fallbackKeys = profile?.fallbackModelKeys ?? config.fallback?.modelKeys ?? [];
+
+  const fallbacks: ModelChainEntry[] = fallbackKeys
+    .filter((k) => k !== primaryEntry.key)
+    .map((k) => catalog.byKey.get(k))
+    .filter((e): e is ModelCatalogEntry => e != null)
+    .map((e) => ({
+      key: e.key,
+      modelConfig: e.modelConfig,
+      displayName: e.displayName,
+    }));
+
+  return [primary, ...fallbacks];
+}
+
+function getMaxRetries(config: LegionConfig, session: ComputerSession): number {
+  const profileKey = session.selectedProfileKey ?? config.defaultProfileKey ?? null;
+  const profile = profileKey
+    ? (config.profiles ?? []).find((p) => p.key === profileKey)
+    : undefined;
+  return profile?.maxRetries ?? config.advanced.maxRetries;
 }
 
 function approvalRequired(mode: ComputerUseApprovalMode, action: ComputerActionProposal, config: LegionConfig): boolean {
@@ -161,8 +205,8 @@ export class ComputerUseOrchestrator {
   private async run(sessionId: string, controller: AbortController): Promise<void> {
     const session = this.readSession(sessionId);
     if (!session) return;
-    const config = this.getConfig();
-    const harness = getHarness(config, session, this.getConfig);
+    const initialConfig = this.getConfig();
+    const harness = getHarness(initialConfig, session, this.getConfig);
     try {
       await harness.initialize(session);
       this.mutateSession(sessionId, (current) => ({ ...current, status: 'running', updatedAt: nowIso() }));
@@ -171,6 +215,9 @@ export class ComputerUseOrchestrator {
         if (controller.signal.aborted) return;
         const current = this.readSession(sessionId);
         if (!current || current.status === 'paused' || current.status === 'stopped' || current.status === 'completed') return;
+
+        // Re-read config each step so mid-session changes take effect
+        const config = this.getConfig();
 
         // Track cycle duration for the overlay countdown timer
         const stepStartMs = Date.now();
@@ -203,11 +250,13 @@ export class ComputerUseOrchestrator {
         const planningSession = this.readSession(sessionId) ?? current;
         const recoveryReason = getLoopRecoveryReason(planningSession);
         const planningRole = recoveryReason ? 'recovery' as const : 'driver' as const;
-        const modelEntry = getEntryForRole(config, planningSession, planningRole)
-          ?? getEntryForRole(config, planningSession, 'driver');
-        if (!modelEntry) {
+
+        // Build model chain with fallback support
+        const modelChain = getModelChainForRole(config, planningSession, planningRole);
+        if (modelChain.length === 0) {
           throw new Error('No model available for computer-use session.');
         }
+        const maxRetries = getMaxRetries(config, planningSession);
 
         if (recoveryReason) {
           this.mutateSession(sessionId, (existing) => ({
@@ -217,11 +266,48 @@ export class ComputerUseOrchestrator {
           }));
         }
 
-        const support = modelEntry.modelConfig.provider === 'anthropic'
+        const support = modelChain[0].modelConfig.provider === 'anthropic'
           ? 'anthropic-client-tool'
-          : modelEntry.modelConfig.provider === 'google'
+          : modelChain[0].modelConfig.provider === 'google'
             ? 'gemini-computer-use'
             : 'openai-responses';
+
+        // Build fallback callbacks for status updates and events
+        const fallbackCallbacks: FallbackCallbacks = {
+          onModelStart: (model, _modelIndex, _totalModels) => {
+            this.mutateSession(sessionId, (existing) => ({
+              ...existing,
+              statusMessage: `Planning with ${model}...`,
+              updatedAt: nowIso(),
+            }));
+          },
+          onRetry: (attempt, model, error) => {
+            const msg = `Retrying with ${model} (attempt ${attempt}/${maxRetries})...`;
+            this.mutateSession(sessionId, (existing) => ({
+              ...existing,
+              statusMessage: msg,
+              updatedAt: nowIso(),
+            }));
+            console.warn(`[ComputerUse] ${msg} Error: ${error}`);
+          },
+          onFallback: (fromModel, toModel, toModelKey, error) => {
+            this.mutateSession(sessionId, (existing) => ({
+              ...existing,
+              selectedModelKey: toModelKey,
+              statusMessage: `Switched from ${fromModel} to ${toModel}`,
+              updatedAt: nowIso(),
+            }));
+            this.emitEvent({
+              type: 'model-fallback',
+              sessionId,
+              fromModel,
+              toModel,
+              toModelKey,
+              error,
+            });
+            console.warn(`[ComputerUse] Fallback: ${fromModel} → ${toModel}. Error: ${error}`);
+          },
+        };
 
         // Consume any pending guidance messages before the next planning cycle
         const preSession = this.readSession(sessionId) ?? planningSession;
@@ -240,17 +326,20 @@ export class ComputerUseOrchestrator {
 
         const freshSession = this.readSession(sessionId) ?? planningSession;
         const excludedApps = config.computerUse.localMacos.captureExcludedApps;
+
         const plan = support === 'anthropic-client-tool'
-          ? await anthropicPlanSession(freshSession, modelEntry.modelConfig, planningRole, excludedApps)
+          ? await anthropicPlanSession(freshSession, modelChain, maxRetries, planningRole, excludedApps, fallbackCallbacks)
           : support === 'gemini-computer-use'
-            ? await geminiPlanSession(freshSession, modelEntry.modelConfig)
-            : await openaiPlanSession(freshSession, modelEntry.modelConfig, planningRole, excludedApps);
+            ? await geminiPlanSession(freshSession, modelChain, maxRetries, fallbackCallbacks)
+            : await openaiPlanSession(freshSession, modelChain, maxRetries, planningRole, excludedApps, fallbackCallbacks);
 
         this.mutateSession(sessionId, (existing) => ({
           ...existing,
           plannerState: plan.plannerState,
           planSummary: plan.summary,
           currentSubgoal: plan.currentSubgoal,
+          // Clear retry/fallback status messages after a successful plan
+          statusMessage: undefined,
           updatedAt: nowIso(),
         }));
 
@@ -323,6 +412,14 @@ export class ComputerUseOrchestrator {
             this.markActionFailed(sessionId, action.id, message);
             throw error;
           }
+        }
+
+        // Wait after executing actions so the screen has time to update
+        // before the next screenshot. This ensures the AI sees the result
+        // of its actions rather than a stale frame.
+        const postActionDelayMs = this.getConfig().computerUse?.postActionDelayMs ?? 300;
+        if (postActionDelayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, postActionDelayMs));
         }
       }
     } catch (error) {

@@ -653,12 +653,25 @@ case "screenshot":
         let excludeSet = Set(excludeAppNames.map { $0.lowercased() })
         let excludedWindows = content.windows.filter { window in
           guard let app = window.owningApplication else { return false }
-          // Exclude by PID (our own process and its windows)
+          let layer = window.windowLayer
+          // Only exclude normal application windows (layer 0) and our own
+          // overlay windows (layer >= 1000, i.e. screen-saver level).
+          // Everything else — menu bar (24), status items (25), dropdown
+          // menus (3/101), dock (20), etc. — must be preserved, because
+          // ScreenCaptureKit suppresses the entire composited contribution
+          // of excluded windows, which hides system menus the AI needs.
+          let isNormalWindow = layer == 0
+          let isHighOverlay = layer >= 1000 && layer < 2_000_000_000
+          if !isNormalWindow && !isHighOverlay { return false }
+          // Exclude by PID (our own process's normal + overlay windows)
           if let pid = excludePid, app.processID == pid {
             return true
           }
-          // Exclude by app name
-          return excludeSet.contains(app.applicationName.lowercased())
+          // Exclude other apps only at normal window level
+          if isNormalWindow {
+            return excludeSet.contains(app.applicationName.lowercased())
+          }
+          return false
         }
 
         let filter = SCContentFilter(display: targetDisplay, excludingWindows: excludedWindows)

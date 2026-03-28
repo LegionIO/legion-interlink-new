@@ -1,8 +1,13 @@
-import { useMemo, useState, type FC } from 'react';
+import { useEffect, useMemo, useState, type FC } from 'react';
 import { CheckCircle2Icon, ChevronDownIcon, ChevronRightIcon, ExternalLinkIcon, LoaderIcon, PauseIcon, PlayIcon, ShieldAlertIcon, SquareIcon } from 'lucide-react';
 import { useComputerUse } from '@/providers/ComputerUseProvider';
 import { useConfig } from '@/providers/ConfigProvider';
+import { legion } from '@/lib/ipc-client';
 import { ComputerStepLog } from './ComputerStepLog';
+import { ModelSelector } from './ModelSelector';
+import { ProfileSelector } from './ProfileSelector';
+import { FallbackToggle } from './FallbackToggle';
+import { ReasoningEffortSelector } from './ReasoningEffortSelector';
 import type { ComputerActionProposal, ComputerSession } from '../../../shared/computer-use';
 
 type PanelProps = {
@@ -63,6 +68,7 @@ export const ComputerSessionPanel: FC<PanelProps> = ({ session }) => {
     setSurface,
     requestLocalMacosPermissions,
     openLocalMacosPrivacySettings,
+    updateSessionSettings,
     frameHistory,
   } = useComputerUse();
   const { config } = useConfig();
@@ -74,6 +80,23 @@ export const ComputerSessionPanel: FC<PanelProps> = ({ session }) => {
   const [isRequestingPermissions, setIsRequestingPermissions] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
   const [timelineExpanded, setTimelineExpanded] = useState(false);
+  const [profilePrimaryModelKey, setProfilePrimaryModelKey] = useState<string | null>(null);
+
+  // Resolve the profile's primary model key so the fallback toggle can update the model selector
+  useEffect(() => {
+    const profileKey = session.selectedProfileKey;
+    if (!profileKey) {
+      setProfilePrimaryModelKey(null);
+      return;
+    }
+    legion.profileCatalog()
+      .then((catalog) => {
+        const profile = (catalog as { profiles: Array<{ key: string; primaryModelKey: string }> }).profiles
+          .find((p) => p.key === profileKey);
+        setProfilePrimaryModelKey(profile?.primaryModelKey ?? null);
+      })
+      .catch(() => setProfilePrimaryModelKey(null));
+  }, [session.selectedProfileKey]);
   const pendingApprovals = session.approvals.filter((approval) => approval.status === 'pending');
   const latestFrame = session.latestFrame;
   const canResume = session.status === 'paused' || session.status === 'failed';
@@ -85,6 +108,7 @@ export const ComputerSessionPanel: FC<PanelProps> = ({ session }) => {
   const cursorClickedRecently = session.cursor?.clickedAt
     ? Date.now() - new Date(session.cursor.clickedAt).getTime() < 700
     : false;
+  const isTerminal = session.status === 'completed' || session.status === 'failed' || session.status === 'stopped';
 
   const handleResume = async () => {
     if (isResuming) return;
@@ -131,9 +155,11 @@ export const ComputerSessionPanel: FC<PanelProps> = ({ session }) => {
                 : <PlayIcon className="h-3.5 w-3.5 text-muted-foreground" />}
             </button>
           )}
-          <button type="button" onClick={() => { void stopSession(session.id); }} className="flex h-8 w-8 items-center justify-center rounded-xl border border-border/70 bg-card/70 transition-colors hover:bg-destructive/10" title="Stop">
-            <SquareIcon className="h-3.5 w-3.5 text-muted-foreground" />
-          </button>
+          {!isTerminal && (
+            <button type="button" onClick={() => { void stopSession(session.id); }} className="flex h-8 w-8 items-center justify-center rounded-xl border border-border/70 bg-card/70 transition-colors hover:bg-destructive/10" title="Stop">
+              <SquareIcon className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          )}
           <button type="button" onClick={() => { void setSurface(session.id, 'window'); }} className="flex h-8 w-8 items-center justify-center rounded-xl border border-border/70 bg-card/70 transition-colors hover:bg-muted/50" title="Detach to window">
             <ExternalLinkIcon className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
@@ -144,6 +170,63 @@ export const ComputerSessionPanel: FC<PanelProps> = ({ session }) => {
       {takeoverLikely && (
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
           Human in control. Resume when ready.
+        </div>
+      )}
+
+      {/* Mid-session model/profile/fallback controls */}
+      {!isTerminal && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <ProfileSelector
+            selectedProfileKey={session.selectedProfileKey ?? null}
+            onSelectProfile={(profileKey, primaryModelKey) => {
+              setProfilePrimaryModelKey(primaryModelKey);
+              if (profileKey !== null) {
+                // Selecting a profile: auto-enable fallback, switch to profile's primary model
+                void updateSessionSettings(session.id, {
+                  profileKey,
+                  fallbackEnabled: true,
+                  ...(primaryModelKey ? { modelKey: primaryModelKey } : {}),
+                });
+              } else {
+                // Returning to default: disable fallback, clear profile
+                void updateSessionSettings(session.id, {
+                  profileKey: null,
+                  fallbackEnabled: false,
+                });
+              }
+            }}
+            dropdownDirection="down"
+          />
+          <FallbackToggle
+            enabled={session.fallbackEnabled ?? false}
+            onToggle={(enabled) => {
+              if (enabled && session.selectedProfileKey && profilePrimaryModelKey) {
+                void updateSessionSettings(session.id, { fallbackEnabled: enabled, modelKey: profilePrimaryModelKey });
+              } else {
+                void updateSessionSettings(session.id, { fallbackEnabled: enabled });
+              }
+            }}
+          />
+          <ModelSelector
+            selectedModelKey={session.selectedModelKey}
+            onSelectModel={(key) => {
+              void updateSessionSettings(session.id, { modelKey: key });
+            }}
+            disabled={session.fallbackEnabled ?? false}
+            filter={(model) => Boolean(
+              (model.computerUseSupport && model.computerUseSupport !== 'none')
+              || model.visionCapable,
+            )}
+            fallbackToUnfilteredWhenEmpty
+            dropdownDirection="down"
+          />
+          <ReasoningEffortSelector
+            value={(session.reasoningEffort as 'low' | 'medium' | 'high' | 'xhigh') ?? 'medium'}
+            onChange={(value) => {
+              void updateSessionSettings(session.id, { reasoningEffort: value });
+            }}
+            dropdownDirection="down"
+          />
         </div>
       )}
 

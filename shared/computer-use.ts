@@ -227,6 +227,8 @@ export type ComputerSession = {
   approvalMode: ComputerUseApprovalMode;
   selectedModelKey: string | null;
   selectedProfileKey?: string | null;
+  fallbackEnabled?: boolean;
+  reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
   status: ComputerUseSessionStatus;
   providerAdapter: string;
   createdAt: string;
@@ -301,6 +303,8 @@ export type StartComputerSessionOptions = {
   approvalMode?: ComputerUseApprovalMode;
   modelKey?: string | null;
   profileKey?: string | null;
+  fallbackEnabled?: boolean;
+  reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
   contextSummary?: string;
 };
 
@@ -313,6 +317,7 @@ export type ComputerUseEvent =
   | { type: 'guidance-sent'; sessionId: string; message: ComputerGuidanceMessage }
   | { type: 'session-removed'; sessionId: string }
   | { type: 'error'; sessionId: string; error: string }
+  | { type: 'model-fallback'; sessionId: string; fromModel: string; toModel: string; toModelKey: string; error: string }
   | { type: 'overlay-state'; state: ComputerOverlayState };
 
 export function supportsComputerUse(support?: ComputerUseSupport | null): boolean {

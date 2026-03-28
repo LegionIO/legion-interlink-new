@@ -13,7 +13,8 @@ const OPTIONS: Array<{ value: ReasoningEffort; label: string }> = [
 export const ReasoningEffortSelector: FC<{
   value: ReasoningEffort;
   onChange: (value: ReasoningEffort) => void;
-}> = ({ value, onChange }) => {
+  dropdownDirection?: 'up' | 'down';
+}> = ({ value, onChange, dropdownDirection = 'up' }) => {
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const current = OPTIONS.find((option) => option.value === value) ?? OPTIONS[1];
@@ -45,7 +46,7 @@ export const ReasoningEffortSelector: FC<{
 
       {isOpen && (
         <>
-          <div className="absolute bottom-full left-0 z-50 mb-2 w-[220px] rounded-2xl border border-border/70 bg-popover/95 p-1.5 shadow-[0_16px_40px_rgba(5,4,15,0.28)] backdrop-blur-xl">
+          <div className={`absolute ${dropdownDirection === 'down' ? 'top-full mt-2' : 'bottom-full mb-2'} left-0 z-50 w-[220px] rounded-2xl border border-border/70 bg-popover/95 p-1.5 shadow-[0_16px_40px_rgba(5,4,15,0.28)] backdrop-blur-xl`}>
             <div className="px-3 py-2 text-sm font-medium text-muted-foreground">Select reasoning</div>
             <div className="max-h-[280px] overflow-y-auto">
               {OPTIONS.map((option) => (

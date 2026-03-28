@@ -1,6 +1,6 @@
 import { app, shell, systemPreferences } from 'electron';
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { accessSync, constants as fsConstants, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -20,6 +20,74 @@ const LOCAL_MACOS_PRIVACY_URLS: Record<ComputerUsePermissionSection, string> = {
   'screen-recording': 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
   automation: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Automation',
 };
+
+/**
+ * Resolve the pre-compiled LocalMacosHelper binary path.
+ *
+ * In production (packaged .app): looks in process.resourcesPath/bin/
+ * In development: looks in <project>/build/bin/
+ *
+ * Returns the path if the binary exists and is executable, otherwise null.
+ */
+export function resolveCompiledHelperBinary(): string | null {
+  const candidates: string[] = [];
+
+  // Production: electron-builder extraResources places it under Resources/bin/
+  if (app.isPackaged) {
+    candidates.push(join(process.resourcesPath, 'bin', 'LocalMacosHelper'));
+  }
+
+  // Dev: compiled via `pnpm compile:swift` into build/bin/
+  candidates.push(join(process.cwd(), 'build', 'bin', 'LocalMacosHelper'));
+
+  for (const candidate of candidates) {
+    try {
+      accessSync(candidate, fsConstants.X_OK);
+      return candidate;
+    } catch {
+      // Not found or not executable — try next
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Build a safe env for the `xcrun swift` fallback path.
+ *
+ * Packaged macOS .app bundles launched from Finder/Dock inherit a minimal PATH
+ * that may not include the Xcode toolchain. This ensures xcrun and swiftc can
+ * find each other even in that context.
+ */
+export function buildSwiftFallbackEnv(): NodeJS.ProcessEnv {
+  const basePaths = [
+    '/usr/bin',
+    '/bin',
+    '/usr/sbin',
+    '/sbin',
+    '/usr/local/bin',
+    '/Library/Developer/CommandLineTools/usr/bin',
+  ];
+
+  const existingPath = process.env.PATH ?? '';
+  const pathSet = new Set([...basePaths, ...existingPath.split(':').filter(Boolean)]);
+  const mergedPath = [...pathSet].join(':');
+
+  const env: NodeJS.ProcessEnv = { ...process.env, PATH: mergedPath };
+
+  // Set DEVELOPER_DIR if not already present — helps xcrun locate the SDK
+  if (!env.DEVELOPER_DIR) {
+    const xcodeDir = '/Applications/Xcode.app/Contents/Developer';
+    const cltDir = '/Library/Developer/CommandLineTools';
+    if (existsSync(xcodeDir)) {
+      env.DEVELOPER_DIR = xcodeDir;
+    } else if (existsSync(cltDir)) {
+      env.DEVELOPER_DIR = cltDir;
+    }
+  }
+
+  return env;
+}
 
 function resolveHelperSource(): string {
   const candidates = [
@@ -95,9 +163,20 @@ export type LocalMacosHelperResponse = {
 
 async function runLocalMacHelper(args: string[]): Promise<LocalMacosHelperResponse> {
   try {
+    // Prefer the pre-compiled binary (always available in production builds,
+    // available in dev after running `pnpm compile:swift`)
+    const binaryPath = resolveCompiledHelperBinary();
+    if (binaryPath) {
+      const { stdout } = await execFileAsync(binaryPath, args, { timeout: 15000 });
+      return JSON.parse(stdout || '{}') as LocalMacosHelperResponse;
+    }
+
+    // Fallback: interpret via xcrun swift (dev mode without pre-compiled binary).
+    // Use the safe env to ensure xcrun/swift are on PATH even in packaged apps.
     const helperScriptPath = resolveMaterializedHelperPath();
     const { stdout } = await execFileAsync('xcrun', ['swift', helperScriptPath, ...args], {
       timeout: 15000,
+      env: buildSwiftFallbackEnv(),
     });
     return JSON.parse(stdout || '{}') as LocalMacosHelperResponse;
   } catch (error) {

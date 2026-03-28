@@ -334,6 +334,7 @@ if (gotSingleInstanceLock) {
     // Track last mcpServers fingerprint to detect changes
     let lastMcpFingerprint = JSON.stringify(getConfig().mcpServers ?? []);
     let lastSkillsFingerprint = JSON.stringify(getConfig().skills?.enabled ?? []);
+    let lastDisplayFingerprint = JSON.stringify(getConfig().computerUse?.localMacos?.allowedDisplays ?? []);
     const syncRealtimeTools = (): void => {
       updateActiveRealtimeSessionTools(getRegisteredTools());
     };
@@ -364,6 +365,36 @@ if (gotSingleInstanceLock) {
         console.info(`[Legion] Skills hot-reload complete: ${skillTools.length} skill tools`);
       }
 
+      // Display list change detection — auto-update maxDimension when allowed displays change
+      const newDisplayFp = JSON.stringify(config.computerUse?.localMacos?.allowedDisplays ?? []);
+      if (newDisplayFp !== lastDisplayFingerprint) {
+        lastDisplayFingerprint = newDisplayFp;
+        const allowedDisplays = config.computerUse?.localMacos?.allowedDisplays ?? [];
+        if (allowedDisplays.length > 0 && process.platform === 'darwin') {
+          void (async () => {
+            try {
+              const { getLocalMacDisplayLayout } = await import('./computer-use/permissions.js');
+              const layout = await getLocalMacDisplayLayout();
+              if (!layout || layout.displays.length === 0) return;
+              const allowedLower = new Set(allowedDisplays.map((n: string) => n.toLowerCase()));
+              const enabled = layout.displays.filter((d: { name: string; displayId: string }) =>
+                allowedLower.has(d.name.toLowerCase()) || allowedLower.has(d.displayId.toLowerCase()),
+              );
+              if (enabled.length === 0) return;
+              const maxDim = Math.max(
+                ...enabled.map((d: { pixelWidth: number; pixelHeight: number }) => Math.max(d.pixelWidth, d.pixelHeight)),
+              );
+              if (maxDim > 0 && maxDim !== config.computerUse?.capture?.maxDimension) {
+                setConfig('computerUse.capture.maxDimension', maxDim);
+                console.info(`[Legion] Auto-updated maxDimension to ${maxDim} for ${enabled.length} enabled displays`);
+              }
+            } catch {
+              // Non-fatal
+            }
+          })();
+        }
+      }
+
       // Plugin config change forwarding
       pluginManager.onConfigChanged(config);
     };
@@ -381,6 +412,35 @@ if (gotSingleInstanceLock) {
     registerLiveSttHandlers(ipcMain);
     registerComputerUseHandlers(ipcMain, LEGION_HOME, getConfig);
     registerKnowledgeHandlers(ipcMain, LEGION_HOME, getConfig);
+
+    // Auto-seed computer use display settings on startup.
+    // If allowedDisplays is empty, populate it with all discovered displays
+    // and set capture.maxDimension to the largest pixel dimension.
+    (async () => {
+      try {
+        if (process.platform !== 'darwin') return;
+        const config = getConfig();
+        const currentDisplays = config.computerUse?.localMacos?.allowedDisplays ?? [];
+        if (currentDisplays.length > 0) return; // Already seeded
+
+        const { getLocalMacDisplayLayout } = await import('./computer-use/permissions.js');
+        const layout = await getLocalMacDisplayLayout();
+        if (!layout || layout.displays.length === 0) return;
+
+        const allNames = layout.displays.map((d: { name: string }) => d.name);
+        setConfig('computerUse.localMacos.allowedDisplays', allNames);
+
+        const maxDim = Math.max(
+          ...layout.displays.map((d: { pixelWidth: number; pixelHeight: number }) => Math.max(d.pixelWidth, d.pixelHeight)),
+        );
+        if (maxDim > 0) {
+          setConfig('computerUse.capture.maxDimension', maxDim);
+        }
+        console.info(`[Legion] Auto-seeded ${allNames.length} displays, maxDimension=${maxDim}`);
+      } catch (err) {
+        console.warn('[Legion] Display auto-seed failed (non-fatal):', err);
+      }
+    })();
 
     // Plugin system
     const pluginManager = new PluginManager(

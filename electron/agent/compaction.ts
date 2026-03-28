@@ -129,6 +129,30 @@ export async function compactConversationPrefix(
     return { compactedMessages: null, summaryText: null, compactionId: null, compactedMessageIds: [] };
   }
 
+  // Budget the compaction prompt input to avoid exceeding the context window.
+  // Mirrors maelstrom-agent: contextWindow - outputMaxTokens - promptReserveTokens
+  const promptInputBudget = Math.floor(
+    tokenization.contextWindowTokens
+      - Math.max(0, config.outputMaxTokens)
+      - Math.max(0, config.promptReserveTokens),
+  );
+  if (promptInputBudget <= 0) {
+    return { compactedMessages: null, summaryText: null, compactionId: null, compactedMessageIds: [] };
+  }
+
+  // Fit prefix to the input budget by dropping oldest messages until it fits
+  const fittedPrefix = [...prefix];
+  while (fittedPrefix.length > 0) {
+    const candidatePromptText = serializeForTokenCounting(fittedPrefix);
+    const candidateTokens = tokenization.encoding.encode(candidatePromptText).length;
+    if (candidateTokens <= promptInputBudget) break;
+    fittedPrefix.shift();
+  }
+
+  if (fittedPrefix.length === 0) {
+    return { compactedMessages: null, summaryText: null, compactionId: null, compactedMessageIds: [] };
+  }
+
   // Generate summary
   const { Agent } = await import('@mastra/core/agent');
   const model = await createLanguageModelFromConfig(modelConfig);
@@ -144,7 +168,7 @@ export async function compactConversationPrefix(
     'Keep durable constraints, decisions, requirements, unresolved TODOs, IDs, names, and references.',
     '',
     'Conversation prefix (JSON):',
-    serializeForTokenCounting(prefix),
+    serializeForTokenCounting(fittedPrefix),
   ].join('\n');
 
   const result = await agent.generate(prompt, { maxSteps: 1 });
@@ -169,5 +193,160 @@ export async function compactConversationPrefix(
     summaryText,
     compactionId,
     compactedMessageIds,
+  };
+}
+
+/* ── Tool Result Compaction ── */
+/* Ported from maelstrom-agent/packages/agent-sdk/src/core/tool-extraction.ts */
+
+export type ToolCompactionConfig = {
+  enabled: boolean;
+  useAI: boolean;
+  triggerTokens: number;
+  outputMaxTokens: number;
+  truncateMinChars: number;
+  truncateHeadRatio: number;
+  truncateMinTailChars: number;
+};
+
+export type ToolCompactionResult = {
+  content: string;
+  wasCompacted: boolean;
+  extractionDurationMs?: number;
+};
+
+/**
+ * Estimate token count from a string. Uses the model-aware tokenizer when
+ * available, otherwise falls back to a rough chars/4 heuristic.
+ */
+function estimateTokens(text: string, modelName?: string): number {
+  if (modelName) {
+    const tokenization = resolveConversationTokenization(modelName);
+    if (tokenization.encoding) {
+      return tokenization.encoding.encode(text).length;
+    }
+  }
+  return Math.ceil(text.length / 4);
+}
+
+/**
+ * Truncate content to fit within a token budget using head/tail ratio.
+ * Mirrors maelstrom's truncateToTokenBudget.
+ */
+function truncateToTokenBudget(
+  content: string,
+  maxTokens: number,
+  options: { minChars: number; headRatio: number; minTailChars: number },
+  modelName?: string,
+): string {
+  if (!content) return content;
+  const totalTokens = estimateTokens(content, modelName);
+  if (totalTokens <= maxTokens) return content;
+
+  const ratio = Math.max(0.05, maxTokens / totalTokens);
+  const keepChars = Math.max(options.minChars, Math.floor(content.length * ratio));
+  const headChars = Math.floor(keepChars * options.headRatio);
+  const tailChars = Math.max(options.minTailChars, keepChars - headChars);
+
+  return [
+    content.slice(0, headChars),
+    '\n\n...[tool output truncated for size]...\n\n',
+    content.slice(-tailChars),
+  ].join('');
+}
+
+/**
+ * Use an AI model to extract relevant information from a large tool result.
+ */
+async function aiExtractRelevantInfo(
+  content: string,
+  toolName: string,
+  userQuery: string,
+  maxOutputTokens: number,
+  modelConfig: LLMModelConfig,
+): Promise<string | null> {
+  try {
+    const { Agent } = await import('@mastra/core/agent');
+    const model = await createLanguageModelFromConfig(modelConfig);
+    const agent = new Agent({
+      id: `tool-compact-${Date.now()}`,
+      name: 'tool-compaction-agent',
+      instructions: 'Summarize only the information needed to answer the user request. Keep important IDs, names, and values. Omit boilerplate and repeated metadata. If output is JSON-like, preserve key fields in compact form.',
+      model: model as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    });
+
+    const prompt = [
+      `User request: ${userQuery || '(none provided)'}`,
+      `Tool: ${toolName}`,
+      '',
+      'Tool output:',
+      content,
+    ].join('\n');
+
+    const result = await agent.generate(prompt, { maxSteps: 1 });
+    return typeof result.text === 'string' ? result.text.trim() || null : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Compact a tool result if it exceeds the configured token threshold.
+ *
+ * Strategy (matching maelstrom):
+ *  1. If disabled or under triggerTokens, return as-is
+ *  2. If useAI, try AI extraction → then bound to outputMaxTokens via truncation
+ *  3. Fallback: head/tail truncation to outputMaxTokens
+ */
+export async function compactToolResult(
+  content: string,
+  toolName: string,
+  userQuery: string,
+  settings: ToolCompactionConfig,
+  modelConfig?: LLMModelConfig,
+  modelName?: string,
+): Promise<ToolCompactionResult> {
+  const started = Date.now();
+
+  if (!settings.enabled) {
+    return { content, wasCompacted: false };
+  }
+
+  if (estimateTokens(content, modelName) <= settings.triggerTokens) {
+    return { content, wasCompacted: false };
+  }
+
+  const truncateOpts = {
+    minChars: settings.truncateMinChars,
+    headRatio: settings.truncateHeadRatio,
+    minTailChars: settings.truncateMinTailChars,
+  };
+
+  // Try AI extraction first
+  if (settings.useAI && modelConfig) {
+    const extracted = await aiExtractRelevantInfo(
+      content,
+      toolName,
+      userQuery,
+      settings.outputMaxTokens,
+      modelConfig,
+    );
+    if (extracted) {
+      // Bound AI output to outputMaxTokens in case the model went over
+      const bounded = truncateToTokenBudget(extracted, settings.outputMaxTokens, truncateOpts, modelName);
+      return {
+        content: bounded,
+        wasCompacted: bounded !== content,
+        extractionDurationMs: Date.now() - started,
+      };
+    }
+  }
+
+  // Fallback: head/tail truncation
+  const fallback = truncateToTokenBudget(content, settings.outputMaxTokens, truncateOpts, modelName);
+  return {
+    content: fallback,
+    wasCompacted: fallback !== content,
+    extractionDurationMs: Date.now() - started,
   };
 }

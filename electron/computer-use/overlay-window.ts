@@ -1,6 +1,54 @@
-import { BrowserWindow, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeImage, screen } from 'electron';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ComputerDisplayLayout, ComputerOverlayState } from '../../shared/computer-use.js';
+
+// Resolve the app icon once — same path as electron/main.ts
+const APP_ICON = join(__dirname, '../../build/icon.png');
+
+/** Ensure the app dock icon stays visible on macOS with the correct custom icon. */
+function ensureDockVisible(): void {
+  try {
+    const dock = process.platform === 'darwin' ? app.dock : undefined;
+    if (!dock) return;
+
+    const icon = existsSync(APP_ICON) ? nativeImage.createFromPath(APP_ICON) : null;
+
+    // Set icon before show() in case show() reads the current icon
+    if (icon) dock.setIcon(icon);
+
+    void dock.show().then(() => {
+      // dock.show() can reset the icon — re-apply after a short delay
+      // to ensure it sticks after the macOS dock animation completes
+      if (icon) dock.setIcon(icon);
+      setTimeout(() => {
+        if (icon) dock.setIcon(icon);
+      }, 200);
+    });
+  } catch {
+    // Dock API may not be available in all environments
+  }
+}
+
+// IPC handler for overlay mouse region toggling.
+// When the renderer detects the mouse entering the clickable banner area
+// (while paused), it sends this to temporarily make the window accept clicks.
+// When the mouse leaves, it switches back to click-through.
+let overlayMouseRegistered = false;
+function ensureOverlayMouseIpc(): void {
+  if (overlayMouseRegistered) return;
+  overlayMouseRegistered = true;
+
+  ipcMain.on('computer-use:overlay-set-ignore-mouse', (event, ignore: boolean) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win.isDestroyed()) return;
+    if (ignore) {
+      win.setIgnoreMouseEvents(true, { forward: true });
+    } else {
+      win.setIgnoreMouseEvents(false);
+    }
+  });
+}
 
 /**
  * Storage: sessionId → Map<displayKey, BrowserWindow>
@@ -48,6 +96,7 @@ function createSingleOverlay(
   displayKey: string,
   bounds: { x: number; y: number; width: number; height: number },
 ): BrowserWindow {
+  ensureOverlayMouseIpc();
   const preloadPath = join(__dirname, '../preload/index.mjs');
   const win = new BrowserWindow({
     x: bounds.x,
@@ -80,6 +129,9 @@ function createSingleOverlay(
   // Place above all normal windows, menu bar, and dock
   win.setAlwaysOnTop(true, 'screen-saver');
 
+  // Make visible across all Spaces, including full-screen app Spaces
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
   // Force full-display bounds (bypass work area constraints)
   win.setBounds(bounds);
 
@@ -90,6 +142,7 @@ function createSingleOverlay(
 
   win.once('ready-to-show', () => {
     win.showInactive();
+    ensureDockVisible();
   });
 
   win.on('closed', () => {
@@ -236,6 +289,7 @@ export function showOverlayAfterCapture(sessionId: string): void {
       win.showInactive();
     }
   }
+  ensureDockVisible();
 }
 
 /**

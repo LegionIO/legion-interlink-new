@@ -617,6 +617,16 @@ function AppShell() {
     }).catch(() => {});
   }, [activeConversationId, selectedModelKey, selectedProfileKey, fallbackEnabled, profilePrimaryModelKey]);
 
+  // When the overlay banner is clicked (paused session), the main process
+  // sends this event after switching the active conversation and focusing
+  // the window. Switch to the computer-use tab so the user sees the session.
+  useEffect(() => {
+    return legion.computerUse.onFocusThread(() => {
+      setSettingsOpen(false);
+      setThreadMode('computer');
+    });
+  }, []);
+
   return (
     <AttachmentProvider>
       <DropZone>

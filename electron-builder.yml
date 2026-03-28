@@ -7,6 +7,9 @@ directories:
 files:
   - out/**/*
   - "!**/*.map"
+extraResources:
+  - from: build/bin/LocalMacosHelper
+    to: bin/LocalMacosHelper
 icon: build/icon.icns
 mac:
   category: public.app-category.developer-tools
