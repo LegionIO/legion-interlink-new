@@ -266,7 +266,7 @@ function buildLoopAlert(session: ComputerSession): string | undefined {
   return `Loop alert: the action \"${describeAction(repeatedAction)}\" was attempted ${sameActions.length} times recently${failedCount > 0 ? ` (${failedCount} failed)` : ''}. Do not propose that same action again unless the UI clearly changed and you explain why repeating it is now safe.${suffix}`;
 }
 
-async function createModel(modelConfig: LLMModelConfig): Promise<any> {
+async function createModel(modelConfig: LLMModelConfig): Promise<Awaited<ReturnType<typeof createLanguageModelFromConfig>>> {
   return createLanguageModelFromConfig(modelConfig);
 }
 

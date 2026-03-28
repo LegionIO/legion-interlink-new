@@ -19,6 +19,7 @@ const LOCAL_MACOS_PRIVACY_URLS: Record<ComputerUsePermissionSection, string> = {
   accessibility: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
   'screen-recording': 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
   automation: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Automation',
+  'input-monitoring': 'x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent',
 };
 
 /**
@@ -131,6 +132,7 @@ export type LocalMacosHelperResponse = {
   accessibilityTrusted?: boolean;
   screenRecordingGranted?: boolean;
   automationGranted?: boolean;
+  inputMonitoringGranted?: boolean;
   desktopCoordinateWidth?: number;
   desktopCoordinateHeight?: number;
   desktopWidth?: number;
@@ -228,10 +230,27 @@ async function requestAutomationPermission(): Promise<boolean> {
   return probeAutomationPermission();
 }
 
+/**
+ * Functional probe for Input Monitoring permission.
+ *
+ * Spawns the helper with `probeInputMonitoring <timeoutMs>`. The helper starts a
+ * listenOnly event tap and waits for any real physical mouse/keyboard event. If
+ * one arrives within the timeout, the permission is confirmed. If the timeout
+ * elapses with no events, the permission is likely missing.
+ *
+ * The caller should ensure the user has been prompted to move their mouse or
+ * press a key so the probe has something to detect.
+ */
+export async function probeInputMonitoring(timeoutMs = 3000): Promise<boolean> {
+  const result = await runLocalMacHelper(['probeInputMonitoring', String(timeoutMs)]);
+  return result.ok === true && (result.inputMonitoringGranted ?? false);
+}
+
 function firstMissingPermission(permissions: ComputerUsePermissions): ComputerUsePermissionSection | null {
   if (!permissions.accessibilityTrusted) return 'accessibility';
   if (!permissions.screenRecordingGranted) return 'screen-recording';
   if (!permissions.automationGranted) return 'automation';
+  if (!permissions.inputMonitoringGranted) return 'input-monitoring';
   return null;
 }
 
@@ -247,7 +266,7 @@ function buildPermissionGuidance(
   if (openedSettings.length > 0) {
     fragments.push('System Settings was opened so you can finish the approval flow.');
   }
-  if (!permissions.accessibilityTrusted || !permissions.screenRecordingGranted || !permissions.automationGranted) {
+  if (!permissions.accessibilityTrusted || !permissions.screenRecordingGranted || !permissions.automationGranted || !permissions.inputMonitoringGranted) {
     fragments.push('After granting access, start or resume the session again.');
   }
   return fragments.length > 0 ? fragments.join(' ') : undefined;
@@ -259,13 +278,21 @@ export async function openLocalMacosPrivacySettings(section: ComputerUsePermissi
 }
 
 export async function getComputerUsePermissions(): Promise<ComputerUsePermissions> {
-  const helperResult = await runLocalMacHelper(['permissions']);
-  const automationGranted = await probeAutomationPermission();
+  // Run the basic permissions check and the input monitoring probe in parallel.
+  // The probe spawns the helper with a short timeout — it resolves early if the
+  // user's mouse/keyboard activity is detected (which is typical since they just
+  // interacted with the UI).
+  const [helperResult, automationGranted, inputMonitoringGranted] = await Promise.all([
+    runLocalMacHelper(['permissions']),
+    probeAutomationPermission(),
+    probeInputMonitoring(3000),
+  ]);
   return {
     target: 'local-macos',
     accessibilityTrusted: getAccessibilityStatus(),
     screenRecordingGranted: getScreenRecordingStatus(helperResult),
     automationGranted,
+    inputMonitoringGranted,
     helperReady: helperResult.ok === true,
     message: helperResult.error,
   };
@@ -275,6 +302,7 @@ export async function requestLocalMacosPermissions(options?: {
   accessibility?: boolean;
   screenRecording?: boolean;
   automation?: boolean;
+  inputMonitoring?: boolean;
   openSettings?: boolean;
 }): Promise<ComputerUsePermissionRequestResult> {
   const requested: ComputerUsePermissionSection[] = [];

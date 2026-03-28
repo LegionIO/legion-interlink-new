@@ -339,6 +339,7 @@ export class ComputerUseSessionManager extends EventEmitter {
       accessibilityTrusted: true,
       screenRecordingGranted: true,
       automationGranted: true,
+      inputMonitoringGranted: true,
       helperReady: true,
     };
   }
@@ -366,6 +367,9 @@ export class ComputerUseSessionManager extends EventEmitter {
       if (!permissions.automationGranted) {
         missing.push('Allow Automation for Interlink so it can drive System Events and read focused window metadata.');
       }
+      if (!permissions.inputMonitoringGranted) {
+        missing.push('Enable Input Monitoring for Interlink in System Settings > Privacy & Security > Input Monitoring so it can detect when you take over control.');
+      }
       return missing.length > 0 ? missing.join(' ') : null;
     }
 
@@ -376,6 +380,7 @@ export class ComputerUseSessionManager extends EventEmitter {
     if (!permissions.accessibilityTrusted) return 'accessibility';
     if (!permissions.screenRecordingGranted) return 'screen-recording';
     if (!permissions.automationGranted) return 'automation';
+    if (!permissions.inputMonitoringGranted) return 'input-monitoring';
     return null;
   }
 

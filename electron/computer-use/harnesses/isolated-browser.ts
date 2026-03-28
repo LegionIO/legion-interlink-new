@@ -82,10 +82,6 @@ async function evalInPage<T>(win: BrowserWindow, source: string): Promise<T> {
   return win.webContents.executeJavaScript(source, true) as Promise<T>;
 }
 
-function escapeText(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
-}
-
 function result(summary: string, cursor?: { x: number; y: number }): ComputerHarnessActionResult {
   return {
     summary,

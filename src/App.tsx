@@ -178,7 +178,7 @@ const ComputerSetupShell: FC<{ preferredConversationId?: string | null }> = ({ p
   useEffect(() => {
     if (!conversationId) return;
     legion.conversations.get(conversationId).then((conv: unknown) => {
-      const record = conv as Record<string, unknown> | null;
+      const record = conv as ConversationRecord | null;
       if (!record) return;
       legion.conversations.put({
         ...record,
@@ -187,7 +187,7 @@ const ComputerSetupShell: FC<{ preferredConversationId?: string | null }> = ({ p
         fallbackEnabled,
         profilePrimaryModelKey,
         updatedAt: new Date().toISOString(),
-      } as any);
+      });
     }).catch(() => {});
   }, [conversationId, fallbackEnabled, profilePrimaryModelKey, selectedModelKey, selectedProfileKey]);
 
@@ -567,7 +567,7 @@ function AppShell() {
   useEffect(() => {
     if (!activeConversationId) return;
     legion.conversations.get(activeConversationId).then((conv: unknown) => {
-      const record = conv as Record<string, unknown> | null;
+      const record = conv as ConversationRecord | null;
       if (!record) return;
       legion.conversations.put({
         ...record,
@@ -576,7 +576,7 @@ function AppShell() {
         fallbackEnabled,
         profilePrimaryModelKey,
         updatedAt: new Date().toISOString(),
-      } as any);
+      });
     }).catch(() => {});
   }, [activeConversationId, selectedModelKey, selectedProfileKey, fallbackEnabled, profilePrimaryModelKey]);
 

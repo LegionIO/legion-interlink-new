@@ -34,7 +34,7 @@ import { useAttachments } from '@/providers/AttachmentContext';
 import { useBranchNav } from '@/providers/RuntimeProvider';
 import { useConfig } from '@/providers/ConfigProvider';
 import { useRealtime } from '@/providers/RealtimeProvider';
-import { isDictationSupportedForProvider, createUnifiedDictationAdapter, type DictationAdapterTypes, type AudioProvider } from '@/lib/audio/speech-adapters';
+import { isDictationSupportedForProvider, createUnifiedDictationAdapter, type DictationSession, type AudioProvider } from '@/lib/audio/speech-adapters';
 import { MarkdownText } from './MarkdownText';
 import { ToolCallDisplay } from './ToolGroup';
 import { SubAgentInline } from './SubAgentInline';
@@ -866,7 +866,7 @@ const DictationButton: FC = () => {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [devices, setDevices] = useState<Array<{ deviceId: string; label: string }>>([]);
   const [levels, setLevels] = useState<Record<string, number>>({});
-  const sessionRef = useRef<DictationAdapterTypes.Session | null>(null);
+  const sessionRef = useRef<DictationSession | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const levelTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -978,7 +978,7 @@ const DictationButton: FC = () => {
         }
       });
 
-      const extSession = session as DictationAdapterTypes.Session & {
+      const extSession = session as DictationSession & {
         onError?: (cb: (err: string) => void) => void;
       };
       extSession.onError?.((err) => {

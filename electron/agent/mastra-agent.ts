@@ -30,6 +30,13 @@ export type StreamEvent = {
   };
 };
 
+type AgentConfig = ConstructorParameters<typeof Agent>[0];
+type JsonStandardSchemaInput = Parameters<typeof toJsonStandardSchema>[0];
+type MastraToolExecutionOptions = {
+  toolCallId?: string;
+  abortSignal?: AbortSignal;
+};
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -114,7 +121,7 @@ function toMastraInputSchema(inputSchema: ToolDefinition['inputSchema']) {
     target: 'jsonSchema7',
   });
 
-  return toJsonStandardSchema(jsonSchema as any);
+  return toJsonStandardSchema(jsonSchema as JsonStandardSchemaInput);
 }
 
 function toMastraTools(
@@ -139,8 +146,9 @@ function toMastraTools(
       description: tool.description,
       inputSchema: toMastraInputSchema(tool.inputSchema),
       execute: async (input, options) => {
-        const toolCallId = typeof (options as any)?.toolCallId === 'string'
-          ? (options as any).toolCallId
+        const mastraOptions = options as MastraToolExecutionOptions | undefined;
+        const toolCallId = typeof mastraOptions?.toolCallId === 'string'
+          ? mastraOptions.toolCallId
           : `tc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const localAbortController = new AbortController();
         const cancel = (): void => {
@@ -149,7 +157,7 @@ function toMastraTools(
           }
         };
 
-        const mergedAbortSignal = mergeAbortSignals(options?.abortSignal, localAbortController.signal);
+        const mergedAbortSignal = mergeAbortSignals(mastraOptions?.abortSignal, localAbortController.signal);
         hooks?.onToolExecutionStart?.({
           toolCallId,
           toolName: tool.name,
@@ -329,7 +337,7 @@ export async function* streamAgentResponse(
       id: `legion-${conversationId}`,
       name: 'legion',
       instructions: buildAgentInstructions(config.systemPrompt),
-      model: model as any,
+      model: model as AgentConfig['model'],
       tools: mastraTools,
       ...(memory ? { memory } : {}),
     });
@@ -384,7 +392,7 @@ async function* generateWithSyntheticEvents(
       );
       const memoryOptions = buildMastraMemoryOptions(conversationId, memory);
 
-      const result = await agent.generate(messages as Parameters<typeof agent.generate>[0], {
+      const generateOptions = {
         maxSteps: config.advanced.maxSteps,
         abortSignal: options?.abortSignal,
         ...(Object.keys(activeModelSettings).length > 0 ? { modelSettings: activeModelSettings } : {}),
@@ -424,7 +432,12 @@ async function* generateWithSyntheticEvents(
             }
           }
         },
-      } as any);
+      };
+      const generate = agent.generate.bind(agent) as unknown as (
+        messageInput: Parameters<typeof agent.generate>[0],
+        options: Record<string, unknown>,
+      ) => ReturnType<typeof agent.generate>;
+      const result = await generate(messages as Parameters<typeof agent.generate>[0], generateOptions);
 
       for (const event of eventQueue) {
         yield event;
@@ -514,13 +527,18 @@ async function* streamWithRealEvents(
         );
         const memoryOptions = buildMastraMemoryOptions(conversationId, memory);
 
-        const streamResult = await agent.stream(messages as Parameters<typeof agent.stream>[0], {
+        const streamOptions = {
           maxSteps: config.advanced.maxSteps,
           abortSignal: options?.abortSignal,
           ...(Object.keys(activeModelSettings).length > 0 ? { modelSettings: activeModelSettings } : {}),
           ...(providerOptions ? { providerOptions } : {}),
           ...(memoryOptions ?? {}),
-        } as any);
+        };
+        const stream = agent.stream.bind(agent) as unknown as (
+          messageInput: Parameters<typeof agent.stream>[0],
+          options: Record<string, unknown>,
+        ) => ReturnType<typeof agent.stream>;
+        const streamResult = await stream(messages as Parameters<typeof agent.stream>[0], streamOptions);
 
         const fullStream = streamResult.fullStream;
         const iterator =

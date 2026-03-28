@@ -165,7 +165,7 @@ function createSingleOverlay(
 export function createOverlayWindow(
   sessionId: string,
   _config: { position: 'top' | 'bottom'; heightPx: number; opacity: number },
-  displayLayout?: ComputerDisplayLayout,
+  _displayLayout?: ComputerDisplayLayout,
 ): BrowserWindow {
   const windowMap = getSessionWindows(sessionId);
 

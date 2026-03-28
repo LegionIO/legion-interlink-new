@@ -117,7 +117,7 @@ function msgId(): string {
 }
 
 function toStoredContent(parts: ContentPart[]): ThreadMessageLike['content'] {
-  return parts as any;
+  return parts as unknown as ThreadMessageLike['content'];
 }
 
 function extractUserText(messages: ThreadMessageLike[]): string {
@@ -1117,7 +1117,6 @@ export function RuntimeProvider({
       } else if (e.type === 'realtime-user-transcript') {
         // Realtime audio: create/update a user message for spoken text
         const itemId = (e as { itemId?: string }).itemId ?? msgId();
-        const isFinal = (e as { isFinal?: boolean }).isFinal ?? true;
         const text = e.text ?? '';
         const existingIdx = acc.messages.findIndex((m) => m.id === `rt-user-${itemId}`);
         if (existingIdx >= 0) {

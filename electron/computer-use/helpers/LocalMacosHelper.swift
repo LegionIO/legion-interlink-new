@@ -532,6 +532,68 @@ case "pointer":
   let pointer = currentPointerTopLeft()
   printJson(["ok": true, "pointerX": pointer.x, "pointerY": pointer.y])
 
+case "probeInputMonitoring":
+  // Functional probe: start a listenOnly event tap and wait for a real physical input event.
+  // Returns inputMonitoringGranted: true if a physical event is received within the timeout,
+  // false otherwise. This reliably detects whether Input Monitoring permission is granted
+  // even on macOS versions where CGEvent.tapCreate() succeeds without the permission.
+  var probeMask: CGEventMask = 0
+  probeMask |= (1 << CGEventType.mouseMoved.rawValue)
+  probeMask |= (1 << CGEventType.leftMouseDown.rawValue)
+  probeMask |= (1 << CGEventType.rightMouseDown.rawValue)
+  probeMask |= (1 << CGEventType.scrollWheel.rawValue)
+  probeMask |= (1 << CGEventType.keyDown.rawValue)
+  probeMask |= (1 << CGEventType.flagsChanged.rawValue)
+
+  let probeTimeoutMs = parseIntArg(args, 2, default: 3000)
+  var probeReceivedEvent = false
+
+  guard let probeTap = CGEvent.tapCreate(
+    tap: .cgSessionEventTap,
+    place: .headInsertEventTap,
+    options: .listenOnly,
+    eventsOfInterest: probeMask,
+    callback: { _, type, event, refcon in
+      // Ignore tap-disabled signals — those aren't physical input
+      if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+        return Unmanaged.passUnretained(event)
+      }
+
+      let sourcePid = event.getIntegerValueField(.eventSourceUnixProcessID)
+      let sourceTag = event.getIntegerValueField(.eventSourceUserData)
+      // Only count events NOT from our own process and NOT our synthetic tag
+      if sourcePid != Int64(getpid()) && sourceTag != syntheticEventTag {
+        // Signal that we received a real physical event
+        let receivedPtr = refcon!.assumingMemoryBound(to: Bool.self)
+        receivedPtr.pointee = true
+        CFRunLoopStop(CFRunLoopGetCurrent())
+      }
+      return Unmanaged.passUnretained(event)
+    },
+    userInfo: &probeReceivedEvent
+  ) else {
+    // Tap creation failed outright — no Input Monitoring permission
+    printJson(["ok": true, "inputMonitoringGranted": false])
+    break
+  }
+
+  let probeSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, probeTap, 0)
+  CFRunLoopAddSource(CFRunLoopGetCurrent(), probeSource, .defaultMode)
+  CGEvent.tapEnable(tap: probeTap, enable: true)
+
+  // Run the loop for up to probeTimeoutMs — CFRunLoopStop in the callback exits early
+  // if a physical event is received.
+  let probeDeadline = Date(timeIntervalSinceNow: Double(probeTimeoutMs) / 1000.0)
+  while !probeReceivedEvent && Date() < probeDeadline {
+    CFRunLoopRunInMode(.defaultMode, 0.1, true)
+  }
+
+  // Clean up
+  CGEvent.tapEnable(tap: probeTap, enable: false)
+  CFRunLoopRemoveSource(CFRunLoopGetCurrent(), probeSource, .defaultMode)
+
+  printJson(["ok": true, "inputMonitoringGranted": probeReceivedEvent])
+
 case "monitor":
   let mask = (
     (1 << CGEventType.mouseMoved.rawValue)

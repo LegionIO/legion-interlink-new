@@ -39,6 +39,11 @@ export type SkillManifest = {
   execution: SkillExecution;
 };
 
+type WorkflowChain = {
+  then: (step: unknown) => WorkflowChain;
+  commit: () => AnyWorkflow;
+};
+
 export function getSkillToolName(skillName: string): string {
   return buildScopedToolName('skill', skillName);
 }
@@ -394,18 +399,18 @@ function buildCompositeWorkflow(
   });
 
   // Chain steps sequentially via .then()
-  let wf: ReturnType<typeof createWorkflow> = createWorkflow({
+  let wf = createWorkflow({
     id: getSkillToolName(manifest.name),
     description: manifest.description,
     inputSchema,
     outputSchema,
-  }) as any;
+  }) as unknown as WorkflowChain;
 
   for (const step of mastraSteps) {
-    wf = (wf as any).then(step);
+    wf = wf.then(step);
   }
 
-  const committed = (wf as any).commit() as AnyWorkflow;
+  const committed = wf.commit();
   registerSkillWorkflow(committed);
   return committed;
 }
@@ -439,9 +444,16 @@ export function workflowToToolDefinition(
           return result.result ?? { status: 'success', steps: result.steps };
         }
         if (result.status === 'failed') {
+          const workflowError = 'error' in result
+            && result.error
+            && typeof result.error === 'object'
+            && 'message' in result.error
+            && typeof result.error.message === 'string'
+            ? result.error.message
+            : 'Workflow failed';
           return {
             isError: true,
-            error: (result as any).error?.message ?? 'Workflow failed',
+            error: workflowError,
             status: 'failed',
             steps: result.steps,
           };

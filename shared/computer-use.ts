@@ -4,7 +4,7 @@ export type ComputerUseTarget = 'isolated-browser' | 'local-macos';
 
 export type ComputerUseApprovalMode = 'step' | 'goal' | 'autonomous';
 
-export type ComputerUsePermissionSection = 'accessibility' | 'screen-recording' | 'automation';
+export type ComputerUsePermissionSection = 'accessibility' | 'screen-recording' | 'automation' | 'input-monitoring';
 
 export type ComputerUseSupport =
   | 'openai-responses'
@@ -199,6 +199,8 @@ export type ComputerUsePermissions = {
   accessibilityTrusted: boolean;
   screenRecordingGranted: boolean;
   automationGranted: boolean;
+  /** Whether Input Monitoring permission is granted (required for the takeover monitor event tap). */
+  inputMonitoringGranted: boolean;
   helperReady: boolean;
   message?: string;
 };

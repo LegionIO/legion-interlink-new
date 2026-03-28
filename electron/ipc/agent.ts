@@ -1037,6 +1037,7 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
     try {
       const { Agent } = await import('@mastra/core/agent');
       const model = await createLanguageModelFromConfig(modelEntry.modelConfig);
+      type AgentConfig = ConstructorParameters<typeof Agent>[0];
 
       const agent = new Agent({
         id: `title-gen-${Date.now()}`,
@@ -1048,7 +1049,7 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
           'Avoid apologies, disclaimers, or copied response text.',
           'Return only the title text with no quotes or formatting.',
         ].join(' '),
-        model: model as any,
+        model: model as AgentConfig['model'],
       });
 
       const titleInput = buildTitleGenerationInput(messages);

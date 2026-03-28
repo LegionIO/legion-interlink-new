@@ -4,7 +4,6 @@ import {
   resolveConversationTokenization,
   serializeForTokenCounting,
 } from './tokenization.js';
-import type { ConversationTokenizationInfo } from './tokenization.js';
 import type { LLMModelConfig } from './model-catalog.js';
 import { createLanguageModelFromConfig } from './language-model.js';
 
@@ -156,11 +155,12 @@ export async function compactConversationPrefix(
   // Generate summary
   const { Agent } = await import('@mastra/core/agent');
   const model = await createLanguageModelFromConfig(modelConfig);
+  type AgentConfig = ConstructorParameters<typeof Agent>[0];
   const agent = new Agent({
     id: `compaction-${Date.now()}`,
     name: 'compaction-agent',
     instructions: COMPACTION_SYSTEM_PROMPT,
-    model: model as any,
+    model: model as AgentConfig['model'],
   });
 
   const prompt = [
@@ -268,11 +268,12 @@ async function aiExtractRelevantInfo(
   try {
     const { Agent } = await import('@mastra/core/agent');
     const model = await createLanguageModelFromConfig(modelConfig);
+    type AgentConfig = ConstructorParameters<typeof Agent>[0];
     const agent = new Agent({
       id: `tool-compact-${Date.now()}`,
       name: 'tool-compaction-agent',
       instructions: 'Summarize only the information needed to answer the user request. Keep important IDs, names, and values. Omit boilerplate and repeated metadata. If output is JSON-like, preserve key fields in compact form.',
-      model: model as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      model: model as AgentConfig['model'],
     });
 
     const prompt = [
