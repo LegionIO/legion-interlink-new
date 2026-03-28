@@ -1,10 +1,9 @@
 import { type FC, type ReactNode, useState, useCallback, memo } from 'react';
-import ReactMarkdown, { type Components } from 'react-markdown';
+import ReactMarkdown, { type Components, type Options } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import { RefreshCwIcon } from 'lucide-react';
-import type { PluggableList } from 'unified';
 import { CodeBlock } from './CodeBlock';
 import { cn } from '@/lib/utils';
 
@@ -185,8 +184,8 @@ const markdownComponents = {
   td: MdTd,
 };
 
-const remarkPlugins: PluggableList = [remarkGfm];
-const rehypePlugins: PluggableList = [rehypeRaw, [rehypeSanitize, rehypeSanitizeOptions]];
+const remarkPlugins: NonNullable<Options['remarkPlugins']> = [remarkGfm];
+const rehypePlugins: NonNullable<Options['rehypePlugins']> = [rehypeRaw, [rehypeSanitize, rehypeSanitizeOptions]];
 
 export const MarkdownText: FC<{ text: string }> = memo(({ text }) => {
   return (
