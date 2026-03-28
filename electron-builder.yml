@@ -20,8 +20,8 @@ mac:
     NSAppleEventsUsageDescription: "Legion Interlink uses Apple Events to activate apps and inspect focused windows during Local Mac computer control."
     NSScreenCaptureUsageDescription: "Legion Interlink captures your screen to enable Local Mac computer control and allow the AI to see what's on your display."
   target:
-    - target: dir
+    - target: dmg
       arch:
         - arm64
-        - x64
+  artifactName: "${productName}-${version}-arm64.${ext}"
   identity: null

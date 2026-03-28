@@ -595,19 +595,22 @@ case "probeInputMonitoring":
   printJson(["ok": true, "inputMonitoringGranted": probeReceivedEvent])
 
 case "monitor":
-  let mask = (
-    (1 << CGEventType.mouseMoved.rawValue)
-    | (1 << CGEventType.leftMouseDown.rawValue)
-    | (1 << CGEventType.leftMouseUp.rawValue)
-    | (1 << CGEventType.rightMouseDown.rawValue)
-    | (1 << CGEventType.rightMouseUp.rawValue)
-    | (1 << CGEventType.leftMouseDragged.rawValue)
-    | (1 << CGEventType.rightMouseDragged.rawValue)
-    | (1 << CGEventType.scrollWheel.rawValue)
-    | (1 << CGEventType.keyDown.rawValue)
-    | (1 << CGEventType.keyUp.rawValue)
-    | (1 << CGEventType.flagsChanged.rawValue)
-  )
+  let monitoredEventTypes: [CGEventType] = [
+    .mouseMoved,
+    .leftMouseDown,
+    .leftMouseUp,
+    .rightMouseDown,
+    .rightMouseUp,
+    .leftMouseDragged,
+    .rightMouseDragged,
+    .scrollWheel,
+    .keyDown,
+    .keyUp,
+    .flagsChanged,
+  ]
+  let mask = monitoredEventTypes.reduce(CGEventMask(0)) { partialResult, eventType in
+    partialResult | (CGEventMask(1) << eventType.rawValue)
+  }
 
   guard let tap = CGEvent.tapCreate(
     tap: .cgSessionEventTap,

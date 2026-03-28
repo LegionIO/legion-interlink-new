@@ -1,0 +1,263 @@
+name: Release
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      verbump:
+        description: Version bump to apply before releasing
+        required: true
+        default: patch
+        type: choice
+        options:
+          - none
+          - major
+          - minor
+          - patch
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      - run: pnpm type-check
+
+      - run: pnpm build
+
+  pr-mac-build:
+    if: ${{ github.event_name == 'pull_request' }}
+    needs: checks
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build:mac
+
+  prepare-release:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Require default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          if [ "$REF_TYPE" != "branch" ]; then
+            echo "workflow_dispatch must run from a branch ref." >&2
+            exit 1
+          fi
+
+          if [ "$REF_NAME" != "$DEFAULT_BRANCH" ]; then
+            echo "workflow_dispatch releases are only allowed from ${DEFAULT_BRANCH}, not ${REF_NAME}." >&2
+            exit 1
+          fi
+
+      - name: Bump package version
+        if: ${{ inputs.verbump != 'none' }}
+        run: npm version "${{ inputs.verbump }}" --no-git-tag-version
+
+      - name: Resolve release version
+        id: version
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Commit package version bump
+        if: ${{ inputs.verbump != 'none' }}
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json
+
+          if git diff --cached --quiet; then
+            echo "package.json did not change after version bump." >&2
+            exit 1
+          fi
+
+          git commit -m "release: v${VERSION}"
+          git push origin "HEAD:${DEFAULT_BRANCH}"
+
+      - name: Ensure release tag is new
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git fetch --tags origin
+
+          if git show-ref --verify --quiet "refs/tags/${TAG}"; then
+            echo "Tag ${TAG} already exists." >&2
+            exit 1
+          fi
+
+      - name: Create and push release tag
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git tag "$TAG"
+          git push origin "$TAG"
+
+  publish-release:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: prepare-release
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    outputs:
+      asset_name: ${{ steps.artifact.outputs.name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-release.outputs.tag }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build:mac
+
+      - name: Locate DMG artifact
+        id: artifact
+        run: |
+          artifact_path="$(find dist -maxdepth 1 -type f -name '*.dmg' | head -n 1)"
+
+          if [ -z "$artifact_path" ]; then
+            echo "No DMG artifact found in dist/." >&2
+            exit 1
+          fi
+
+          echo "path=$artifact_path" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$artifact_path")" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+        run: |
+          gh release create "$TAG" "${{ steps.artifact.outputs.path }}" \
+            --generate-notes \
+            --title "$TAG" \
+            --verify-tag
+
+  update-cask:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs:
+      - prepare-release
+      - publish-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download DMG and compute SHA256
+        id: sha
+        env:
+          ASSET_NAME: ${{ needs.publish-release.outputs.asset_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+        run: |
+          gh release download "$TAG" \
+            --pattern "$ASSET_NAME" \
+            --repo "${{ github.repository }}" \
+            --output interlink.dmg
+
+          sha=$(shasum -a 256 interlink.dmg | awk '{print $1}')
+          echo "sha256=$sha" >> "$GITHUB_OUTPUT"
+          echo "asset_name_url=${ASSET_NAME// /%20}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          repository: LegionIO/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update cask formula
+        working-directory: homebrew-tap
+        env:
+          ASSET_NAME_URL: ${{ steps.sha.outputs.asset_name_url }}
+          REPOSITORY: ${{ github.repository }}
+          SHA256: ${{ steps.sha.outputs.sha256 }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          mkdir -p Casks
+          cat > Casks/legion-interlink.rb << RUBY
+          cask "legion-interlink" do
+            version "${VERSION}"
+            sha256 "${SHA256}"
+
+            url "https://github.com/${REPOSITORY}/releases/download/v#{version}/${ASSET_NAME_URL}"
+            name "Legion Interlink"
+            desc "LegionIO desktop client"
+            homepage "https://github.com/${REPOSITORY}"
+
+            app "Legion Interlink.app"
+
+            zap trash: "~/.legionio"
+          end
+          RUBY
+
+      - name: Commit and push cask update
+        working-directory: homebrew-tap
+        env:
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/legion-interlink.rb
+
+          if git diff --cached --quiet; then
+            echo "Cask formula is already up to date."
+            exit 0
+          fi
+
+          git commit -m "update legion-interlink cask to ${VERSION}"
+          git push
