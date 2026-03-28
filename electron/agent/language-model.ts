@@ -2,6 +2,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { defaultProvider } from '@aws-sdk/credential-provider-node';
+import type { LanguageModel } from 'ai';
 import type { LLMModelConfig } from './model-catalog.js';
 
 function stripTrailingSlashes(value: string): string {
@@ -121,7 +122,7 @@ async function createBedrockModel(modelConfig: LLMModelConfig) {
   return bedrock(modelConfig.modelName);
 }
 
-export async function createLanguageModelFromConfig(modelConfig: LLMModelConfig): Promise<unknown> {
+export async function createLanguageModelFromConfig(modelConfig: LLMModelConfig): Promise<LanguageModel> {
   if (modelConfig.provider === 'google') {
     throw new Error('Gemini models are not supported by Legion runtime yet.');
   }

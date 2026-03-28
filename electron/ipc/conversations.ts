@@ -38,7 +38,7 @@ function getStorePath(legionHome: string): string {
   return join(legionHome, 'data', 'conversations.json');
 }
 
-function readStore(legionHome: string): ConversationsStore {
+export function readConversationStore(legionHome: string): ConversationsStore {
   const storePath = getStorePath(legionHome);
   if (!existsSync(storePath)) {
     return { conversations: {}, activeConversationId: null, settings: {} };
@@ -50,7 +50,7 @@ function readStore(legionHome: string): ConversationsStore {
   }
 }
 
-function writeStore(legionHome: string, store: ConversationsStore): void {
+export function writeConversationStore(legionHome: string, store: ConversationsStore): void {
   const storePath = getStorePath(legionHome);
   const dir = join(legionHome, 'data');
   if (!existsSync(dir)) {
@@ -59,7 +59,7 @@ function writeStore(legionHome: string, store: ConversationsStore): void {
   writeFileSync(storePath, JSON.stringify(store, null, 2), 'utf-8');
 }
 
-function broadcastConversationChange(store: ConversationsStore): void {
+export function broadcastConversationChange(store: ConversationsStore): void {
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send('conversations:changed', store);
   }
@@ -67,7 +67,7 @@ function broadcastConversationChange(store: ConversationsStore): void {
 
 export function registerConversationHandlers(ipcMain: IpcMain, legionHome: string, getConfig?: () => LegionConfig): void {
   ipcMain.handle('conversations:list', () => {
-    const store = readStore(legionHome);
+    const store = readConversationStore(legionHome);
     const conversations = Object.values(store.conversations);
     // Sort by most recent activity
     conversations.sort((a, b) => {
@@ -79,25 +79,25 @@ export function registerConversationHandlers(ipcMain: IpcMain, legionHome: strin
   });
 
   ipcMain.handle('conversations:get', (_event, id: string) => {
-    const store = readStore(legionHome);
+    const store = readConversationStore(legionHome);
     return store.conversations[id] ?? null;
   });
 
   ipcMain.handle('conversations:put', (_event, conversation: ConversationRecord) => {
-    const store = readStore(legionHome);
+    const store = readConversationStore(legionHome);
     store.conversations[conversation.id] = conversation;
-    writeStore(legionHome, store);
+    writeConversationStore(legionHome, store);
     broadcastConversationChange(store);
     return { ok: true };
   });
 
   ipcMain.handle('conversations:delete', (_event, id: string) => {
-    const store = readStore(legionHome);
+    const store = readConversationStore(legionHome);
     delete store.conversations[id];
     if (store.activeConversationId === id) {
       store.activeConversationId = null;
     }
-    writeStore(legionHome, store);
+    writeConversationStore(legionHome, store);
     broadcastConversationChange(store);
 
     // Clean up associated computer-use sessions
@@ -114,7 +114,7 @@ export function registerConversationHandlers(ipcMain: IpcMain, legionHome: strin
   });
 
   ipcMain.handle('conversations:clear', () => {
-    const store = readStore(legionHome);
+    const store = readConversationStore(legionHome);
 
     // Clean up all computer-use sessions
     if (getConfig) {
@@ -130,20 +130,20 @@ export function registerConversationHandlers(ipcMain: IpcMain, legionHome: strin
 
     store.conversations = {};
     store.activeConversationId = null;
-    writeStore(legionHome, store);
+    writeConversationStore(legionHome, store);
     broadcastConversationChange(store);
     return { ok: true };
   });
 
   ipcMain.handle('conversations:get-active-id', () => {
-    const store = readStore(legionHome);
+    const store = readConversationStore(legionHome);
     return store.activeConversationId;
   });
 
   ipcMain.handle('conversations:set-active-id', (_event, id: string) => {
-    const store = readStore(legionHome);
+    const store = readConversationStore(legionHome);
     store.activeConversationId = id;
-    writeStore(legionHome, store);
+    writeConversationStore(legionHome, store);
     broadcastConversationChange(store);
     return { ok: true };
   });

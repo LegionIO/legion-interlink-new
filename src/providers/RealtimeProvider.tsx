@@ -104,7 +104,7 @@ export const useRealtime = () => useContext(RealtimeContext);
 /* ── Provider ── */
 
 export const RealtimeProvider: FC<PropsWithChildren> = ({ children }) => {
-  const { config, updateConfig } = useConfig();
+  const { config } = useConfig();
   const [callState, setCallState] = useState<RealtimeCallState>(defaultState);
   const [inputLevel, setInputLevel] = useState(0);
   const [outputLevel, setOutputLevel] = useState(0);

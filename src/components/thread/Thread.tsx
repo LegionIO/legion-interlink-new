@@ -34,7 +34,7 @@ import { useAttachments } from '@/providers/AttachmentContext';
 import { useBranchNav } from '@/providers/RuntimeProvider';
 import { useConfig } from '@/providers/ConfigProvider';
 import { useRealtime } from '@/providers/RealtimeProvider';
-import { isDictationSupportedForProvider, createUnifiedDictationAdapter, type DictationAdapterTypes, type AudioProvider } from '@/lib/audio/speech-adapters';
+import { isDictationSupportedForProvider, createUnifiedDictationAdapter, type DictationSession, type AudioProvider } from '@/lib/audio/speech-adapters';
 import { MarkdownText } from './MarkdownText';
 import { ToolCallDisplay } from './ToolGroup';
 import { SubAgentInline } from './SubAgentInline';
@@ -45,7 +45,7 @@ import { ModelSelector } from './ModelSelector';
 import { ReasoningEffortSelector, type ReasoningEffort } from './ReasoningEffortSelector';
 import { ProfileSelector } from './ProfileSelector';
 import { FallbackToggle } from './FallbackToggle';
-import { FallbackBanner } from './FallbackBanner';
+import { FallbackBanner, ComputerUseFallbackBanner } from './FallbackBanner';
 import { CallOverlay } from './CallOverlay';
 import { ComputerSessionPanel } from './ComputerSessionPanel';
 import { ComputerSetupPanel } from './ComputerSetupPanel';
@@ -81,6 +81,7 @@ export const Thread: FC<{
     <ThreadPrimitive.Root className="flex h-full min-h-0 flex-col overflow-hidden">
       <SearchBar visible={searchOpen} onClose={() => setSearchOpen(false)} viewportRef={viewportRef} />
       <FallbackBanner />
+      <ComputerUseFallbackBanner />
       <ThreadModeTabs mode={mode} onChange={onChangeMode} />
       {mode === 'chat' ? (
         <ThreadPrimitive.Viewport ref={viewportRef} className="relative min-h-0 flex-1 overflow-y-auto">
@@ -196,17 +197,19 @@ const ComputerTabSurface: FC = () => {
 
   if (!activeComputerSession) {
     return (
-      <div className="min-h-0 flex-1 overflow-hidden px-6 py-4">
-        <div className="mx-auto flex h-full w-full max-w-5xl min-h-0 flex-col">
-          <div className="flex min-h-full flex-1 items-center justify-center rounded-2xl border border-dashed border-border/60 bg-card/20 px-6 py-8">
-            <div className="max-w-md text-center">
-              <MonitorIcon className="mx-auto h-8 w-8 text-muted-foreground/40" />
-              <div className="mt-3 text-sm font-medium">{activeConversationId ? 'No Active Session' : 'Select a Conversation'}</div>
-              <p className="mt-1.5 text-xs text-muted-foreground">
-                {activeConversationId
-                  ? 'Configure a goal and start a session using the controls below.'
-                  : 'Choose or create a conversation from the sidebar first.'}
-              </p>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="px-6 py-4">
+          <div className="mx-auto flex w-full max-w-5xl min-h-0 flex-col">
+            <div className="flex min-h-full flex-1 items-center justify-center rounded-2xl border border-dashed border-border/60 bg-card/20 px-6 py-8">
+              <div className="max-w-md text-center">
+                <MonitorIcon className="mx-auto h-8 w-8 text-muted-foreground/40" />
+                <div className="mt-3 text-sm font-medium">{activeConversationId ? 'No Active Session' : 'Select a Conversation'}</div>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  {activeConversationId
+                    ? 'Configure a goal and start a session using the controls below.'
+                    : 'Choose or create a conversation from the sidebar first.'}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -215,9 +218,9 @@ const ComputerTabSurface: FC = () => {
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-hidden px-6 py-4">
-      <div className="mx-auto flex h-full w-full max-w-5xl min-h-0 flex-col">
-        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="px-6 py-4">
+        <div className="mx-auto flex w-full max-w-5xl min-h-0 flex-col">
           <ComputerSessionPanel session={activeComputerSession} />
         </div>
       </div>
@@ -553,6 +556,12 @@ const ToolFallback: FC<{
   isError?: boolean;
   startedAt?: string;
   finishedAt?: string;
+  originalResult?: unknown;
+  compactionMeta?: {
+    wasCompacted: boolean;
+    extractionDurationMs: number;
+  };
+  compactionPhase?: 'start' | 'complete' | null;
   liveOutput?: {
     stdout?: string;
     stderr?: string;
@@ -588,6 +597,9 @@ const ToolFallback: FC<{
           isError: props.isError,
           startedAt: props.startedAt,
           finishedAt: props.finishedAt,
+          originalResult: props.originalResult,
+          compactionMeta: props.compactionMeta,
+          compactionPhase: props.compactionPhase,
           liveOutput: props.liveOutput,
         }}
       />
@@ -854,7 +866,7 @@ const DictationButton: FC = () => {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [devices, setDevices] = useState<Array<{ deviceId: string; label: string }>>([]);
   const [levels, setLevels] = useState<Record<string, number>>({});
-  const sessionRef = useRef<DictationAdapterTypes.Session | null>(null);
+  const sessionRef = useRef<DictationSession | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const levelTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -966,7 +978,7 @@ const DictationButton: FC = () => {
         }
       });
 
-      const extSession = session as DictationAdapterTypes.Session & {
+      const extSession = session as DictationSession & {
         onError?: (cb: (err: string) => void) => void;
       };
       extSession.onError?.((err) => {

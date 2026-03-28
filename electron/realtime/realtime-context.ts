@@ -11,8 +11,6 @@
 
 import type { LegionConfig } from '../config/schema.js';
 import { getSharedMemory, getResourceId } from '../agent/memory.js';
-import { readFileSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
 
 /* ── Token estimation ── */
 
@@ -77,6 +75,19 @@ function formatMessagesAsConversation(
 
 const CALL_INSTRUCTIONS = `## Call Instructions
 You are receiving a phone call. Start the conversation by naturally answering the call with a brief greeting, as if picking up a ringing phone. Vary your greeting naturally. If you have conversation context above, you may reference it naturally in your greeting (e.g., "Hey! Were you wanting to continue talking about...?"). Keep your greeting brief and warm.`;
+
+type ConversationMessage = {
+  role?: string;
+  content?: unknown;
+};
+
+type SemanticRecallThreadConfig = {
+  lastMessages: false;
+  semanticRecall: {
+    topK: number;
+    messageRange: { before: number; after: number };
+  };
+};
 
 export async function buildRealtimeMemoryContext(
   conversationId: string,
@@ -147,7 +158,15 @@ export async function buildRealtimeMemoryContext(
 
         if (result.messages && result.messages.length > 0) {
           // Log first few message roles for debugging
-          const preview = result.messages.slice(0, 5).map((m: any) => `${m.role}:${typeof m.content === 'string' ? m.content.slice(0, 50) : JSON.stringify(m.content).slice(0, 50)}`);
+          const preview = result.messages
+            .slice(0, 5)
+            .map((message) => {
+              const typedMessage = message as ConversationMessage;
+              const contentPreview = typeof typedMessage.content === 'string'
+                ? typedMessage.content.slice(0, 50)
+                : JSON.stringify(typedMessage.content).slice(0, 50);
+              return `${typedMessage.role}:${contentPreview}`;
+            });
           console.info(`[RealtimeContext] Message preview: ${JSON.stringify(preview)}`);
 
           const formatted = formatMessagesAsConversation(
@@ -248,17 +267,18 @@ export async function buildRealtimeMemoryContext(
 
       if (searchString) {
         const topK = memoryConfig.semanticRecall.topK || 3;
+        const threadConfig: SemanticRecallThreadConfig = {
+          lastMessages: false,
+          semanticRecall: {
+            topK,
+            messageRange: { before: 1, after: 1 },
+          },
+        };
         const result = await memory.recall({
           threadId: conversationId,
           resourceId,
           vectorSearchString: searchString,
-          threadConfig: {
-            lastMessages: false,
-            semanticRecall: {
-              topK,
-              messageRange: { before: 1, after: 1 },
-            },
-          } as any,
+          threadConfig,
         });
 
         if (result.messages && result.messages.length > 0) {

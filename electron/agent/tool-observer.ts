@@ -106,6 +106,8 @@ const OBSERVER_SYSTEM_PROMPT = [
   '- Use message_sub_agent to guide running sub-agents, ask for updates, or redirect their work.',
 ].join(' ');
 
+type AgentConfig = ConstructorParameters<typeof Agent>[0];
+
 const ObserverActionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('continue'),
@@ -547,7 +549,7 @@ export class ToolObserverManager {
           id: `tool-observer-${this.conversationId}`,
           name: 'tool-observer',
           instructions: OBSERVER_SYSTEM_PROMPT,
-          model: model as any,
+          model: model as AgentConfig['model'],
         });
         this.observerAgent = agent;
         return agent;

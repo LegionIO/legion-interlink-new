@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { legion } from '@/lib/ipc-client';
 import type {
   ComputerSession,
@@ -11,6 +11,13 @@ import type {
   ComputerUseSurface,
   ComputerUseTarget,
 } from '../../shared/computer-use';
+
+export type ComputerUseFallbackBanner = {
+  sessionId: string;
+  fromModel: string;
+  toModel: string;
+  error: string;
+};
 
 type ConversationMessageLike = {
   id?: string;
@@ -43,6 +50,8 @@ type ComputerUseContextValue = {
     approvalMode?: ComputerUseApprovalMode;
     modelKey?: string | null;
     profileKey?: string | null;
+    fallbackEnabled?: boolean;
+    reasoningEffort?: string;
   }) => Promise<ComputerSession>;
   pauseSession: (sessionId: string) => Promise<void>;
   resumeSession: (sessionId: string) => Promise<void>;
@@ -52,9 +61,14 @@ type ComputerUseContextValue = {
   setSurface: (sessionId: string, surface: ComputerUseSurface) => Promise<void>;
   sendGuidance: (sessionId: string, text: string) => Promise<void>;
   continueSession: (sessionId: string, newGoal: string) => Promise<ComputerSession | null>;
+  updateSessionSettings: (sessionId: string, settings: { modelKey?: string | null; profileKey?: string | null; fallbackEnabled?: boolean; reasoningEffort?: string }) => Promise<void>;
+  fallbackBanner: ComputerUseFallbackBanner | null;
+  dismissFallbackBanner: () => void;
   checkLocalMacosPermissions: () => Promise<ComputerUsePermissions>;
   requestLocalMacosPermissions: () => Promise<ComputerUsePermissionRequestResult>;
   openLocalMacosPrivacySettings: (section?: ComputerUsePermissionSection) => Promise<OpenPrivacySettingsResult>;
+  requestSingleLocalMacosPermission: (section: ComputerUsePermissionSection) => Promise<ComputerUsePermissions>;
+  probeInputMonitoring: (timeoutMs?: number) => Promise<boolean>;
 };
 
 const ComputerUseContext = createContext<ComputerUseContextValue>({
@@ -70,9 +84,14 @@ const ComputerUseContext = createContext<ComputerUseContextValue>({
   setSurface: async () => {},
   sendGuidance: async () => {},
   continueSession: async () => null,
-  checkLocalMacosPermissions: async () => ({ target: 'local-macos', accessibilityTrusted: false, screenRecordingGranted: false, automationGranted: false, helperReady: false }),
-  requestLocalMacosPermissions: async () => ({ permissions: { target: 'local-macos', accessibilityTrusted: false, screenRecordingGranted: false, automationGranted: false, helperReady: false }, requested: [], openedSettings: [] }),
+  updateSessionSettings: async () => {},
+  fallbackBanner: null,
+  dismissFallbackBanner: () => {},
+  checkLocalMacosPermissions: async () => ({ target: 'local-macos', accessibilityTrusted: false, screenRecordingGranted: false, automationGranted: false, inputMonitoringGranted: false, helperReady: false }),
+  requestLocalMacosPermissions: async () => ({ permissions: { target: 'local-macos', accessibilityTrusted: false, screenRecordingGranted: false, automationGranted: false, inputMonitoringGranted: false, helperReady: false }, requested: [], openedSettings: [] }),
   openLocalMacosPrivacySettings: async () => ({ opened: null }),
+  requestSingleLocalMacosPermission: async () => ({ target: 'local-macos', accessibilityTrusted: false, screenRecordingGranted: false, automationGranted: false, inputMonitoringGranted: false, helperReady: false }),
+  probeInputMonitoring: async () => false,
 });
 
 function sortSessions(sessions: ComputerSession[]): ComputerSession[] {
@@ -177,6 +196,16 @@ function buildConversationContextSummary(conversation: ConversationRecordLike | 
 export function ComputerUseProvider({ children }: { children: ReactNode }) {
   const [sessions, setSessions] = useState<ComputerSession[]>([]);
   const [frameHistory, setFrameHistory] = useState<Map<string, ComputerFrame[]>>(new Map());
+  const [fallbackBanner, setFallbackBanner] = useState<ComputerUseFallbackBanner | null>(null);
+  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const dismissFallbackBanner = useCallback(() => {
+    setFallbackBanner(null);
+    if (fallbackTimerRef.current) {
+      clearTimeout(fallbackTimerRef.current);
+      fallbackTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     legion.computerUse.listSessions()
@@ -229,6 +258,17 @@ export function ComputerUseProvider({ children }: { children: ReactNode }) {
           return next;
         });
         return;
+      }
+      if (payload.type === 'model-fallback') {
+        setFallbackBanner({
+          sessionId: payload.sessionId,
+          fromModel: payload.fromModel,
+          toModel: payload.toModel,
+          error: payload.error,
+        });
+        if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
+        fallbackTimerRef.current = setTimeout(() => setFallbackBanner(null), 8000);
+        // Also refetch the session to pick up the updated selectedModelKey
       }
       if ('sessionId' in payload) {
         void legion.computerUse.getSession(payload.sessionId)
@@ -310,12 +350,25 @@ export function ComputerUseProvider({ children }: { children: ReactNode }) {
       if (session) setSessions((current) => sortSessions([...current.filter((existing) => existing.id !== session.id), session]));
       return session;
     },
+    updateSessionSettings: async (sessionId, settings) => {
+      const session = await legion.computerUse.updateSessionSettings(sessionId, settings) as ComputerSession | null;
+      if (session) setSessions((current) => sortSessions([...current.filter((existing) => existing.id !== session.id), session]));
+    },
+    fallbackBanner,
+    dismissFallbackBanner,
     checkLocalMacosPermissions: async () => legion.computerUse.getLocalMacosPermissions() as Promise<ComputerUsePermissions>,
     requestLocalMacosPermissions: async () => legion.computerUse.requestLocalMacosPermissions() as Promise<ComputerUsePermissionRequestResult>,
     openLocalMacosPrivacySettings: async (section) => {
       return legion.computerUse.openLocalMacosPrivacySettings(section) as Promise<OpenPrivacySettingsResult>;
     },
-  }), [sessions, frameHistory]);
+    requestSingleLocalMacosPermission: async (section) => {
+      return legion.computerUse.requestSingleLocalMacosPermission(section) as Promise<ComputerUsePermissions>;
+    },
+    probeInputMonitoring: async (timeoutMs) => {
+      const result = await legion.computerUse.probeInputMonitoring(timeoutMs);
+      return result.inputMonitoringGranted;
+    },
+  }), [sessions, frameHistory, fallbackBanner, dismissFallbackBanner]);
 
   return (
     <ComputerUseContext.Provider value={value}>

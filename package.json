@@ -12,7 +12,8 @@
     "preview": "electron-vite preview",
     "start": "electron-vite preview",
     "rebuild": "electron-builder install-app-deps",
-    "build:mac": "pnpm build && electron-builder --mac --config",
+    "compile:swift": "bash scripts/compile-swift-helper.sh",
+    "build:mac": "pnpm compile:swift && pnpm build && electron-builder --mac --config",
     "lint": "eslint .",
     "type-check": "tsc --noEmit"
   },

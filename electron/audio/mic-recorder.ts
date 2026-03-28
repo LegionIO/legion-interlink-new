@@ -8,7 +8,7 @@
  * Communication uses executeJavaScript() for reliability — no IPC messaging.
  */
 
-import { BrowserWindow, ipcMain, type IpcMain } from 'electron';
+import { BrowserWindow, type IpcMain } from 'electron';
 import { writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';

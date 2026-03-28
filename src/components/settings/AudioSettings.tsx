@@ -3,8 +3,8 @@ import { EyeIcon, EyeOffIcon, Volume2Icon, SquareIcon, SearchIcon, XIcon } from 
 import type { SettingsProps } from './shared';
 import { Toggle, SliderField, settingsSelectClass } from './shared';
 import { createAzureSpeechAdapter, type AzureTtsConfig } from '@/lib/audio/azure-speech-adapters';
-import type { SpeechSynthesisAdapterTypes } from '@/lib/audio/speech-adapters';
-import { AZURE_NEURAL_VOICES, type AzureNeuralVoice } from '@/lib/azureNeuralVoices';
+import type { SpeechSynthesisUtterance } from '@/lib/audio/speech-adapters';
+import { AZURE_NEURAL_VOICES } from '@/lib/azureNeuralVoices';
 
 const PREVIEW_TEXT = 'Hello! This is a preview of how this voice sounds.';
 
@@ -47,7 +47,7 @@ const VoicePreviewButton: FC<{
 }> = ({ provider, nativeVoice, nativeRate, azure }) => {
   const [state, setState] = useState<PreviewState>('idle');
   const cancelRef = useRef<(() => void) | null>(null);
-  const utteranceRef = useRef<SpeechSynthesisAdapterTypes.Utterance | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   // Cleanup on unmount
   useEffect(() => {

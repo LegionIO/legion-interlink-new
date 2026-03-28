@@ -237,7 +237,6 @@ type ContentPart = {
 
 const MiniChatBubble: FC<{ role: string; content: ContentPart[] }> = ({ role, content }) => {
   const isAssistant = role === 'assistant';
-  const isUser = role === 'user';
 
   // Determine user message source (task, parent, or user)
   const firstTextPart = content.find((p) => p.type === 'text');

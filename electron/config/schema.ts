@@ -204,6 +204,7 @@ const computerUseConfigSchema = z.object({
   defaultTarget: computerUseTargetSchema,
   approvalModeDefault: computerUseApprovalModeSchema,
   idleTimeoutSec: z.number().positive(),
+  postActionDelayMs: z.number().min(0).max(5000),
   maxSessionDurationMin: z.number().positive(),
   models: z.object({
     plannerModelKey: z.string().optional(),
@@ -212,40 +213,18 @@ const computerUseConfigSchema = z.object({
     recoveryModelKey: z.string().optional(),
   }),
   capture: z.object({
-    fps: z.number().min(0.1).max(2),
     maxDimension: z.number().positive(),
     jpegQuality: z.number().min(0.1).max(1),
-    diffThreshold: z.number().min(0).max(1),
   }),
   safety: z.object({
-    pauseOnExternalAuth: z.boolean(),
-    pauseOnDownloads: z.boolean(),
-    pauseOnDeletes: z.boolean(),
     pauseOnTerminal: z.boolean(),
-    pauseOnClipboardPaste: z.boolean(),
-    pauseOnSystemSettings: z.boolean(),
     manualTakeoverPauses: z.boolean(),
   }),
   localMacos: z.object({
     autoRequestPermissions: z.boolean(),
     autoOpenPrivacySettings: z.boolean(),
-    allowedApps: z.array(z.string()),
-    deniedApps: z.array(z.string()),
     allowedDisplays: z.array(z.string()),
-    redactApps: z.array(z.string()),
     captureExcludedApps: z.array(z.string()),
-  }),
-  isolated: z.object({
-    browserProfileDir: z.string(),
-    downloadDir: z.string(),
-    allowedDomains: z.array(z.string()),
-    persistentSession: z.boolean(),
-  }),
-  persistence: z.object({
-    saveFrames: z.boolean(),
-    saveVideo: z.boolean(),
-    checkpointEveryActions: z.number().positive(),
-    retainDays: z.number().positive(),
   }),
   overlay: z.object({
     enabled: z.boolean(),

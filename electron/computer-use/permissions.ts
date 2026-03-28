@@ -1,6 +1,6 @@
 import { app, shell, systemPreferences } from 'electron';
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { accessSync, constants as fsConstants, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -19,7 +19,76 @@ const LOCAL_MACOS_PRIVACY_URLS: Record<ComputerUsePermissionSection, string> = {
   accessibility: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
   'screen-recording': 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
   automation: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Automation',
+  'input-monitoring': 'x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent',
 };
+
+/**
+ * Resolve the pre-compiled LocalMacosHelper binary path.
+ *
+ * In production (packaged .app): looks in process.resourcesPath/bin/
+ * In development: looks in <project>/build/bin/
+ *
+ * Returns the path if the binary exists and is executable, otherwise null.
+ */
+export function resolveCompiledHelperBinary(): string | null {
+  const candidates: string[] = [];
+
+  // Production: electron-builder extraResources places it under Resources/bin/
+  if (app.isPackaged) {
+    candidates.push(join(process.resourcesPath, 'bin', 'LocalMacosHelper'));
+  }
+
+  // Dev: compiled via `pnpm compile:swift` into build/bin/
+  candidates.push(join(process.cwd(), 'build', 'bin', 'LocalMacosHelper'));
+
+  for (const candidate of candidates) {
+    try {
+      accessSync(candidate, fsConstants.X_OK);
+      return candidate;
+    } catch {
+      // Not found or not executable — try next
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Build a safe env for the `xcrun swift` fallback path.
+ *
+ * Packaged macOS .app bundles launched from Finder/Dock inherit a minimal PATH
+ * that may not include the Xcode toolchain. This ensures xcrun and swiftc can
+ * find each other even in that context.
+ */
+export function buildSwiftFallbackEnv(): NodeJS.ProcessEnv {
+  const basePaths = [
+    '/usr/bin',
+    '/bin',
+    '/usr/sbin',
+    '/sbin',
+    '/usr/local/bin',
+    '/Library/Developer/CommandLineTools/usr/bin',
+  ];
+
+  const existingPath = process.env.PATH ?? '';
+  const pathSet = new Set([...basePaths, ...existingPath.split(':').filter(Boolean)]);
+  const mergedPath = [...pathSet].join(':');
+
+  const env: NodeJS.ProcessEnv = { ...process.env, PATH: mergedPath };
+
+  // Set DEVELOPER_DIR if not already present — helps xcrun locate the SDK
+  if (!env.DEVELOPER_DIR) {
+    const xcodeDir = '/Applications/Xcode.app/Contents/Developer';
+    const cltDir = '/Library/Developer/CommandLineTools';
+    if (existsSync(xcodeDir)) {
+      env.DEVELOPER_DIR = xcodeDir;
+    } else if (existsSync(cltDir)) {
+      env.DEVELOPER_DIR = cltDir;
+    }
+  }
+
+  return env;
+}
 
 function resolveHelperSource(): string {
   const candidates = [
@@ -63,6 +132,7 @@ export type LocalMacosHelperResponse = {
   accessibilityTrusted?: boolean;
   screenRecordingGranted?: boolean;
   automationGranted?: boolean;
+  inputMonitoringGranted?: boolean;
   desktopCoordinateWidth?: number;
   desktopCoordinateHeight?: number;
   desktopWidth?: number;
@@ -95,9 +165,20 @@ export type LocalMacosHelperResponse = {
 
 async function runLocalMacHelper(args: string[]): Promise<LocalMacosHelperResponse> {
   try {
+    // Prefer the pre-compiled binary (always available in production builds,
+    // available in dev after running `pnpm compile:swift`)
+    const binaryPath = resolveCompiledHelperBinary();
+    if (binaryPath) {
+      const { stdout } = await execFileAsync(binaryPath, args, { timeout: 15000 });
+      return JSON.parse(stdout || '{}') as LocalMacosHelperResponse;
+    }
+
+    // Fallback: interpret via xcrun swift (dev mode without pre-compiled binary).
+    // Use the safe env to ensure xcrun/swift are on PATH even in packaged apps.
     const helperScriptPath = resolveMaterializedHelperPath();
     const { stdout } = await execFileAsync('xcrun', ['swift', helperScriptPath, ...args], {
       timeout: 15000,
+      env: buildSwiftFallbackEnv(),
     });
     return JSON.parse(stdout || '{}') as LocalMacosHelperResponse;
   } catch (error) {
@@ -149,10 +230,27 @@ async function requestAutomationPermission(): Promise<boolean> {
   return probeAutomationPermission();
 }
 
+/**
+ * Functional probe for Input Monitoring permission.
+ *
+ * Spawns the helper with `probeInputMonitoring <timeoutMs>`. The helper starts a
+ * listenOnly event tap and waits for any real physical mouse/keyboard event. If
+ * one arrives within the timeout, the permission is confirmed. If the timeout
+ * elapses with no events, the permission is likely missing.
+ *
+ * The caller should ensure the user has been prompted to move their mouse or
+ * press a key so the probe has something to detect.
+ */
+export async function probeInputMonitoring(timeoutMs = 3000): Promise<boolean> {
+  const result = await runLocalMacHelper(['probeInputMonitoring', String(timeoutMs)]);
+  return result.ok === true && (result.inputMonitoringGranted ?? false);
+}
+
 function firstMissingPermission(permissions: ComputerUsePermissions): ComputerUsePermissionSection | null {
   if (!permissions.accessibilityTrusted) return 'accessibility';
   if (!permissions.screenRecordingGranted) return 'screen-recording';
   if (!permissions.automationGranted) return 'automation';
+  if (!permissions.inputMonitoringGranted) return 'input-monitoring';
   return null;
 }
 
@@ -168,7 +266,7 @@ function buildPermissionGuidance(
   if (openedSettings.length > 0) {
     fragments.push('System Settings was opened so you can finish the approval flow.');
   }
-  if (!permissions.accessibilityTrusted || !permissions.screenRecordingGranted || !permissions.automationGranted) {
+  if (!permissions.accessibilityTrusted || !permissions.screenRecordingGranted || !permissions.automationGranted || !permissions.inputMonitoringGranted) {
     fragments.push('After granting access, start or resume the session again.');
   }
   return fragments.length > 0 ? fragments.join(' ') : undefined;
@@ -180,13 +278,21 @@ export async function openLocalMacosPrivacySettings(section: ComputerUsePermissi
 }
 
 export async function getComputerUsePermissions(): Promise<ComputerUsePermissions> {
-  const helperResult = await runLocalMacHelper(['permissions']);
-  const automationGranted = await probeAutomationPermission();
+  // Run the basic permissions check and the input monitoring probe in parallel.
+  // The probe spawns the helper with a short timeout — it resolves early if the
+  // user's mouse/keyboard activity is detected (which is typical since they just
+  // interacted with the UI).
+  const [helperResult, automationGranted, inputMonitoringGranted] = await Promise.all([
+    runLocalMacHelper(['permissions']),
+    probeAutomationPermission(),
+    probeInputMonitoring(3000),
+  ]);
   return {
     target: 'local-macos',
     accessibilityTrusted: getAccessibilityStatus(),
     screenRecordingGranted: getScreenRecordingStatus(helperResult),
     automationGranted,
+    inputMonitoringGranted,
     helperReady: helperResult.ok === true,
     message: helperResult.error,
   };
@@ -196,6 +302,7 @@ export async function requestLocalMacosPermissions(options?: {
   accessibility?: boolean;
   screenRecording?: boolean;
   automation?: boolean;
+  inputMonitoring?: boolean;
   openSettings?: boolean;
 }): Promise<ComputerUsePermissionRequestResult> {
   const requested: ComputerUsePermissionSection[] = [];
@@ -238,6 +345,58 @@ export async function requestLocalMacosPermissions(options?: {
     openedSettings,
     message: buildPermissionGuidance(permissions, requested, openedSettings),
   };
+}
+
+/**
+ * Request a single permission section and return updated permission state.
+ *
+ * Unlike `requestLocalMacosPermissions()` which walks through all missing
+ * permissions sequentially, this targets exactly one section — useful for
+ * per-permission "Grant" buttons in the UI.
+ */
+export async function requestSinglePermission(
+  section: ComputerUsePermissionSection,
+  options?: { openSettings?: boolean },
+): Promise<ComputerUsePermissions> {
+  switch (section) {
+    case 'accessibility':
+      if (process.platform === 'darwin') {
+        try {
+          systemPreferences.isTrustedAccessibilityClient(true);
+        } catch {
+          // Ignore prompt failures — re-check below.
+        }
+      }
+      break;
+    case 'screen-recording':
+      await requestScreenRecordingPermission();
+      break;
+    case 'automation':
+      await requestAutomationPermission();
+      break;
+    case 'input-monitoring':
+      // Input Monitoring cannot be programmatically requested — the user must
+      // grant it in System Settings. Open the pane directly.
+      await openLocalMacosPrivacySettings('input-monitoring');
+      break;
+  }
+
+  const permissions = await getComputerUsePermissions();
+
+  // If the permission is still missing and the caller wants to open Settings,
+  // deep-link to the relevant pane.
+  if (options?.openSettings !== false) {
+    const stillMissing =
+      (section === 'accessibility' && !permissions.accessibilityTrusted) ||
+      (section === 'screen-recording' && !permissions.screenRecordingGranted) ||
+      (section === 'automation' && !permissions.automationGranted) ||
+      (section === 'input-monitoring' && !permissions.inputMonitoringGranted);
+    if (stillMissing) {
+      await openLocalMacosPrivacySettings(section);
+    }
+  }
+
+  return permissions;
 }
 
 export async function runLocalMacMouseCommand(args: string[]): Promise<LocalMacosHelperResponse> {

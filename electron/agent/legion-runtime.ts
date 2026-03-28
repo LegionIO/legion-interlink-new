@@ -233,6 +233,25 @@ function stringifyValue(value: unknown, maxLength = 2000): string {
   }
 }
 
+function toIsoTimestamp(value: unknown): string | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return new Date(value).toISOString();
+  }
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return new Date(numeric).toISOString();
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+  return undefined;
+}
+
+function normalizeDaemonEventName(eventName: string | undefined, payload: Record<string, unknown>): string {
+  if (eventName && eventName.trim().length > 0) return eventName.trim();
+  const payloadType = payload.type;
+  return typeof payloadType === 'string' ? payloadType.trim() : '';
+}
+
 async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator<StreamEvent> {
   const daemonUrl = resolveDaemonUrl(options.config);
   const readyUrl = new URL('/api/ready', daemonUrl).toString();
@@ -340,8 +359,134 @@ async function* consumeDaemonSSE(
   const decoder = new TextDecoder();
   let buffer = '';
   let emittedAny = false;
+  let currentEventName = '';
+  let currentDataLines: string[] = [];
 
   try {
+    const flushEvent = async (): Promise<StreamEvent[]> => {
+      if (!currentEventName && currentDataLines.length === 0) return [];
+
+      const rawData = currentDataLines.join('\n').trim();
+      const explicitEventName = currentEventName;
+      currentEventName = '';
+      currentDataLines = [];
+
+      if (!rawData || rawData === '[DONE]') return [];
+
+      let payload: Record<string, unknown>;
+      try {
+        payload = JSON.parse(rawData) as Record<string, unknown>;
+      } catch {
+        return [{ conversationId, type: 'text-delta', text: rawData }];
+      }
+
+      const eventName = normalizeDaemonEventName(explicitEventName, payload);
+      if (!eventName) return [];
+
+      if (eventName === 'text-delta' || eventName === 'text_delta' || eventName === 'delta') {
+        const text = (payload.text as string) || (payload.delta as string) || '';
+        return text ? [{ conversationId, type: 'text-delta', text }] : [];
+      }
+
+      if (eventName === 'tool-call' || eventName === 'tool_call') {
+        return [{
+          conversationId,
+          type: 'tool-call',
+          toolCallId: (payload.toolCallId as string) ?? (payload.tool_call_id as string),
+          toolName: (payload.toolName as string) ?? (payload.tool_name as string),
+          args: payload.args ?? payload.parameters ?? {},
+          startedAt: toIsoTimestamp(payload.timestamp) ?? new Date().toISOString(),
+        }];
+      }
+
+      if (eventName === 'tool-result' || eventName === 'tool_result') {
+        return [{
+          conversationId,
+          type: 'tool-result',
+          toolCallId: (payload.toolCallId as string) ?? (payload.tool_call_id as string),
+          toolName: (payload.toolName as string) ?? (payload.tool_name as string),
+          result: payload.result ?? payload.content,
+          finishedAt: toIsoTimestamp(payload.timestamp) ?? new Date().toISOString(),
+        }];
+      }
+
+      if (eventName === 'tool-error' || eventName === 'tool_error') {
+        return [{
+          conversationId,
+          type: 'tool-result',
+          toolCallId: (payload.toolCallId as string) ?? (payload.tool_call_id as string),
+          toolName: (payload.toolName as string) ?? (payload.tool_name as string),
+          result: { isError: true, error: payload.error ?? payload.message ?? 'Tool execution failed' },
+          finishedAt: toIsoTimestamp(payload.timestamp) ?? new Date().toISOString(),
+        }];
+      }
+
+      if (eventName === 'tool-progress' || eventName === 'tool_progress') {
+        const progressType = payload.type;
+        if (progressType === 'extraction_start' || progressType === 'extraction_complete') {
+          return [{
+            conversationId,
+            type: 'tool-compaction',
+            toolCallId: (payload.toolCallId as string) ?? (payload.tool_call_id as string),
+            toolName: (payload.toolName as string) ?? (payload.tool_name as string),
+            data: {
+              phase: progressType === 'extraction_start' ? 'start' : 'complete',
+              originalContent: progressType === 'extraction_start' && typeof payload.content === 'string'
+                ? payload.content
+                : undefined,
+              resultContent: progressType === 'extraction_complete' && typeof payload.content === 'string'
+                ? payload.content
+                : undefined,
+              extractionDurationMs: typeof payload.duration_ms === 'number' ? payload.duration_ms : 0,
+              timestamp: toIsoTimestamp(payload.timestamp),
+            },
+          }];
+        }
+
+        return [{
+          conversationId,
+          type: 'tool-progress',
+          toolCallId: (payload.toolCallId as string) ?? (payload.tool_call_id as string),
+          toolName: (payload.toolName as string) ?? (payload.tool_name as string),
+          data: payload,
+        }];
+      }
+
+      if (eventName === 'error') {
+        return [{
+          conversationId,
+          type: 'error',
+          error: (payload.error as string) || (payload.message as string) || 'Daemon stream error',
+        }];
+      }
+
+      if (eventName === 'done') {
+        return [{ conversationId, type: 'done', data: payload }];
+      }
+
+      if (eventName === 'context_usage' || eventName === 'context-usage') {
+        return [{ conversationId, type: 'context-usage', data: payload }];
+      }
+
+      if (
+        eventName === 'conversation_compaction'
+        || eventName === 'compaction_start'
+        || eventName === 'compaction_complete'
+        || eventName === 'compaction_error'
+        || eventName === 'memory_processor_start'
+        || eventName === 'memory_processor_complete'
+        || eventName === 'memory_processor_error'
+      ) {
+        return [{ conversationId, type: 'compaction', data: { event: eventName, ...payload } }];
+      }
+
+      if (payload.response && typeof payload.response === 'string') {
+        return [{ conversationId, type: 'text-delta', text: payload.response as string }];
+      }
+
+      return [];
+    };
+
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -351,57 +496,39 @@ async function* consumeDaemonSSE(
       buffer = lines.pop() || '';
 
       for (const line of lines) {
-        if (!line.startsWith('data:')) continue;
-        const raw = line.slice(5).trim();
-        if (!raw || raw === '[DONE]') continue;
-
-        let event: Record<string, unknown>;
-        try {
-          event = JSON.parse(raw) as Record<string, unknown>;
-        } catch {
-          emittedAny = true;
-          yield { conversationId, type: 'text-delta', text: raw };
+        const trimmedLine = line.replace(/\r$/, '');
+        if (!trimmedLine) {
+          const events = await flushEvent();
+          for (const event of events) {
+            emittedAny = true;
+            yield event;
+          }
           continue;
         }
-
-        const eventType = (event.type as string) || '';
-        if (eventType === 'text-delta' || eventType === 'delta') {
-          const text = (event.text as string) || (event.delta as string) || '';
-          if (text) {
-            emittedAny = true;
-            yield { conversationId, type: 'text-delta', text };
-          }
-        } else if (eventType === 'tool-call') {
-          emittedAny = true;
-          yield {
-            conversationId,
-            type: 'tool-call',
-            toolCallId: event.toolCallId as string,
-            toolName: event.toolName as string,
-            args: event.args,
-            startedAt: new Date().toISOString(),
-          };
-        } else if (eventType === 'tool-result') {
-          emittedAny = true;
-          yield {
-            conversationId,
-            type: 'tool-result',
-            toolCallId: event.toolCallId as string,
-            toolName: event.toolName as string,
-            result: event.result,
-            finishedAt: new Date().toISOString(),
-          };
-        } else if (eventType === 'error') {
-          yield {
-            conversationId,
-            type: 'error',
-            error: (event.error as string) || (event.message as string) || 'Daemon stream error',
-          };
-        } else if (event.response && typeof event.response === 'string') {
-          emittedAny = true;
-          yield { conversationId, type: 'text-delta', text: event.response as string };
+        if (trimmedLine.startsWith(':')) continue;
+        if (trimmedLine.startsWith('event:')) {
+          currentEventName = trimmedLine.slice(6).trim();
+          continue;
+        }
+        if (trimmedLine.startsWith('data:')) {
+          currentDataLines.push(trimmedLine.slice(5).trimStart());
         }
       }
+    }
+
+    if (buffer.trim().length > 0) {
+      const finalLine = buffer.replace(/\r$/, '');
+      if (finalLine.startsWith('event:')) {
+        currentEventName = finalLine.slice(6).trim();
+      } else if (finalLine.startsWith('data:')) {
+        currentDataLines.push(finalLine.slice(5).trimStart());
+      }
+    }
+
+    const trailingEvents = await flushEvent();
+    for (const event of trailingEvents) {
+      emittedAny = true;
+      yield event;
     }
   } catch (error) {
     if (!abortSignal?.aborted) {
