@@ -18,7 +18,6 @@ import { DaemonSettings } from './DaemonSettings';
 import { DaemonExtensions } from './DaemonExtensions';
 import { DaemonTasks } from './DaemonTasks';
 import { DaemonWorkers } from './DaemonWorkers';
-import { DaemonSchedules } from './DaemonSchedules';
 import { DaemonEvents } from './DaemonEvents';
 import { DaemonAudit } from './DaemonAudit';
 import { DaemonPrompts } from './DaemonPrompts';
@@ -43,7 +42,7 @@ import { usePlugins } from '@/providers/PluginProvider';
 type SettingsSection =
   | 'models' | 'profiles' | 'memory' | 'compaction' | 'tools' | 'skills' | 'sub-agents' | 'system-prompt'
   | 'audio' | 'realtime' | 'computer-use' | 'advanced' | 'mcp'
-  | 'daemon' | 'extensions' | 'tasks' | 'workers' | 'schedules' | 'events' | 'audit'
+  | 'daemon' | 'extensions' | 'tasks' | 'workers' | 'events' | 'audit'
   | 'prompts' | 'webhooks' | 'tenants' | 'capacity' | 'governance' | 'metrics' | 'doctor' | 'topology'
   | 'gaia' | 'task-graph' | 'memory-inspector' | 'cost-tracker' | 'mesh' | 'schedule-builder';
 
@@ -65,7 +64,6 @@ const sections: Array<{ key: SettingsSection; label: string; group?: string }> =
   { key: 'extensions', label: 'Extensions', group: 'Legion Daemon' },
   { key: 'tasks', label: 'Tasks', group: 'Legion Daemon' },
   { key: 'workers', label: 'Workers', group: 'Legion Daemon' },
-  { key: 'schedules', label: 'Schedules', group: 'Legion Daemon' },
   { key: 'events', label: 'Events', group: 'Legion Daemon' },
   { key: 'audit', label: 'Audit', group: 'Legion Daemon' },
   { key: 'prompts', label: 'Prompts', group: 'Legion Daemon' },
@@ -208,7 +206,6 @@ export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
         {activeSection === 'extensions' && <DaemonExtensions config={config} updateConfig={updateConfig} />}
         {activeSection === 'tasks' && <DaemonTasks config={config} updateConfig={updateConfig} />}
         {activeSection === 'workers' && <DaemonWorkers config={config} updateConfig={updateConfig} />}
-        {activeSection === 'schedules' && <DaemonSchedules config={config} updateConfig={updateConfig} />}
         {activeSection === 'events' && <DaemonEvents config={config} updateConfig={updateConfig} />}
         {activeSection === 'audit' && <DaemonAudit config={config} updateConfig={updateConfig} />}
         {activeSection === 'prompts' && <DaemonPrompts config={config} updateConfig={updateConfig} />}
