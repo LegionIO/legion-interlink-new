@@ -2,6 +2,45 @@ import type { IpcMain } from 'electron';
 import { readFileSync } from 'fs';
 import type { LegionConfig } from '../config/schema.js';
 import { daemonGet, daemonPost, daemonDelete } from '../lib/daemon-client.js';
+import type { DaemonResult } from '../lib/daemon-client.js';
+
+async function daemonGetWithFallback<T = unknown>(
+  config: LegionConfig,
+  legionHome: string,
+  v3Path: string,
+  v2Path: string,
+  query?: Record<string, string>,
+): Promise<DaemonResult<T>> {
+  const result = await daemonGet<T>(config, legionHome, v3Path, query);
+  if (result.ok || result.error !== 'HTTP 404') return result;
+  console.info(`[Knowledge] v3 route ${v3Path} unavailable, using v2: ${v2Path}`);
+  return daemonGet<T>(config, legionHome, v2Path, query);
+}
+
+async function daemonPostWithFallback<T = unknown>(
+  config: LegionConfig,
+  legionHome: string,
+  v3Path: string,
+  v2Path: string,
+  body: unknown,
+): Promise<DaemonResult<T>> {
+  const result = await daemonPost<T>(config, legionHome, v3Path, body);
+  if (result.ok || result.error !== 'HTTP 404') return result;
+  console.info(`[Knowledge] v3 route ${v3Path} unavailable, using v2: ${v2Path}`);
+  return daemonPost<T>(config, legionHome, v2Path, body);
+}
+
+async function daemonDeleteWithFallback(
+  config: LegionConfig,
+  legionHome: string,
+  v3Path: string,
+  v2Path: string,
+): Promise<DaemonResult> {
+  const result = await daemonDelete(config, legionHome, v3Path);
+  if (result.ok || result.error !== 'HTTP 404') return result;
+  console.info(`[Knowledge] v3 route ${v3Path} unavailable, using v2: ${v2Path}`);
+  return daemonDelete(config, legionHome, v2Path);
+}
 
 export function registerKnowledgeHandlers(
   ipcMain: IpcMain,
@@ -48,22 +87,37 @@ export function registerKnowledgeHandlers(
   });
 
   ipcMain.handle('knowledge:monitors-list', async () =>
-    daemonGet(cfg(), legionHome, '/api/lex/knowledge/monitors'));
+    daemonGetWithFallback(cfg(), legionHome,
+      '/api/extensions/knowledge/runners/monitors/list',
+      '/api/lex/knowledge/monitors'));
 
   ipcMain.handle('knowledge:monitor-add', async (_e, path: string) =>
-    daemonPost(cfg(), legionHome, '/api/lex/knowledge/monitors', { path }));
+    daemonPostWithFallback(cfg(), legionHome,
+      '/api/extensions/knowledge/runners/monitors/create',
+      '/api/lex/knowledge/monitors',
+      { path }));
 
   ipcMain.handle('knowledge:monitor-remove', async (_e, id: string) =>
-    daemonDelete(cfg(), legionHome, `/api/lex/knowledge/monitors/${id}`));
+    daemonDeleteWithFallback(cfg(), legionHome,
+      `/api/extensions/knowledge/runners/monitors/delete?id=${id}`,
+      `/api/lex/knowledge/monitors/${id}`));
 
   ipcMain.handle('knowledge:monitor-scan', async (_e, id: string) =>
-    daemonPost(cfg(), legionHome, `/api/lex/knowledge/monitors/${id}/scan`, {}));
+    daemonPostWithFallback(cfg(), legionHome,
+      `/api/extensions/knowledge/runners/monitors/scan?id=${id}`,
+      `/api/lex/knowledge/monitors/${id}/scan`,
+      {}));
 
   ipcMain.handle('knowledge:health', async () =>
-    daemonGet(cfg(), legionHome, '/api/lex/knowledge/health'));
+    daemonGetWithFallback(cfg(), legionHome,
+      '/api/extensions/knowledge/runners/health/check',
+      '/api/lex/knowledge/health'));
 
   ipcMain.handle('knowledge:maintain', async () =>
-    daemonPost(cfg(), legionHome, '/api/lex/knowledge/maintain', {}));
+    daemonPostWithFallback(cfg(), legionHome,
+      '/api/extensions/knowledge/runners/maintenance/run',
+      '/api/lex/knowledge/maintain',
+      {}));
 
   ipcMain.handle('knowledge:status', async () =>
     daemonGet(cfg(), legionHome, '/api/apollo/status'));
