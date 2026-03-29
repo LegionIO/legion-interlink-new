@@ -254,15 +254,14 @@ async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator
     return;
   }
 
-  const model = options.modelConfig.modelName || '';
-  const provider = toLegionProvider(options.modelConfig.provider);
-  if (!model) {
-    console.warn('[LegionRuntime] No model name configured, daemon inference will likely fail');
-  }
+  // Let the daemon use its own model/provider defaults.
+  // Only forward model/provider if explicitly configured for daemon override.
+  const daemonModelOverride = options.config.runtime?.legion?.model as string | undefined;
+  const daemonProviderOverride = options.config.runtime?.legion?.provider as string | undefined;
   const requestBody: Record<string, unknown> = {
     messages: normalizedMessages,
-    ...(model ? { model } : {}),
-    ...(provider ? { provider } : {}),
+    ...(daemonModelOverride ? { model: daemonModelOverride } : {}),
+    ...(daemonProviderOverride ? { provider: daemonProviderOverride } : {}),
   };
   if (options.reasoningEffort) {
     requestBody.reasoning_effort = options.reasoningEffort;
