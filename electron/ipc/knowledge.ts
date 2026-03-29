@@ -49,21 +49,23 @@ export function registerKnowledgeHandlers(
 ): void {
   const cfg = () => getConfig();
 
-  ipcMain.handle('knowledge:query', async (_e, query: string, scope?: string, synthesize?: boolean) =>
-    daemonPost(cfg(), legionHome, '/api/apollo/query', { query, scope, synthesize }));
+  ipcMain.handle('knowledge:query', async (_e, query: string, _scope?: string, _synthesize?: boolean) =>
+    daemonPost(cfg(), legionHome, '/api/apollo/query', { query, agent_id: 'legion-interlink' }));
 
-  ipcMain.handle('knowledge:retrieve', async (_e, query: string, scope?: string, limit?: number) =>
-    daemonPost(cfg(), legionHome, '/api/apollo/retrieve', { query, scope, limit }));
+  ipcMain.handle('knowledge:retrieve', async (_e, query: string, _scope?: string, limit?: number) =>
+    daemonPost(cfg(), legionHome, '/api/apollo/query', { query, limit: limit || 20, agent_id: 'legion-interlink' }));
 
   ipcMain.handle('knowledge:browse', async (_e, filters?: { tag?: string; source?: string; page?: string; per_page?: string }) => {
-    const query: Record<string, string> = {};
-    if (filters?.tag) query['tag'] = filters.tag;
-    if (filters?.source) query['source'] = filters.source;
-    if (filters?.page) query['page'] = filters.page;
-    if (filters?.per_page) query['per_page'] = filters.per_page;
-    return daemonGet(cfg(), legionHome, '/api/apollo/entries', query);
+    const body: Record<string, unknown> = {
+      query: filters?.tag || filters?.source || '*',
+      limit: parseInt(filters?.per_page || '50', 10),
+      agent_id: 'legion-interlink',
+    };
+    if (filters?.tag) body.tags = [filters.tag];
+    return daemonPost(cfg(), legionHome, '/api/apollo/query', body);
   });
 
+  // NOTE: DELETE /api/apollo/entries/{id} does not exist in the daemon OpenAPI spec — this will 404 until the daemon implements it
   ipcMain.handle('knowledge:delete', async (_e, id: string) =>
     daemonDelete(cfg(), legionHome, `/api/apollo/entries/${id}`));
 
@@ -72,8 +74,13 @@ export function registerKnowledgeHandlers(
 
   ipcMain.handle('knowledge:ingest-file', async (_e, filePath: string) => {
     try {
-      const content = readFileSync(filePath, 'utf-8');
       const fileName = filePath.split('/').pop() || filePath;
+      const ext = fileName.split('.').pop()?.toLowerCase() || '';
+      const binaryTypes = ['pdf', 'docx', 'xlsx', 'pptx', 'doc', 'xls', 'ppt', 'zip', 'gz', 'tar', 'png', 'jpg', 'jpeg', 'gif', 'webp'];
+      if (binaryTypes.includes(ext)) {
+        return { ok: false, error: `Binary file type .${ext} requires daemon-side extraction. Use the daemon absorber pipeline for this file type.` };
+      }
+      const content = readFileSync(filePath, 'utf-8');
       return daemonPost(cfg(), legionHome, '/api/apollo/ingest', {
         content,
         source_channel: 'desktop',
@@ -112,7 +119,7 @@ export function registerKnowledgeHandlers(
     daemonGet(cfg(), legionHome, '/api/apollo/stats'));
 
   ipcMain.handle('knowledge:maintain', async () =>
-    daemonPost(cfg(), legionHome, '/api/apollo/maintenance', {}));
+    daemonPost(cfg(), legionHome, '/api/apollo/maintenance', { action: 'decay_cycle' }));
 
   ipcMain.handle('knowledge:status', async () =>
     daemonGet(cfg(), legionHome, '/api/apollo/status'));
