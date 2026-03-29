@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type FC } from 'react';
+import { useState, useEffect, useCallback, useRef, type FC } from 'react';
 import {
   LinkIcon, PlayIcon, SearchIcon, Loader2Icon, CheckCircle2Icon,
   XCircleIcon, GlobeIcon, CircleIcon, RefreshCwIcon,
@@ -31,6 +31,7 @@ export const AbsorbTab: FC = () => {
   const [resolving, setResolving] = useState(false);
   const [dispatching, setDispatching] = useState(false);
   const [jobs, setJobs] = useState<AbsorbJob[]>([]);
+  const pollIntervalsRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
 
   const loadPatterns = useCallback(async () => {
     setLoading(true);
@@ -44,6 +45,45 @@ export const AbsorbTab: FC = () => {
   }, []);
 
   useEffect(() => { void loadPatterns(); }, [loadPatterns]);
+
+  useEffect(() => {
+    const intervals = pollIntervalsRef.current;
+    return () => {
+      intervals.forEach((id) => clearInterval(id));
+      intervals.clear();
+    };
+  }, []);
+
+  const startPolling = useCallback((localId: string, jobId: string) => {
+    const intervalId = setInterval(() => {
+      void (async () => {
+        try {
+          const res = await legion.daemon.absorberJob(jobId);
+          if (!res.ok) return;
+          const d = res.data as { status?: string; absorber?: string; error?: string };
+          const terminal = d.status === 'completed' || d.status === 'failed';
+          setJobs((prev) =>
+            prev.map((j) =>
+              j.id === localId
+                ? {
+                    ...j,
+                    id: jobId,
+                    status: terminal ? (d.status as 'completed' | 'failed') : 'running',
+                    absorber: d.absorber ?? j.absorber,
+                    error: d.error,
+                  }
+                : j,
+            ),
+          );
+          if (terminal) {
+            clearInterval(intervalId);
+            pollIntervalsRef.current.delete(localId);
+          }
+        } catch { /* daemon unavailable, keep polling */ }
+      })();
+    }, 2000);
+    pollIntervalsRef.current.set(localId, intervalId);
+  }, []);
 
   const handleResolve = async () => {
     if (!urlInput.trim()) return;
@@ -74,13 +114,24 @@ export const AbsorbTab: FC = () => {
       const res = await legion.daemon.absorberDispatch(input, scope);
       if (res.ok && res.data) {
         const d = res.data as { job_id?: string; absorber?: string; success?: boolean; error?: string };
-        setJobs((prev) =>
-          prev.map((j) =>
-            j.id === jobId
-              ? { ...j, id: d.job_id || j.id, status: d.success ? 'completed' : 'failed', absorber: d.absorber, error: d.error }
-              : j,
-          ),
-        );
+        if (d.job_id) {
+          setJobs((prev) =>
+            prev.map((j) =>
+              j.id === jobId
+                ? { ...j, absorber: d.absorber, status: 'running' }
+                : j,
+            ),
+          );
+          startPolling(jobId, d.job_id);
+        } else {
+          setJobs((prev) =>
+            prev.map((j) =>
+              j.id === jobId
+                ? { ...j, id: d.job_id || j.id, status: d.success ? 'completed' : 'failed', absorber: d.absorber, error: d.error }
+                : j,
+            ),
+          );
+        }
       } else {
         setJobs((prev) =>
           prev.map((j) => (j.id === jobId ? { ...j, status: 'failed', error: res.error } : j)),
