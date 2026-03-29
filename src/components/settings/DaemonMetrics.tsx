@@ -7,6 +7,7 @@ import {
   ActivityIcon,
 } from 'lucide-react';
 import { type SettingsProps } from './shared';
+import { legion } from '@/lib/ipc-client';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
@@ -25,9 +26,6 @@ interface HealthData {
   db_connected?: boolean;
   [key: string]: unknown;
 }
-
-const daemonCall = (method: string, ...args: unknown[]) =>
-  ((window as unknown as { legion: { daemon: Record<string, (...a: unknown[]) => Promise<{ ok: boolean; data?: unknown; error?: string }>> } }).legion.daemon[method](...args));
 
 const AUTO_REFRESH_MS = 10_000;
 
@@ -92,7 +90,7 @@ export const DaemonMetrics: FC<SettingsProps> = () => {
     setLoadState('loading');
     setLoadError('');
     try {
-      const result = await daemonCall('health');
+      const result = await legion.daemon.health();
       if (result.ok) {
         setHealth((result.data as HealthData) ?? {});
         setLoadState('loaded');

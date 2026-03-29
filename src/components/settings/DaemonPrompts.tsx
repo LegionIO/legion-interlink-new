@@ -9,6 +9,7 @@ import {
   XIcon,
 } from 'lucide-react';
 import { type SettingsProps } from './shared';
+import { legion } from '@/lib/ipc-client';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 type RunState = 'idle' | 'running' | 'done' | 'error';
@@ -27,9 +28,6 @@ interface RunForm {
   model: string;
 }
 
-const daemonCall = (method: string, ...args: unknown[]) =>
-  ((window as unknown as { legion: { daemon: Record<string, (...a: unknown[]) => Promise<{ ok: boolean; data?: unknown; error?: string }>> } }).legion.daemon[method](...args));
-
 export const DaemonPrompts: FC<SettingsProps> = () => {
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [loadState, setLoadState] = useState<LoadState>('idle');
@@ -43,7 +41,7 @@ export const DaemonPrompts: FC<SettingsProps> = () => {
     setLoadState('loading');
     setLoadError('');
     try {
-      const result = await daemonCall('prompts');
+      const result = await legion.daemon.prompts();
       if (result.ok && Array.isArray(result.data)) {
         setPrompts(result.data as Prompt[]);
         setLoadState('loaded');
@@ -92,7 +90,7 @@ export const DaemonPrompts: FC<SettingsProps> = () => {
     }
     if (runForm.model) body['model'] = runForm.model;
     try {
-      const result = await daemonCall('promptRun', runForm.promptName, body);
+      const result = await legion.daemon.promptRun(runForm.promptName, body);
       if (result.ok) {
         setRunState('done');
         setRunResult(typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2));

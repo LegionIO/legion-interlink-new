@@ -196,6 +196,12 @@ const fallbackConfigSchema = z.object({
   modelKeys: z.array(z.string()),
 });
 
+const knowledgeConfigSchema = z.object({
+  ragEnabled: z.boolean(),
+  captureEnabled: z.boolean(),
+  scope: z.enum(['global', 'local', 'all']),
+});
+
 const computerUseConfigSchema = z.object({
   enabled: z.boolean(),
   showStepLog: z.boolean(),
@@ -337,6 +343,12 @@ export const legionConfigSchema = z.object({
     fileAccess: fileAccessSchema,
     processStreaming: processStreamingSchema,
     subAgents: subAgentConfigSchema,
+    webFetch: z.object({
+      enabled: z.boolean().default(true),
+    }).optional(),
+    webSearch: z.object({
+      enabled: z.boolean().default(true),
+    }).optional(),
   }),
   mcpServers: z.array(mcpServerSchema),
   skills: z.object({
@@ -363,6 +375,7 @@ export const legionConfigSchema = z.object({
   profiles: z.array(profileConfigSchema).optional(),
   defaultProfileKey: z.string().optional(),
   fallback: fallbackConfigSchema.optional(),
+  knowledge: knowledgeConfigSchema.optional(),
 });
 
 export type LegionConfig = z.infer<typeof legionConfigSchema>;

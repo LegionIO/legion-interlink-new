@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, type FC } from 'react';
 import { RefreshCwIcon, LoaderIcon, WifiOffIcon, RadioIcon, CircleStopIcon } from 'lucide-react';
 import { type SettingsProps } from './shared';
+import { legion } from '@/lib/ipc-client';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
@@ -9,9 +10,6 @@ interface DaemonEvent {
   type: string;
   data?: unknown;
 }
-
-const daemonCall = (method: string, ...args: unknown[]) =>
-  ((window as unknown as { legion: { daemon: Record<string, (...a: unknown[]) => Promise<{ ok: boolean; data?: unknown; error?: string }>> } }).legion.daemon[method](...args));
 
 const LIVE_INTERVAL_MS = 3000;
 const MAX_EVENTS = 200;
@@ -30,7 +28,7 @@ export const DaemonEvents: FC<SettingsProps> = () => {
       setLoadError('');
     }
     try {
-      const result = await daemonCall('eventsRecent', 50);
+      const result = await legion.daemon.eventsRecent(50);
       if (result.ok && Array.isArray(result.data)) {
         const incoming = result.data as DaemonEvent[];
         if (append) {
@@ -89,7 +87,7 @@ export const DaemonEvents: FC<SettingsProps> = () => {
   const toggleLive = async () => {
     if (!live) {
       try {
-        await daemonCall('eventsSubscribe');
+        await legion.daemon.eventsSubscribe();
       } catch {
         // subscribe is best-effort
       }
@@ -97,7 +95,7 @@ export const DaemonEvents: FC<SettingsProps> = () => {
     } else {
       setLive(false);
       try {
-        await daemonCall('eventsUnsubscribe');
+        await legion.daemon.eventsUnsubscribe();
       } catch {
         // unsubscribe is best-effort
       }

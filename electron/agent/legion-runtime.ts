@@ -1,7 +1,7 @@
-import { createHmac, randomUUID } from 'crypto';
-import { existsSync, readFileSync, realpathSync } from 'fs';
+import { existsSync, realpathSync } from 'fs';
 import { join, resolve } from 'path';
 import type { LegionConfig } from '../config/schema.js';
+import { resolveDaemonUrl, resolveAuthToken } from '../lib/daemon-client.js';
 import type { LLMModelConfig } from './model-catalog.js';
 import type { StreamEvent } from './mastra-agent.js';
 
@@ -111,46 +111,6 @@ function resolveLegionConfigDir(config: LegionConfig, legionHome: string): strin
   return join(legionHome, 'settings');
 }
 
-function resolveDaemonUrl(config: LegionConfig): string {
-  const configured = runtimeConfig(config).legion.daemonUrl.trim();
-  return configured || 'http://127.0.0.1:4567';
-}
-
-function resolveDaemonAuthToken(config: LegionConfig, legionHome: string): string | null {
-  const cryptPath = join(resolveLegionConfigDir(config, legionHome), 'crypt.json');
-  if (!existsSync(cryptPath)) return null;
-
-  try {
-    const raw = JSON.parse(readFileSync(cryptPath, 'utf-8')) as {
-      crypt?: { cluster_secret?: string };
-    };
-    const clusterSecret = raw.crypt?.cluster_secret?.trim();
-    if (!clusterSecret) return null;
-
-    const now = Math.floor(Date.now() / 1000);
-    const header = base64UrlEncode({ alg: 'HS256', typ: 'JWT' });
-    const payload = base64UrlEncode({
-      sub: process.env.USER || process.env.USERNAME || 'legion-interlink',
-      name: 'Legion Interlink',
-      roles: ['desktop'],
-      scope: 'human',
-      iss: 'legion',
-      iat: now,
-      exp: now + 3600,
-      jti: randomUUID(),
-    });
-    const signature = createHmac('sha256', clusterSecret)
-      .update(`${header}.${payload}`)
-      .digest('base64url');
-    return `${header}.${payload}.${signature}`;
-  } catch {
-    return null;
-  }
-}
-
-function base64UrlEncode(value: unknown): string {
-  return Buffer.from(JSON.stringify(value)).toString('base64url');
-}
 
 function resolveRubyPath(config: LegionConfig): string {
   const configured = runtimeConfig(config).legion.rubyPath.trim();
@@ -255,12 +215,14 @@ function normalizeDaemonEventName(eventName: string | undefined, payload: Record
 async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator<StreamEvent> {
   const daemonUrl = resolveDaemonUrl(options.config);
   const readyUrl = new URL('/api/ready', daemonUrl).toString();
-  const chatUrl = new URL('/api/llm/chat', daemonUrl).toString();
-  const authToken = resolveDaemonAuthToken(options.config, options.legionHome);
+  const inferenceUrl = new URL('/api/llm/inference', daemonUrl).toString();
+  const authToken = resolveAuthToken(options.config, options.legionHome);
 
   let readyResponse: Response;
   try {
-    readyResponse = await fetch(readyUrl, { signal: options.abortSignal });
+    readyResponse = await fetch(readyUrl, {
+      signal: options.abortSignal ?? AbortSignal.timeout(5000),
+    });
   } catch (error) {
     yield {
       conversationId: options.conversationId,
@@ -281,8 +243,8 @@ async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator
     return;
   }
 
-  const daemonPayload = buildDaemonPayload(options.messages);
-  if (!daemonPayload.message) {
+  const normalizedMessages = normalizeMessages(options.messages);
+  if (normalizedMessages.length === 0 || !normalizedMessages.some((m) => m.role === 'user')) {
     yield {
       conversationId: options.conversationId,
       type: 'error',
@@ -292,28 +254,42 @@ async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator
     return;
   }
 
+  // Let the daemon use its own model/provider defaults.
+  // Only forward model/provider if explicitly configured for daemon override.
+  const legionRuntime = options.config.runtime?.legion as Record<string, unknown> | undefined;
+  const daemonModelOverride = legionRuntime?.model as string | undefined;
+  const daemonProviderOverride = legionRuntime?.provider as string | undefined;
   const requestBody: Record<string, unknown> = {
-    message: daemonPayload.message,
-    ...(daemonPayload.context ? { context: daemonPayload.context } : {}),
-    model: options.modelConfig.modelName,
-    provider: toLegionProvider(options.modelConfig.provider),
+    messages: normalizedMessages,
+    ...(daemonModelOverride ? { model: daemonModelOverride } : {}),
+    ...(daemonProviderOverride ? { provider: daemonProviderOverride } : {}),
   };
   if (options.reasoningEffort) {
     requestBody.reasoning_effort = options.reasoningEffort;
+  }
+  const knowledgeConfig = options.config.knowledge as { ragEnabled?: boolean; captureEnabled?: boolean; scope?: string } | undefined;
+  if (knowledgeConfig?.ragEnabled !== undefined) {
+    requestBody.rag_enabled = knowledgeConfig.ragEnabled;
+  }
+  if (knowledgeConfig?.captureEnabled !== undefined) {
+    requestBody.capture_enabled = knowledgeConfig.captureEnabled;
+  }
+  if (knowledgeConfig?.scope) {
+    requestBody.knowledge_scope = knowledgeConfig.scope;
   }
 
   const useStreaming = options.config.runtime?.legion?.daemonStreaming !== false;
   if (useStreaming) {
     let streamResponse: Response;
     try {
-      streamResponse = await fetch(chatUrl, {
+      streamResponse = await fetch(inferenceUrl, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
           'accept': 'text/event-stream',
           ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({ ...requestBody, stream: true }),
         signal: options.abortSignal,
       });
     } catch (error) {
@@ -332,11 +308,11 @@ async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator
       return;
     }
 
-    yield* handleDaemonSyncResponse(options.conversationId, streamResponse, chatUrl, authToken, options.abortSignal, daemonUrl);
+    yield* handleDaemonSyncResponse(options.conversationId, streamResponse, inferenceUrl, authToken, options.abortSignal, daemonUrl);
     return;
   }
 
-  const response = await fetch(chatUrl, {
+  const response = await fetch(inferenceUrl, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -347,7 +323,7 @@ async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator
     signal: options.abortSignal,
   });
 
-  yield* handleDaemonSyncResponse(options.conversationId, response, chatUrl, authToken, options.abortSignal, daemonUrl);
+  yield* handleDaemonSyncResponse(options.conversationId, response, inferenceUrl, authToken, options.abortSignal, daemonUrl);
 }
 
 async function* consumeDaemonSSE(
@@ -599,7 +575,11 @@ async function* handleDaemonSyncResponse(
     return;
   }
 
-  const text = typeof data.data?.response === 'string' ? data.data.response : '';
+  const text = typeof data.data?.content === 'string'
+    ? data.data.content
+    : typeof data.data?.response === 'string'
+      ? data.data.response
+      : '';
   if (text) {
     yield { conversationId, type: 'text-delta', text };
   } else {
@@ -763,7 +743,7 @@ async function runDaemonHealthCheck(config: LegionConfig): Promise<LegionStatus[
   const readyUrl = new URL('/api/ready', daemonUrl).toString();
 
   try {
-    const response = await fetch(readyUrl);
+    const response = await fetch(readyUrl, { signal: AbortSignal.timeout(5000) });
     let details: unknown = null;
     try {
       details = await response.json();

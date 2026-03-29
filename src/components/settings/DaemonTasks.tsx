@@ -8,6 +8,7 @@ import {
   PlusIcon,
 } from 'lucide-react';
 import { settingsSelectClass, type SettingsProps } from './shared';
+import { legion } from '@/lib/ipc-client';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
@@ -23,9 +24,6 @@ interface TaskDetail extends Task {
   args?: unknown;
   logs?: string[];
 }
-
-const daemonCall = (method: string, ...args: unknown[]) =>
-  ((window as unknown as { legion: { daemon: Record<string, (...a: unknown[]) => Promise<{ ok: boolean; data?: unknown; error?: string }>> } }).legion.daemon[method](...args));
 
 const STATUS_BADGE: Record<string, string> = {
   completed: 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20',
@@ -48,7 +46,7 @@ const ExpandedTask: FC<{ task: TaskDetail }> = ({ task }) => {
 
   useEffect(() => {
     setLogsState('loading');
-    daemonCall('taskLogs', task.id).then((res) => {
+    legion.daemon.taskLogs(task.id).then((res) => {
       if (res.ok) {
         const raw = res.data;
         setLogs(Array.isArray(raw) ? (raw as string[]) : typeof raw === 'string' ? [raw] : []);
@@ -109,7 +107,7 @@ const TriggerForm: FC<{ onClose: () => void; onCreated: () => void }> = ({ onClo
     setSubmitting(true);
     setError('');
     try {
-      const res = await daemonCall('taskCreate', { runner_class: runnerClass.trim(), function: fn.trim() });
+      const res = await legion.daemon.taskCreate({ runner_class: runnerClass.trim(), function: fn.trim() });
       if (res.ok) {
         onCreated();
         onClose();
@@ -190,7 +188,7 @@ export const DaemonTasks: FC<SettingsProps> = ({ config }) => {
     setLoadError('');
     try {
       const filters = statusFilter !== 'all' ? { status: statusFilter } : undefined;
-      const res = await daemonCall('tasks', filters);
+      const res = await legion.daemon.tasks(filters);
       if (res.ok) {
         setTasks(Array.isArray(res.data) ? (res.data as Task[]) : []);
         setLoadState('loaded');
@@ -220,7 +218,7 @@ export const DaemonTasks: FC<SettingsProps> = ({ config }) => {
     setExpandedId(task.id);
     if (!expandedData[task.id]) {
       try {
-        const res = await daemonCall('task', task.id);
+        const res = await legion.daemon.task(task.id);
         if (res.ok && res.data) {
           setExpandedData((prev) => ({ ...prev, [task.id]: res.data as TaskDetail }));
         } else {

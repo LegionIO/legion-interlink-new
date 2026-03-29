@@ -1,7 +1,7 @@
 import type { IpcMain } from 'electron';
 import { BrowserWindow } from 'electron';
 import { join } from 'path';
-import { resolveModelForThread, resolveModelCatalog, resolveStreamConfig, type ModelCatalogEntry } from '../agent/model-catalog.js';
+import { resolveModelForThread, resolveModelCatalog, resolveStreamConfig, type ModelCatalogEntry, type LLMModelConfig } from '../agent/model-catalog.js';
 import { streamAgentResponse, streamWithFallback } from '../agent/mastra-agent.js';
 import type { StreamEvent, ReasoningEffort } from '../agent/mastra-agent.js';
 import { getLegionStatus, resolveAgentBackend, streamLegionAgent } from '../agent/legion-runtime.js';
@@ -246,13 +246,13 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
       return { conversationId };
     }
 
-    const streamConfig = resolveStreamConfig(config, {
+    let streamConfig = resolveStreamConfig(config, {
       threadModelKey: modelKey ?? null,
       threadProfileKey: profileKey ?? null,
       reasoningEffort,
       fallbackEnabled: fallbackEnabled ?? false,
     });
-    const modelEntry = streamConfig?.primaryModel ?? null;
+    let modelEntry = streamConfig?.primaryModel ?? null;
     const backend = await resolveAgentBackend(config);
     const messageList = messages as Array<{ role?: string; content?: unknown }>;
     console.info(`[Agent:stream] conv=${conversationId} backend=${backend} model=${modelKey ?? config.models.defaultModelKey} profile=${profileKey ?? 'none'} fallback=${fallbackEnabled ? 'on' : 'off'} fallbackModels=${streamConfig?.fallbackModels.length ?? 0} messageCount=${messageList.length}`);
@@ -266,13 +266,42 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
     }
 
     if (!modelEntry || !streamConfig) {
-      broadcastStreamEvent({
-        conversationId,
-        type: 'text-delta',
-        text: 'No model configured. Please add a model provider in Settings and ensure your API key is set.',
-      });
-      broadcastStreamEvent({ conversationId, type: 'done' });
-      return { conversationId };
+      if (backend === 'legion-daemon') {
+        // Daemon manages its own models — create a passthrough config so the request proceeds
+        const fallbackModelConfig: LLMModelConfig = {
+          provider: 'openai-compatible',
+          endpoint: '',
+          apiKey: '',
+          modelName: '',
+          temperature: config.advanced.temperature,
+          maxSteps: config.advanced.maxSteps,
+          maxRetries: config.advanced.maxRetries,
+        };
+        const fallbackEntry: ModelCatalogEntry = {
+          key: '__daemon_default__',
+          displayName: 'Daemon Default',
+          modelConfig: fallbackModelConfig,
+        };
+        modelEntry = fallbackEntry;
+        streamConfig = {
+          primaryModel: fallbackEntry,
+          fallbackModels: [],
+          fallbackEnabled: false,
+          systemPrompt: config.systemPrompt,
+          temperature: config.advanced.temperature,
+          maxSteps: config.advanced.maxSteps,
+          maxRetries: config.advanced.maxRetries,
+          useResponsesApi: false,
+        };
+      } else {
+        broadcastStreamEvent({
+          conversationId,
+          type: 'text-delta',
+          text: 'No model configured. Please add a model provider in Settings and ensure your API key is set.',
+        });
+        broadcastStreamEvent({ conversationId, type: 'done' });
+        return { conversationId };
+      }
     }
 
     // Run streaming in background

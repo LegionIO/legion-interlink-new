@@ -1,0 +1,109 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload DMG to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" --repo LegionIO/legion-interlink > /dev/null 2>&1 || \
+            gh release create "$TAG" --repo LegionIO/legion-interlink --title "$TAG" --generate-notes
+          gh release upload "$TAG" dist/*.dmg --clobber
+
+  update-cask:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get version from tag
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download DMG and compute SHA256
+        id: sha
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          asset_url=$(gh release view "$TAG" --repo LegionIO/legion-interlink --json assets --jq '.assets[] | select(.name | endswith(".dmg")) | .url' | head -n 1)
+          if [ -z "$asset_url" ]; then
+            echo "No DMG asset found for release $TAG" >&2
+            exit 1
+          fi
+          gh api "$asset_url" --output interlink.dmg
+          sha=$(shasum -a 256 interlink.dmg | awk '{print $1}')
+          echo "sha256=$sha" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          repository: LegionIO/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update cask formula
+        working-directory: homebrew-tap
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA256: ${{ steps.sha.outputs.sha256 }}
+        run: |
+          mkdir -p Casks
+          cat > Casks/legion-interlink.rb << RUBY
+          cask "legion-interlink" do
+            version "${VERSION}"
+            sha256 "${SHA256}"
+
+            url "https://github.com/LegionIO/legion-interlink/releases/download/v#{version}/Legion-Interlink-#{version}-arm64.dmg"
+            name "Legion Interlink"
+            desc "LegionIO desktop client"
+            homepage "https://github.com/LegionIO/legion-interlink"
+
+            app "Legion Interlink.app"
+
+            zap trash: "~/.legionio"
+          end
+          RUBY
+
+      - name: Commit and push cask update
+        working-directory: homebrew-tap
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/legion-interlink.rb
+          if git diff --cached --quiet; then
+            echo "No changes to commit; skipping commit and push."
+          else
+            git commit -m "update legion-interlink cask to ${VERSION}"
+            git push
+          fi
