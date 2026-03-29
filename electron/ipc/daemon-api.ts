@@ -1,141 +1,16 @@
 import type { IpcMain, BrowserWindow } from 'electron';
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
-import { createHmac, randomUUID } from 'crypto';
 import type { LegionConfig } from '../config/schema.js';
-
-type DaemonResult<T = unknown> = { ok: boolean; data?: T; error?: string };
-
-function resolveDaemonUrl(config: LegionConfig): string {
-  return config.runtime?.legion?.daemonUrl?.trim() || 'http://127.0.0.1:4567';
-}
-
-function resolveAuthToken(config: LegionConfig, legionHome: string): string | null {
-  const configDir = config.runtime?.legion?.configDir?.trim() || join(legionHome, 'settings');
-  const cryptPath = join(configDir, 'crypt.json');
-  if (!existsSync(cryptPath)) return null;
-
-  try {
-    const raw = JSON.parse(readFileSync(cryptPath, 'utf-8')) as { crypt?: { cluster_secret?: string } };
-    const secret = raw.crypt?.cluster_secret?.trim();
-    if (!secret) return null;
-
-    const now = Math.floor(Date.now() / 1000);
-    const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-    const payload = Buffer.from(JSON.stringify({
-      sub: process.env.USER || 'legion-interlink',
-      name: 'Legion Interlink',
-      roles: ['desktop'],
-      scope: 'human',
-      iss: 'legion',
-      iat: now,
-      exp: now + 3600,
-      jti: randomUUID(),
-    })).toString('base64url');
-    const signature = createHmac('sha256', secret).update(`${header}.${payload}`).digest('base64url');
-    return `${header}.${payload}.${signature}`;
-  } catch {
-    return null;
-  }
-}
-
-function authHeaders(config: LegionConfig, legionHome: string): Record<string, string> {
-  const token = resolveAuthToken(config, legionHome);
-  return {
-    'accept': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
-async function daemonGet<T = unknown>(
-  config: LegionConfig,
-  legionHome: string,
-  path: string,
-  query?: Record<string, string>,
-): Promise<DaemonResult<T>> {
-  const base = resolveDaemonUrl(config);
-  const url = new URL(path, base);
-  if (query) {
-    for (const [k, v] of Object.entries(query)) {
-      if (v) url.searchParams.set(k, v);
-    }
-  }
-
-  try {
-    const resp = await fetch(url.toString(), { headers: authHeaders(config, legionHome) });
-    if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}` };
-    const body = await resp.json() as { data?: T };
-    return { ok: true, data: (body.data ?? body) as T };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
-}
-
-async function daemonPost<T = unknown>(
-  config: LegionConfig,
-  legionHome: string,
-  path: string,
-  body: unknown,
-): Promise<DaemonResult<T>> {
-  const base = resolveDaemonUrl(config);
-  try {
-    const resp = await fetch(new URL(path, base).toString(), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', ...authHeaders(config, legionHome) },
-      body: JSON.stringify(body),
-    });
-    if (!resp.ok) {
-      const errBody = await resp.json().catch(() => ({})) as { error?: { message?: string } };
-      return { ok: false, error: errBody.error?.message || `HTTP ${resp.status}` };
-    }
-    const data = await resp.json().catch(() => ({})) as { data?: T };
-    return { ok: true, data: (data.data ?? data) as T };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
-}
-
-async function daemonPut<T = unknown>(
-  config: LegionConfig,
-  legionHome: string,
-  path: string,
-  body: unknown,
-): Promise<DaemonResult<T>> {
-  const base = resolveDaemonUrl(config);
-  try {
-    const resp = await fetch(new URL(path, base).toString(), {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json', ...authHeaders(config, legionHome) },
-      body: JSON.stringify(body),
-    });
-    if (!resp.ok) {
-      const errBody = await resp.json().catch(() => ({})) as { error?: { message?: string } };
-      return { ok: false, error: errBody.error?.message || `HTTP ${resp.status}` };
-    }
-    const data = await resp.json().catch(() => ({})) as { data?: T };
-    return { ok: true, data: (data.data ?? data) as T };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
-}
-
-async function daemonDelete(
-  config: LegionConfig,
-  legionHome: string,
-  path: string,
-): Promise<DaemonResult> {
-  const base = resolveDaemonUrl(config);
-  try {
-    const resp = await fetch(new URL(path, base).toString(), {
-      method: 'DELETE',
-      headers: authHeaders(config, legionHome),
-    });
-    if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}` };
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
-}
+import {
+  DAEMON_TIMEOUT_MS,
+  resolveDaemonUrl,
+  resolveAuthToken,
+  withTimeout,
+  daemonGet,
+  daemonPost,
+  daemonPatch,
+  daemonPut,
+  daemonDelete,
+} from '../lib/daemon-client.js';
 
 export function registerDaemonApiHandlers(
   ipcMain: IpcMain,
@@ -174,6 +49,9 @@ export function registerDaemonApiHandlers(
   ipcMain.handle('daemon:task-delete', async (_e, id: string) =>
     daemonDelete(cfg(), legionHome, `/api/tasks/${id}`));
 
+  ipcMain.handle('daemon:task-graph', async (_e, filters?: Record<string, string>) =>
+    daemonGet(cfg(), legionHome, '/api/tasks/graph', filters));
+
   // ── Workers ──
   ipcMain.handle('daemon:workers', async (_e, filters?: Record<string, string>) =>
     daemonGet(cfg(), legionHome, '/api/workers', filters));
@@ -188,7 +66,7 @@ export function registerDaemonApiHandlers(
     daemonGet(cfg(), legionHome, `/api/workers/${id}/costs`));
 
   ipcMain.handle('daemon:worker-lifecycle', async (_e, id: string, body: unknown) =>
-    daemonPost(cfg(), legionHome, `/api/workers/${id}/lifecycle`, body));  // PATCH mapped to POST
+    daemonPatch(cfg(), legionHome, `/api/workers/${id}/lifecycle`, body));
 
   // ── Schedules ──
   ipcMain.handle('daemon:schedules', async () =>
@@ -296,12 +174,15 @@ export function registerDaemonApiHandlers(
     const token = resolveAuthToken(cfg(), legionHome);
 
     try {
+      // Use a short connection timeout, then hand off to the persistent abort controller
+      const connectTimeout = AbortSignal.timeout(DAEMON_TIMEOUT_MS);
+      const combined = AbortSignal.any([connectTimeout, eventsAbort.signal]);
       const resp = await fetch(url, {
         headers: {
           'accept': 'text/event-stream',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        signal: eventsAbort.signal,
+        signal: combined,
       });
 
       if (!resp.ok || !resp.body) {
@@ -366,8 +247,8 @@ export function registerDaemonApiHandlers(
 
   // ── Sub-agents (daemon mode) ──
   ipcMain.handle('daemon:sub-agent-create', async (_e, body: { message: string; model?: string; parent_conversation_id?: string }) =>
-    daemonPost(cfg(), legionHome, '/api/llm/chat', {
-      message: body.message,
+    daemonPost(cfg(), legionHome, '/api/llm/inference', {
+      messages: [{ role: 'user', content: body.message }],
       ...(body.model ? { model: body.model } : {}),
       sub_agent: true,
       parent_id: body.parent_conversation_id,
@@ -375,6 +256,107 @@ export function registerDaemonApiHandlers(
 
   ipcMain.handle('daemon:sub-agent-status', async (_e, taskId: string) =>
     daemonGet(cfg(), legionHome, `/api/tasks/${taskId}`));
+
+  // ── Natural Language Routing ──
+  ipcMain.handle('daemon:do', async (_e, input: string) =>
+    daemonPost(cfg(), legionHome, '/api/do', { input }));
+
+  ipcMain.handle('daemon:capabilities', async () =>
+    daemonGet(cfg(), legionHome, '/api/capabilities'));
+
+  // ── Memory Inspector ──
+  ipcMain.handle('daemon:memory-entries', async (_e, filters?: Record<string, string>) =>
+    daemonGet(cfg(), legionHome, '/api/memory/entries', filters));
+
+  ipcMain.handle('daemon:memory-entry', async (_e, id: string) =>
+    daemonGet(cfg(), legionHome, `/api/memory/entries/${id}`));
+
+  ipcMain.handle('daemon:memory-entry-update', async (_e, id: string, body: unknown) =>
+    daemonPut(cfg(), legionHome, `/api/memory/entries/${id}`, body));
+
+  ipcMain.handle('daemon:memory-entry-delete', async (_e, id: string) =>
+    daemonDelete(cfg(), legionHome, `/api/memory/entries/${id}`));
+
+  ipcMain.handle('daemon:memory-stats', async () =>
+    daemonGet(cfg(), legionHome, '/api/memory/stats'));
+
+  // ── Marketplace ──
+  ipcMain.handle('daemon:marketplace', async (_e, filters?: Record<string, string>) =>
+    daemonGet(cfg(), legionHome, '/api/extensions/available', filters));
+
+  ipcMain.handle('daemon:extension-install', async (_e, id: string) =>
+    daemonPost(cfg(), legionHome, `/api/extensions/${id}/install`, {}));
+
+  ipcMain.handle('daemon:extension-uninstall', async (_e, id: string) =>
+    daemonPost(cfg(), legionHome, `/api/extensions/${id}/uninstall`, {}));
+
+  ipcMain.handle('daemon:extension-enable', async (_e, id: string) =>
+    daemonPost(cfg(), legionHome, `/api/extensions/${id}/enable`, {}));
+
+  ipcMain.handle('daemon:extension-disable', async (_e, id: string) =>
+    daemonPost(cfg(), legionHome, `/api/extensions/${id}/disable`, {}));
+
+  ipcMain.handle('daemon:extension-config', async (_e, id: string) =>
+    daemonGet(cfg(), legionHome, `/api/extensions/${id}/config`));
+
+  ipcMain.handle('daemon:extension-config-update', async (_e, id: string, body: unknown) =>
+    daemonPut(cfg(), legionHome, `/api/extensions/${id}/config`, body));
+
+  // ── GitHub ──
+  ipcMain.handle('daemon:github-status', async () =>
+    daemonGet(cfg(), legionHome, '/api/github/status'));
+
+  ipcMain.handle('daemon:github-repos', async () =>
+    daemonGet(cfg(), legionHome, '/api/github/repos'));
+
+  ipcMain.handle('daemon:github-pulls', async (_e, filters?: Record<string, string>) =>
+    daemonGet(cfg(), legionHome, '/api/github/pulls', filters));
+
+  ipcMain.handle('daemon:github-pull', async (_e, repo: string, number: number) =>
+    daemonGet(cfg(), legionHome, `/api/github/pulls/${number}`, { repo }));
+
+  ipcMain.handle('daemon:github-issues', async (_e, filters?: Record<string, string>) =>
+    daemonGet(cfg(), legionHome, '/api/github/issues', filters));
+
+  ipcMain.handle('daemon:github-commits', async (_e, filters?: Record<string, string>) =>
+    daemonGet(cfg(), legionHome, '/api/github/commits', filters));
+
+  // ── GAIA ──
+  ipcMain.handle('daemon:gaia-status', async () =>
+    daemonGet(cfg(), legionHome, '/api/gaia/status'));
+
+  ipcMain.handle('daemon:gaia-events', async (_e, filters?: { limit?: string }) =>
+    daemonGet(cfg(), legionHome, '/api/gaia/buffer', filters));
+
+  // ── Cost / Metering ──
+  ipcMain.handle('daemon:metering', async (_e, filters?: Record<string, string>) =>
+    daemonGet(cfg(), legionHome, '/api/metering', filters));
+
+  ipcMain.handle('daemon:metering-rollup', async (_e, filters?: Record<string, string>) =>
+    daemonGet(cfg(), legionHome, '/api/metering/rollup', filters));
+
+  ipcMain.handle('daemon:metering-by-model', async (_e, filters?: Record<string, string>) =>
+    daemonGet(cfg(), legionHome, '/api/metering/by_model', filters));
+
+  // ── Mesh / Nodes ──
+  ipcMain.handle('daemon:mesh-status', async () =>
+    daemonGet(cfg(), legionHome, '/api/mesh/status'));
+
+  ipcMain.handle('daemon:mesh-peers', async () =>
+    daemonGet(cfg(), legionHome, '/api/mesh/peers'));
+
+  // ── Absorbers ──
+  ipcMain.handle('daemon:absorbers', async () =>
+    daemonGet(cfg(), legionHome, '/api/absorbers'));
+
+  ipcMain.handle('daemon:absorber-resolve', async (_e, input: string) =>
+    daemonPost(cfg(), legionHome, '/api/absorbers/resolve', { input }));
+
+  ipcMain.handle('daemon:absorber-dispatch', async (_e, input: string, scope?: string) =>
+    daemonPost(cfg(), legionHome, '/api/absorbers/dispatch', { input, scope }));
+
+  ipcMain.handle('daemon:absorber-job', async (_e, jobId: string) =>
+    daemonGet(cfg(), legionHome, `/api/absorbers/jobs/${jobId}`));
 
   // ── Health / Doctor / Metrics ──
   ipcMain.handle('daemon:health', async () =>
@@ -393,6 +375,7 @@ export function registerDaemonApiHandlers(
           'accept': 'application/json, text/plain',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
+        ...withTimeout(),
       });
       if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}` };
       const contentType = resp.headers.get('content-type') ?? '';

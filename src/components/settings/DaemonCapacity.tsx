@@ -6,6 +6,7 @@ import {
   TrendingUpIcon,
 } from 'lucide-react';
 import { type SettingsProps } from './shared';
+import { legion } from '@/lib/ipc-client';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 type ForecastState = 'idle' | 'loading' | 'loaded' | 'error';
@@ -24,9 +25,6 @@ interface ForecastEntry {
   projected_utilization?: number;
   [key: string]: unknown;
 }
-
-const daemonCall = (method: string, ...args: unknown[]) =>
-  ((window as unknown as { legion: { daemon: Record<string, (...a: unknown[]) => Promise<{ ok: boolean; data?: unknown; error?: string }>> } }).legion.daemon[method](...args));
 
 function asNumber(value: unknown, fallback = 0): number {
   return typeof value === 'number' ? value : fallback;
@@ -70,7 +68,7 @@ export const DaemonCapacity: FC<SettingsProps> = () => {
     setLoadState('loading');
     setLoadError('');
     try {
-      const result = await daemonCall('capacity');
+      const result = await legion.daemon.capacity();
       if (result.ok) {
         setCapacity(result.data as CapacityData);
         setLoadState('loaded');
@@ -88,7 +86,7 @@ export const DaemonCapacity: FC<SettingsProps> = () => {
     setForecastState('loading');
     setForecastError('');
     try {
-      const result = await daemonCall('capacityForecast', { days: '7' });
+      const result = await legion.daemon.capacityForecast({ days: '7' });
       if (result.ok) {
         setForecast((result.data as ForecastEntry[]) ?? []);
         setForecastState('loaded');

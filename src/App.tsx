@@ -11,12 +11,23 @@ import { DropZone } from '@/components/thread/DropZone';
 import { ConversationList } from '@/components/conversations/ConversationList';
 import { SubAgentSidebarSection } from '@/components/conversations/SubAgentSidebarSection';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
+import { KnowledgePanel } from '@/components/knowledge/KnowledgePanel';
+import { GitHubPanel } from '@/components/github/GitHubPanel';
+import { MarketplacePanel } from '@/components/marketplace/MarketplacePanel';
+import { CommandBar } from '@/components/CommandBar';
+import { NotificationPanel } from '@/components/notifications/NotificationPanel';
+import { DashboardPanel } from '@/components/dashboard/DashboardPanel';
+import { KeyboardShortcutsOverlay } from '@/components/KeyboardShortcutsOverlay';
+import { ExportDialog } from '@/components/conversations/ExportDialog';
+import { SubAgentDashboard } from '@/components/subagents/SubAgentDashboard';
+import { ToastContainer } from '@/components/notifications/ToastContainer';
+import { NotificationProvider, useNotifications } from '@/providers/NotificationProvider';
 import { PluginProvider } from '@/providers/PluginProvider';
 import { PluginBannerSlot } from '@/components/plugins/PluginBannerSlot';
 import { PluginModalHost } from '@/components/plugins/PluginModalHost';
 import { ComputerUseProvider, useComputerUse } from '@/providers/ComputerUseProvider';
 import { OverlayShell } from '@/components/overlay/OverlayShell';
-import { CpuIcon, SettingsIcon } from 'lucide-react';
+import { BellIcon, BookOpenIcon, BotIcon, CpuIcon, DownloadIcon, GaugeIcon, GitBranchIcon, PuzzleIcon, SettingsIcon } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import type { ReasoningEffort } from '@/components/thread/ReasoningEffortSelector';
 import { legion } from '@/lib/ipc-client';
@@ -28,7 +39,9 @@ export default function App() {
     <ConfigProvider>
       <PluginProvider>
         <ComputerUseProvider>
-          <AppRoot />
+          <NotificationProvider>
+            <AppRoot />
+          </NotificationProvider>
         </ComputerUseProvider>
       </PluginProvider>
     </ConfigProvider>
@@ -331,10 +344,13 @@ async function cleanupEmptyConversations(
   }
 }
 
+type AppView = 'chat' | 'dashboard' | 'settings' | 'knowledge' | 'github' | 'marketplace' | 'notifications' | 'subagents';
+
 function AppShell() {
+  const { unreadCount } = useNotifications();
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [activeConversationTitle, setActiveConversationTitle] = useState('New Conversation');
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activeView, setActiveView] = useState<AppView>('chat');
   const [threadMode, setThreadMode] = useState<ThreadMode>('chat');
   const [selectedModelKey, setSelectedModelKey] = useState<string | null>(null);
   const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>('medium');
@@ -344,6 +360,9 @@ function AppShell() {
   // Track the primary model key of the currently selected profile so we can
   // restore it when auto-routing is re-enabled.
   const [profilePrimaryModelKey, setProfilePrimaryModelKey] = useState<string | null>(null);
+  const [commandBarOpen, setCommandBarOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [dragState, setDragState] = useState<{ startX: number; startWidth: number } | null>(null);
   const { config, updateConfig } = useConfig();
@@ -470,7 +489,7 @@ function AppShell() {
     const { legion } = await import('@/lib/ipc-client');
     await cleanupAbandonedConversation(id);
     await legion.conversations.setActiveId(id);
-    setSettingsOpen(false);
+    setActiveView('chat');
     setActiveConversationId(id);
     // Clean up any other empty conversations in the background
     void cleanupEmptyConversations(id, undefined, cuSessionsByConversation);
@@ -491,7 +510,7 @@ function AppShell() {
       selectedModelKey: null,
     });
     await legion.conversations.setActiveId(newId);
-    setSettingsOpen(false);
+    setActiveView('chat');
     setActiveConversationId(newId);
     // Reset per-conversation settings for the new conversation
     setSelectedModelKey(null);
@@ -501,16 +520,34 @@ function AppShell() {
   }, [cleanupAbandonedConversation]);
 
   const handleSettingsToggle = useCallback(async () => {
-    if (!settingsOpen) {
+    if (activeView !== 'settings') {
       await cleanupAbandonedConversation();
     }
-    setSettingsOpen((open) => !open);
-  }, [cleanupAbandonedConversation, settingsOpen]);
+    setActiveView((v) => v === 'settings' ? 'chat' : 'settings');
+  }, [cleanupAbandonedConversation, activeView]);
 
   const handleOpenSettings = useCallback(async () => {
     await cleanupAbandonedConversation();
-    setSettingsOpen(true);
+    setActiveView('settings');
   }, [cleanupAbandonedConversation]);
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      switch (e.key) {
+        case 'k': e.preventDefault(); setCommandBarOpen((v) => !v); break;
+        case '?': e.preventDefault(); setShortcutsOpen((v) => !v); break;
+        case '1': e.preventDefault(); setActiveView((v) => v === 'dashboard' ? 'chat' : 'dashboard'); break;
+        case '2': e.preventDefault(); setActiveView((v) => v === 'knowledge' ? 'chat' : 'knowledge'); break;
+        case '3': e.preventDefault(); setActiveView((v) => v === 'github' ? 'chat' : 'github'); break;
+        case '4': e.preventDefault(); setActiveView((v) => v === 'marketplace' ? 'chat' : 'marketplace'); break;
+        case '5': e.preventDefault(); setActiveView((v) => v === 'notifications' ? 'chat' : 'notifications'); break;
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, []);
 
   // Listen for Cmd+, / menu Settings
   useEffect(() => {
@@ -605,12 +642,16 @@ function AppShell() {
       <ComputerUseAutoNavigator
         activeConversationId={activeConversationId}
         onRevealComputerSurface={() => {
-          setSettingsOpen(false);
+          setActiveView('chat');
           setThreadMode('computer');
         }}
       />
       <RealtimeProvider>
         <PluginModalHost />
+        <CommandBar open={commandBarOpen} onClose={() => setCommandBarOpen(false)} />
+        <KeyboardShortcutsOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+        <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} conversationId={activeConversationId} />
+        <ToastContainer />
         <div className="flex h-screen overflow-hidden bg-transparent text-foreground">
           {/* Sidebar */}
           <aside
@@ -646,6 +687,59 @@ function AppShell() {
                   <SettingsIcon className="h-4 w-4" />
                   Settings
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveView(activeView === 'dashboard' ? 'chat' : 'dashboard')}
+                  className={`rounded-md p-1.5 transition-colors hover:bg-sidebar-accent/80 ${activeView === 'dashboard' ? 'bg-primary/15 text-primary' : 'text-muted-foreground'}`}
+                  title="Dashboard"
+                >
+                  <GaugeIcon className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveView(activeView === 'knowledge' ? 'chat' : 'knowledge')}
+                  className={`rounded-md p-1.5 transition-colors hover:bg-sidebar-accent/80 ${activeView === 'knowledge' ? 'bg-primary/15 text-primary' : 'text-muted-foreground'}`}
+                  title="Knowledge"
+                >
+                  <BookOpenIcon className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveView(activeView === 'github' ? 'chat' : 'github')}
+                  className={`rounded-md p-1.5 transition-colors hover:bg-sidebar-accent/80 ${activeView === 'github' ? 'bg-primary/15 text-primary' : 'text-muted-foreground'}`}
+                  title="GitHub"
+                >
+                  <GitBranchIcon className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveView(activeView === 'marketplace' ? 'chat' : 'marketplace')}
+                  className={`rounded-md p-1.5 transition-colors hover:bg-sidebar-accent/80 ${activeView === 'marketplace' ? 'bg-primary/15 text-primary' : 'text-muted-foreground'}`}
+                  title="Extensions"
+                >
+                  <PuzzleIcon className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveView(activeView === 'subagents' ? 'chat' : 'subagents')}
+                  className={`rounded-md p-1.5 transition-colors hover:bg-sidebar-accent/80 ${activeView === 'subagents' ? 'bg-primary/15 text-primary' : 'text-muted-foreground'}`}
+                  title="Sub-Agents"
+                >
+                  <BotIcon className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveView(activeView === 'notifications' ? 'chat' : 'notifications')}
+                  className={`relative rounded-md p-1.5 transition-colors hover:bg-sidebar-accent/80 ${activeView === 'notifications' ? 'bg-primary/15 text-primary' : 'text-muted-foreground'}`}
+                  title="Notifications"
+                >
+                  <BellIcon className="h-4 w-4" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-bold text-white">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
+                </button>
                 <ThemeToggle />
               </div>
             </div>
@@ -670,19 +764,53 @@ function AppShell() {
           <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <div className="titlebar-drag flex h-14 items-center justify-between border-b border-border/70 bg-background/85 px-6 backdrop-blur-md">
               <div className="titlebar-no-drag min-w-0">
-                {settingsOpen ? (
+                {activeView === 'settings' ? (
                   <span className="text-sm font-medium text-foreground">Settings</span>
+                ) : activeView === 'knowledge' ? (
+                  <span className="text-sm font-medium text-foreground">Knowledge</span>
+                ) : activeView === 'github' ? (
+                  <span className="text-sm font-medium text-foreground">GitHub</span>
+                ) : activeView === 'marketplace' ? (
+                  <span className="text-sm font-medium text-foreground">Extensions</span>
+                ) : activeView === 'notifications' ? (
+                  <span className="text-sm font-medium text-foreground">Notifications</span>
+                ) : activeView === 'dashboard' ? (
+                  <span className="text-sm font-medium text-foreground">Dashboard</span>
+                ) : activeView === 'subagents' ? (
+                  <span className="text-sm font-medium text-foreground">Sub-Agents</span>
                 ) : (
                   <span className="block truncate text-sm font-medium text-foreground">
                     {activeConversationTitle}
                   </span>
                 )}
               </div>
+              {activeView === 'chat' && activeConversationId && (
+                <button
+                  type="button"
+                  onClick={() => setExportOpen(true)}
+                  className="titlebar-no-drag rounded-md p-1.5 text-muted-foreground hover:bg-muted/40 transition-colors"
+                  title="Export conversation"
+                >
+                  <DownloadIcon className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
             <PluginBannerSlot />
             <div className="min-h-0 flex-1 overflow-hidden">
-              {settingsOpen ? (
-                <SettingsPanel onClose={() => setSettingsOpen(false)} />
+              {activeView === 'settings' ? (
+                <SettingsPanel onClose={() => setActiveView('chat')} />
+              ) : activeView === 'knowledge' ? (
+                <KnowledgePanel onClose={() => setActiveView('chat')} />
+              ) : activeView === 'github' ? (
+                <GitHubPanel onClose={() => setActiveView('chat')} />
+              ) : activeView === 'marketplace' ? (
+                <MarketplacePanel onClose={() => setActiveView('chat')} />
+              ) : activeView === 'notifications' ? (
+                <NotificationPanel onClose={() => setActiveView('chat')} />
+              ) : activeView === 'dashboard' ? (
+                <DashboardPanel onClose={() => setActiveView('chat')} />
+              ) : activeView === 'subagents' ? (
+                <SubAgentDashboard onClose={() => setActiveView('chat')} />
               ) : (
                 <ThreadOrSubAgent
                   mode={threadMode}

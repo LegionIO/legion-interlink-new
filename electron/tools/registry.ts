@@ -20,6 +20,8 @@ import { createModelSwitchTool } from './model-switch.js';
 import { createSubAgentTool } from './sub-agent.js';
 import { loadSkillsAsTools } from './skill-loader.js';
 import { createSkillManageTool } from './skill-manage.js';
+import { webFetchTool } from './web-fetch.js';
+import { webSearchTool } from './web-search.js';
 import { z } from 'zod';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -181,6 +183,14 @@ export async function buildToolRegistry(getConfig: () => LegionConfig, legionHom
     tools.push(createGrepTool(getConfig));
     tools.push(createGlobTool(getConfig));
     tools.push(createListDirectoryTool());
+  }
+
+  // Web tools
+  if (config?.tools?.webFetch?.enabled !== false) {
+    tools.push(webFetchTool);
+  }
+  if (config?.tools?.webSearch?.enabled !== false) {
+    tools.push(webSearchTool);
   }
 
   // Self-management tools (always available)

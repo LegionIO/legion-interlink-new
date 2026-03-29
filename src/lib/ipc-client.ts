@@ -50,6 +50,7 @@ type LegionAPI = {
     taskLogs: (id: string) => Promise<DaemonResult>;
     taskCreate: (body: unknown) => Promise<DaemonResult>;
     taskDelete: (id: string) => Promise<DaemonResult>;
+    taskGraph: (filters?: Record<string, string>) => Promise<DaemonResult>;
     workers: (filters?: Record<string, string>) => Promise<DaemonResult>;
     worker: (id: string) => Promise<DaemonResult>;
     workerHealth: (id: string) => Promise<DaemonResult>;
@@ -89,6 +90,37 @@ type LegionAPI = {
     onEvent: (callback: (event: unknown) => void) => () => void;
     subAgentCreate: (body: { message: string; model?: string; parent_conversation_id?: string }) => Promise<DaemonResult>;
     subAgentStatus: (taskId: string) => Promise<DaemonResult>;
+    doCommand: (input: string) => Promise<DaemonResult>;
+    capabilities: () => Promise<DaemonResult>;
+    memoryEntries: (filters?: Record<string, string>) => Promise<DaemonResult>;
+    memoryEntry: (id: string) => Promise<DaemonResult>;
+    memoryEntryUpdate: (id: string, body: unknown) => Promise<DaemonResult>;
+    memoryEntryDelete: (id: string) => Promise<DaemonResult>;
+    memoryStats: () => Promise<DaemonResult>;
+    marketplace: (filters?: Record<string, string>) => Promise<DaemonResult>;
+    extensionInstall: (id: string) => Promise<DaemonResult>;
+    extensionUninstall: (id: string) => Promise<DaemonResult>;
+    extensionEnable: (id: string) => Promise<DaemonResult>;
+    extensionDisable: (id: string) => Promise<DaemonResult>;
+    extensionConfig: (id: string) => Promise<DaemonResult>;
+    extensionConfigUpdate: (id: string, body: unknown) => Promise<DaemonResult>;
+    githubStatus: () => Promise<DaemonResult>;
+    githubRepos: () => Promise<DaemonResult>;
+    githubPulls: (filters?: Record<string, string>) => Promise<DaemonResult>;
+    githubPull: (repo: string, number: number) => Promise<DaemonResult>;
+    githubIssues: (filters?: Record<string, string>) => Promise<DaemonResult>;
+    githubCommits: (filters?: Record<string, string>) => Promise<DaemonResult>;
+    gaiaStatus: () => Promise<DaemonResult>;
+    gaiaEvents: (filters?: { limit?: string }) => Promise<DaemonResult>;
+    metering: (filters?: Record<string, string>) => Promise<DaemonResult>;
+    meteringRollup: (filters?: Record<string, string>) => Promise<DaemonResult>;
+    meteringByModel: (filters?: Record<string, string>) => Promise<DaemonResult>;
+    meshStatus: () => Promise<DaemonResult>;
+    meshPeers: () => Promise<DaemonResult>;
+    absorbers: () => Promise<DaemonResult>;
+    absorberResolve: (input: string) => Promise<DaemonResult>;
+    absorberDispatch: (input: string, scope?: string) => Promise<DaemonResult>;
+    absorberJob: (jobId: string) => Promise<DaemonResult>;
     health: () => Promise<DaemonResult>;
     ready: () => Promise<DaemonResult>;
     metrics: () => Promise<DaemonResult>;
@@ -155,6 +187,7 @@ type LegionAPI = {
   }>;
   dialog: {
     openFile: (options?: { filters?: Array<{ name: string; extensions: string[] }> }) => Promise<unknown>;
+    openDirectoryFiles: () => Promise<{ canceled: boolean; filePaths: string[] }>;
   };
   image: {
     fetch: (url: string) => Promise<{ data?: string; mime?: string; error?: string }>;
@@ -217,6 +250,21 @@ type LegionAPI = {
     onPartial: (callback: (text: string) => void) => () => void;
     onFinal: (callback: (text: string) => void) => () => void;
     onSttError: (callback: (error: string) => void) => () => void;
+  };
+  knowledge: {
+    query: (query: string, scope?: string, synthesize?: boolean) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+    retrieve: (query: string, scope?: string, limit?: number) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+    browse: (filters?: { tag?: string; source?: string; page?: string; per_page?: string }) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+    delete: (id: string) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+    ingest: (content: string, metadata?: Record<string, unknown>) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+    ingestFile: (filePath: string) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+    monitorsList: () => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+    monitorAdd: (path: string) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+    monitorRemove: (id: string) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+    monitorScan: (id: string) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+    health: () => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+    maintain: () => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+    status: () => Promise<{ ok: boolean; data?: unknown; error?: string }>;
   };
   onMenuOpenSettings: (callback: () => void) => () => void;
   onFind: (callback: () => void) => () => void;

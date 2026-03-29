@@ -7,6 +7,7 @@ import {
   CircleIcon,
 } from 'lucide-react';
 import { type SettingsProps } from './shared';
+import { legion } from '@/lib/ipc-client';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
@@ -29,9 +30,6 @@ interface TopologyData {
   nodes: TopologyNode[];
   edges: TopologyEdge[];
 }
-
-const daemonCall = (method: string, ...args: unknown[]) =>
-  ((window as unknown as { legion: { daemon: Record<string, (...a: unknown[]) => Promise<{ ok: boolean; data?: unknown; error?: string }>> } }).legion.daemon[method](...args));
 
 const NODE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
   extension: { bg: '#3b82f620', border: '#3b82f680', text: '#3b82f6' },
@@ -107,10 +105,10 @@ export const DaemonTopology: FC<SettingsProps> = () => {
     setLoadError('');
     try {
       const [catalogRes, workersRes, schedulesRes, nodesRes] = await Promise.all([
-        daemonCall('catalog'),
-        daemonCall('workers'),
-        daemonCall('schedules'),
-        daemonCall('nodes'),
+        legion.daemon.catalog(),
+        legion.daemon.workers(),
+        legion.daemon.schedules(),
+        legion.daemon.nodes(),
       ]);
 
       const extensions = catalogRes.ok && Array.isArray(catalogRes.data) ? catalogRes.data : [];

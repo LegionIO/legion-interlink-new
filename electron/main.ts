@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, shell, Menu, nativeTheme, dialog, net, MenuItem, clipboard, systemPreferences } from 'electron';
 import { join } from 'path';
-import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'fs';
+import { mkdirSync, existsSync, readFileSync, writeFileSync, readdirSync } from 'fs';
 import { homedir } from 'os';
 import { readEffectiveConfig, registerConfigHandlers } from './ipc/config.js';
 import { registerAgentHandlers, registerTools, updateMcpTools, updateSkillTools, updatePluginTools, getRegisteredTools } from './ipc/agent.js';
@@ -20,6 +20,7 @@ import { registerLiveSttHandlers } from './audio/live-stt.js';
 import { registerRealtimeHandlers, updateActiveRealtimeSessionTools } from './ipc/realtime.js';
 import type { LegionConfig } from './config/schema.js';
 import { registerComputerUseHandlers } from './ipc/computer-use.js';
+import { registerKnowledgeHandlers } from './ipc/knowledge.js';
 import { closeAllOverlayWindows } from './computer-use/overlay-window.js';
 
 const LEGION_HOME = join(homedir(), '.legionio');
@@ -410,6 +411,7 @@ if (gotSingleInstanceLock) {
     registerMicRecorderHandlers(ipcMain);
     registerLiveSttHandlers(ipcMain);
     registerComputerUseHandlers(ipcMain, LEGION_HOME, getConfig);
+    registerKnowledgeHandlers(ipcMain, LEGION_HOME, getConfig);
 
     // Auto-seed computer use display settings on startup.
     // If allowedDisplays is empty, populate it with all discovered displays
@@ -502,6 +504,31 @@ if (gotSingleInstanceLock) {
         };
       });
       return { canceled: false, files };
+    });
+
+    // Directory picker handler — walks directory recursively and returns all file paths
+    ipcMain.handle('dialog:open-directory-files', async () => {
+      const win = BrowserWindow.getFocusedWindow();
+      if (!win) return { canceled: true, filePaths: [] };
+      const result = await dialog.showOpenDialog(win, {
+        properties: ['openDirectory'],
+      });
+      if (result.canceled || result.filePaths.length === 0) return { canceled: true, filePaths: [] };
+
+      const dirPath = result.filePaths[0];
+      const files: string[] = [];
+      const walk = (dir: string): void => {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+          const full = join(dir, entry.name);
+          if (entry.isDirectory()) {
+            if (!entry.name.startsWith('.')) walk(full);
+          } else {
+            files.push(full);
+          }
+        }
+      };
+      walk(dirPath);
+      return { canceled: false, filePaths: files };
     });
 
     // Fetch image bytes from main process (bypasses CORS)

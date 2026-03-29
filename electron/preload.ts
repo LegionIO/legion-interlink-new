@@ -79,6 +79,7 @@ const legionAPI = {
     taskLogs: (id: string) => ipcRenderer.invoke('daemon:task-logs', id),
     taskCreate: (body: unknown) => ipcRenderer.invoke('daemon:task-create', body),
     taskDelete: (id: string) => ipcRenderer.invoke('daemon:task-delete', id),
+    taskGraph: (filters?: Record<string, string>) => ipcRenderer.invoke('daemon:task-graph', filters),
     workers: (filters?: Record<string, string>) => ipcRenderer.invoke('daemon:workers', filters),
     worker: (id: string) => ipcRenderer.invoke('daemon:worker', id),
     workerHealth: (id: string) => ipcRenderer.invoke('daemon:worker-health', id),
@@ -123,6 +124,37 @@ const legionAPI = {
     subAgentCreate: (body: { message: string; model?: string; parent_conversation_id?: string }) =>
       ipcRenderer.invoke('daemon:sub-agent-create', body),
     subAgentStatus: (taskId: string) => ipcRenderer.invoke('daemon:sub-agent-status', taskId),
+    doCommand: (input: string) => ipcRenderer.invoke('daemon:do', input),
+    capabilities: () => ipcRenderer.invoke('daemon:capabilities'),
+    memoryEntries: (filters?: Record<string, string>) => ipcRenderer.invoke('daemon:memory-entries', filters),
+    memoryEntry: (id: string) => ipcRenderer.invoke('daemon:memory-entry', id),
+    memoryEntryUpdate: (id: string, body: unknown) => ipcRenderer.invoke('daemon:memory-entry-update', id, body),
+    memoryEntryDelete: (id: string) => ipcRenderer.invoke('daemon:memory-entry-delete', id),
+    memoryStats: () => ipcRenderer.invoke('daemon:memory-stats'),
+    marketplace: (filters?: Record<string, string>) => ipcRenderer.invoke('daemon:marketplace', filters),
+    extensionInstall: (id: string) => ipcRenderer.invoke('daemon:extension-install', id),
+    extensionUninstall: (id: string) => ipcRenderer.invoke('daemon:extension-uninstall', id),
+    extensionEnable: (id: string) => ipcRenderer.invoke('daemon:extension-enable', id),
+    extensionDisable: (id: string) => ipcRenderer.invoke('daemon:extension-disable', id),
+    extensionConfig: (id: string) => ipcRenderer.invoke('daemon:extension-config', id),
+    extensionConfigUpdate: (id: string, body: unknown) => ipcRenderer.invoke('daemon:extension-config-update', id, body),
+    githubStatus: () => ipcRenderer.invoke('daemon:github-status'),
+    githubRepos: () => ipcRenderer.invoke('daemon:github-repos'),
+    githubPulls: (filters?: Record<string, string>) => ipcRenderer.invoke('daemon:github-pulls', filters),
+    githubPull: (repo: string, number: number) => ipcRenderer.invoke('daemon:github-pull', repo, number),
+    githubIssues: (filters?: Record<string, string>) => ipcRenderer.invoke('daemon:github-issues', filters),
+    githubCommits: (filters?: Record<string, string>) => ipcRenderer.invoke('daemon:github-commits', filters),
+    gaiaStatus: () => ipcRenderer.invoke('daemon:gaia-status'),
+    gaiaEvents: (filters?: { limit?: string }) => ipcRenderer.invoke('daemon:gaia-events', filters),
+    metering: (filters?: Record<string, string>) => ipcRenderer.invoke('daemon:metering', filters),
+    meteringRollup: (filters?: Record<string, string>) => ipcRenderer.invoke('daemon:metering-rollup', filters),
+    meteringByModel: (filters?: Record<string, string>) => ipcRenderer.invoke('daemon:metering-by-model', filters),
+    meshStatus: () => ipcRenderer.invoke('daemon:mesh-status'),
+    meshPeers: () => ipcRenderer.invoke('daemon:mesh-peers'),
+    absorbers: () => ipcRenderer.invoke('daemon:absorbers'),
+    absorberResolve: (input: string) => ipcRenderer.invoke('daemon:absorber-resolve', input),
+    absorberDispatch: (input: string, scope?: string) => ipcRenderer.invoke('daemon:absorber-dispatch', input, scope),
+    absorberJob: (jobId: string) => ipcRenderer.invoke('daemon:absorber-job', jobId),
     health: () => ipcRenderer.invoke('daemon:health'),
     ready: () => ipcRenderer.invoke('daemon:ready'),
     metrics: () => ipcRenderer.invoke('daemon:metrics'),
@@ -223,6 +255,7 @@ const legionAPI = {
   dialog: {
     openFile: (options?: { filters?: Array<{ name: string; extensions: string[] }> }) =>
       ipcRenderer.invoke('dialog:open-file', options),
+    openDirectoryFiles: () => ipcRenderer.invoke('dialog:open-directory-files'),
   },
 
   // Image utilities (fetched via main process to bypass CORS)
@@ -317,6 +350,27 @@ const legionAPI = {
       ipcRenderer.on('stt:error', handler);
       return () => ipcRenderer.removeListener('stt:error', handler);
     },
+  },
+
+  // Knowledge (Apollo)
+  knowledge: {
+    query: (query: string, scope?: string, synthesize?: boolean) =>
+      ipcRenderer.invoke('knowledge:query', query, scope, synthesize),
+    retrieve: (query: string, scope?: string, limit?: number) =>
+      ipcRenderer.invoke('knowledge:retrieve', query, scope, limit),
+    browse: (filters?: { tag?: string; source?: string; page?: string; per_page?: string }) =>
+      ipcRenderer.invoke('knowledge:browse', filters),
+    delete: (id: string) => ipcRenderer.invoke('knowledge:delete', id),
+    ingest: (content: string, metadata?: Record<string, unknown>) =>
+      ipcRenderer.invoke('knowledge:ingest', content, metadata),
+    ingestFile: (filePath: string) => ipcRenderer.invoke('knowledge:ingest-file', filePath),
+    monitorsList: () => ipcRenderer.invoke('knowledge:monitors-list'),
+    monitorAdd: (path: string) => ipcRenderer.invoke('knowledge:monitor-add', path),
+    monitorRemove: (id: string) => ipcRenderer.invoke('knowledge:monitor-remove', id),
+    monitorScan: (id: string) => ipcRenderer.invoke('knowledge:monitor-scan', id),
+    health: () => ipcRenderer.invoke('knowledge:health'),
+    maintain: () => ipcRenderer.invoke('knowledge:maintain'),
+    status: () => ipcRenderer.invoke('knowledge:status'),
   },
 
   // Menu events

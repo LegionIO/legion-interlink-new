@@ -18,7 +18,6 @@ import { DaemonSettings } from './DaemonSettings';
 import { DaemonExtensions } from './DaemonExtensions';
 import { DaemonTasks } from './DaemonTasks';
 import { DaemonWorkers } from './DaemonWorkers';
-import { DaemonSchedules } from './DaemonSchedules';
 import { DaemonEvents } from './DaemonEvents';
 import { DaemonAudit } from './DaemonAudit';
 import { DaemonPrompts } from './DaemonPrompts';
@@ -29,6 +28,12 @@ import { DaemonGovernance } from './DaemonGovernance';
 import { DaemonMetrics } from './DaemonMetrics';
 import { DaemonDoctor } from './DaemonDoctor';
 import { DaemonTopology } from './DaemonTopology';
+import { DaemonMemoryInspector } from './DaemonMemoryInspector';
+import { DaemonTaskGraph } from './DaemonTaskGraph';
+import { DaemonGaia } from './DaemonGaia';
+import { DaemonCostTracker } from './DaemonCostTracker';
+import { DaemonMesh } from './DaemonMesh';
+import { DaemonScheduleBuilder } from './DaemonScheduleBuilder';
 import type { SettingsProps } from './shared';
 import { usePluginSettingsSections } from '@/components/plugins/PluginSettingsSections';
 import { getPluginComponent } from '@/components/plugins/PluginComponentRegistry';
@@ -37,8 +42,9 @@ import { usePlugins } from '@/providers/PluginProvider';
 type SettingsSection =
   | 'models' | 'profiles' | 'memory' | 'compaction' | 'tools' | 'skills' | 'sub-agents' | 'system-prompt'
   | 'audio' | 'realtime' | 'computer-use' | 'advanced' | 'mcp'
-  | 'daemon' | 'extensions' | 'tasks' | 'workers' | 'schedules' | 'events' | 'audit'
-  | 'prompts' | 'webhooks' | 'tenants' | 'capacity' | 'governance' | 'metrics' | 'doctor' | 'topology';
+  | 'daemon' | 'extensions' | 'tasks' | 'workers' | 'events' | 'audit'
+  | 'prompts' | 'webhooks' | 'tenants' | 'capacity' | 'governance' | 'metrics' | 'doctor' | 'topology'
+  | 'gaia' | 'task-graph' | 'memory-inspector' | 'cost-tracker' | 'mesh' | 'schedule-builder';
 
 const sections: Array<{ key: SettingsSection; label: string; group?: string }> = [
   { key: 'models', label: 'Models' },
@@ -58,7 +64,6 @@ const sections: Array<{ key: SettingsSection; label: string; group?: string }> =
   { key: 'extensions', label: 'Extensions', group: 'Legion Daemon' },
   { key: 'tasks', label: 'Tasks', group: 'Legion Daemon' },
   { key: 'workers', label: 'Workers', group: 'Legion Daemon' },
-  { key: 'schedules', label: 'Schedules', group: 'Legion Daemon' },
   { key: 'events', label: 'Events', group: 'Legion Daemon' },
   { key: 'audit', label: 'Audit', group: 'Legion Daemon' },
   { key: 'prompts', label: 'Prompts', group: 'Legion Daemon' },
@@ -69,6 +74,12 @@ const sections: Array<{ key: SettingsSection; label: string; group?: string }> =
   { key: 'metrics', label: 'Metrics', group: 'Legion Daemon' },
   { key: 'doctor', label: 'Diagnostics', group: 'Legion Daemon' },
   { key: 'topology', label: 'Topology', group: 'Legion Daemon' },
+  { key: 'memory-inspector', label: 'Memory', group: 'Legion Daemon' },
+  { key: 'task-graph', label: 'Task Graph', group: 'Legion Daemon' },
+  { key: 'gaia', label: 'GAIA', group: 'Legion Daemon' },
+  { key: 'cost-tracker', label: 'Costs', group: 'Legion Daemon' },
+  { key: 'mesh', label: 'Mesh', group: 'Legion Daemon' },
+  { key: 'schedule-builder', label: 'Schedule Builder', group: 'Legion Daemon' },
 ];
 
 export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
@@ -195,7 +206,6 @@ export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
         {activeSection === 'extensions' && <DaemonExtensions config={config} updateConfig={updateConfig} />}
         {activeSection === 'tasks' && <DaemonTasks config={config} updateConfig={updateConfig} />}
         {activeSection === 'workers' && <DaemonWorkers config={config} updateConfig={updateConfig} />}
-        {activeSection === 'schedules' && <DaemonSchedules config={config} updateConfig={updateConfig} />}
         {activeSection === 'events' && <DaemonEvents config={config} updateConfig={updateConfig} />}
         {activeSection === 'audit' && <DaemonAudit config={config} updateConfig={updateConfig} />}
         {activeSection === 'prompts' && <DaemonPrompts config={config} updateConfig={updateConfig} />}
@@ -206,6 +216,12 @@ export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
         {activeSection === 'metrics' && <DaemonMetrics config={config} updateConfig={updateConfig} />}
         {activeSection === 'doctor' && <DaemonDoctor config={config} updateConfig={updateConfig} />}
         {activeSection === 'topology' && <DaemonTopology config={config} updateConfig={updateConfig} />}
+        {activeSection === 'memory-inspector' && <DaemonMemoryInspector config={config} updateConfig={updateConfig} />}
+        {activeSection === 'task-graph' && <DaemonTaskGraph config={config} updateConfig={updateConfig} />}
+        {activeSection === 'gaia' && <DaemonGaia config={config} updateConfig={updateConfig} />}
+        {activeSection === 'cost-tracker' && <DaemonCostTracker config={config} updateConfig={updateConfig} />}
+        {activeSection === 'mesh' && <DaemonMesh config={config} updateConfig={updateConfig} />}
+        {activeSection === 'schedule-builder' && <DaemonScheduleBuilder config={config} updateConfig={updateConfig} />}
         {/* Plugin settings sections */}
         {pluginSections.map((ps) => {
           if (activeSection !== ps.key) return null;
