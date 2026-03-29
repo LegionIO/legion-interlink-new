@@ -266,6 +266,16 @@ async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator
   if (options.reasoningEffort) {
     requestBody.reasoning_effort = options.reasoningEffort;
   }
+  const knowledgeConfig = options.config.knowledge as { ragEnabled?: boolean; captureEnabled?: boolean; scope?: string } | undefined;
+  if (knowledgeConfig?.ragEnabled !== undefined) {
+    requestBody.rag_enabled = knowledgeConfig.ragEnabled;
+  }
+  if (knowledgeConfig?.captureEnabled !== undefined) {
+    requestBody.capture_enabled = knowledgeConfig.captureEnabled;
+  }
+  if (knowledgeConfig?.scope) {
+    requestBody.knowledge_scope = knowledgeConfig.scope;
+  }
 
   const useStreaming = options.config.runtime?.legion?.daemonStreaming !== false;
   if (useStreaming) {

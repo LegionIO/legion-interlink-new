@@ -104,7 +104,7 @@ export const GaiaPhaseWheel: FC<Props> = ({ phases, tickMode, tickCount }) => {
               />
               {/* Phase label — abbreviated */}
               <text x={x} y={y} textAnchor="middle" dominantBaseline="central" className="fill-current text-[6px] text-foreground/70 pointer-events-none select-none">
-                {(i + 1).toString()}
+                {state.name ? state.name.slice(0, 3).toUpperCase() : (i + 1).toString()}
               </text>
             </g>
           );

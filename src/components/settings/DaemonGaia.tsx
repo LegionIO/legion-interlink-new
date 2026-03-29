@@ -40,12 +40,21 @@ const modeConfig: Record<string, { color: string; bg: string; icon: typeof ZapIc
   dormant_active: { color: 'text-purple-400', bg: 'bg-purple-500/10', icon: MoonIcon },
 };
 
+function formatSecondsAgo(date: Date): string {
+  const secs = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  return `${Math.floor(mins / 60)}h ago`;
+}
+
 export const DaemonGaia: FC<SettingsProps> = () => {
   const [status, setStatus] = useState<GaiaStatus | null>(null);
   const [events, setEvents] = useState<TickEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState(false);
+  const [lastFetched, setLastFetched] = useState<Date | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -53,6 +62,7 @@ export const DaemonGaia: FC<SettingsProps> = () => {
     const res = await legion.daemon.gaiaStatus();
     if (res.ok && res.data) {
       setStatus(res.data as GaiaStatus);
+      setLastFetched(new Date());
       setError(null);
     } else {
       setError(res.error || 'Failed to fetch GAIA status');
@@ -115,6 +125,9 @@ export const DaemonGaia: FC<SettingsProps> = () => {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {lastFetched && (
+            <span className="text-[10px] text-muted-foreground">Updated {formatSecondsAgo(lastFetched)}</span>
+          )}
           <button type="button" onClick={() => setLive(!live)} className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${live ? 'bg-red-500/10 text-red-400' : 'bg-card/50 text-muted-foreground hover:text-foreground border border-border/50'}`}>
             {live && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />}
             {live ? 'Stop' : 'Live'}
