@@ -575,7 +575,11 @@ async function* handleDaemonSyncResponse(
     return;
   }
 
-  const text = typeof data.data?.response === 'string' ? data.data.response : '';
+  const text = typeof data.data?.content === 'string'
+    ? data.data.content
+    : typeof data.data?.response === 'string'
+      ? data.data.response
+      : '';
   if (text) {
     yield { conversationId, type: 'text-delta', text };
   } else {
