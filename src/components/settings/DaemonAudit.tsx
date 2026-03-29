@@ -8,6 +8,7 @@ import {
   CheckCircle2Icon,
 } from 'lucide-react';
 import { settingsSelectClass, type SettingsProps } from './shared';
+import { legion } from '@/lib/ipc-client';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 type VerifyState = 'idle' | 'verifying' | 'ok' | 'fail';
@@ -20,9 +21,6 @@ interface AuditEntry {
   source?: string;
   [key: string]: unknown;
 }
-
-const daemonCall = (method: string, ...args: unknown[]) =>
-  ((window as unknown as { legion: { daemon: Record<string, (...a: unknown[]) => Promise<{ ok: boolean; data?: unknown; error?: string }>> } }).legion.daemon[method](...args));
 
 const STATUS_COLORS: Record<string, string> = {
   success: 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20',
@@ -46,9 +44,9 @@ export const DaemonAudit: FC<SettingsProps> = () => {
   const fetchAudit = useCallback(async () => {
     setLoadState('loading');
     setLoadError('');
-    const filters = eventTypeFilter ? { event_type: eventTypeFilter } : {};
+    const filters: Record<string, string> | undefined = eventTypeFilter ? { event_type: eventTypeFilter } : undefined;
     try {
-      const result = await daemonCall('audit', filters);
+      const result = await legion.daemon.audit(filters);
       if (result.ok && Array.isArray(result.data)) {
         setEntries(result.data as AuditEntry[]);
         setLoadState('loaded');
@@ -70,7 +68,7 @@ export const DaemonAudit: FC<SettingsProps> = () => {
     setVerifyState('verifying');
     setVerifyMessage('');
     try {
-      const result = await daemonCall('auditVerify');
+      const result = await legion.daemon.auditVerify();
       if (result.ok) {
         setVerifyState('ok');
         setVerifyMessage(typeof result.data === 'string' ? result.data : 'Chain integrity verified.');

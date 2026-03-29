@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, type FC } from 'react';
 import { RefreshCwIcon, LoaderIcon, WifiOffIcon, ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
 import type { SettingsProps } from './shared';
+import { legion } from '@/lib/ipc-client';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
@@ -21,9 +22,6 @@ type Worker = {
 type WorkerDetail = Worker & {
   costs?: Record<string, unknown>;
 };
-
-const daemonCall = (method: string, ...args: unknown[]) =>
-  ((window as unknown as { legion: { daemon: Record<string, (...a: unknown[]) => Promise<{ ok: boolean; data?: unknown; error?: string }>> } }).legion.daemon[method](...args));
 
 const LIFECYCLE_BADGE: Record<string, string> = {
   bootstrap: 'bg-muted/50 text-muted-foreground border border-border/40',
@@ -57,8 +55,8 @@ const WorkerCard: FC<{ worker: Worker }> = ({ worker }) => {
     setDetailState('loading');
     try {
       const [workerRes, costsRes] = await Promise.all([
-        daemonCall('worker', worker.id),
-        daemonCall('workerCosts', worker.id),
+        legion.daemon.worker(worker.id),
+        legion.daemon.workerCosts(worker.id),
       ]);
       const merged: WorkerDetail = {
         ...worker,
@@ -156,7 +154,7 @@ export const DaemonWorkers: FC<SettingsProps> = () => {
     setLoadState('loading');
     setLoadError('');
     try {
-      const result = await daemonCall('workers');
+      const result = await legion.daemon.workers();
       if (result.ok && Array.isArray(result.data)) {
         setWorkers(result.data as Worker[]);
         setLoadState('loaded');

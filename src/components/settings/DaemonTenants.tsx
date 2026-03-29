@@ -7,6 +7,7 @@ import {
   ChevronRightIcon,
 } from 'lucide-react';
 import { type SettingsProps } from './shared';
+import { legion } from '@/lib/ipc-client';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
@@ -24,9 +25,6 @@ interface Tenant {
   status: 'active' | 'suspended' | string;
   quota?: TenantQuota;
 }
-
-const daemonCall = (method: string, ...args: unknown[]) =>
-  ((window as unknown as { legion: { daemon: Record<string, (...a: unknown[]) => Promise<{ ok: boolean; data?: unknown; error?: string }>> } }).legion.daemon[method](...args));
 
 const StatusBadge: FC<{ status: string }> = ({ status }) => {
   const isActive = status === 'active';
@@ -115,7 +113,7 @@ export const DaemonTenants: FC<SettingsProps> = () => {
     setLoadState('loading');
     setLoadError('');
     try {
-      const result = await daemonCall('tenants');
+      const result = await legion.daemon.tenants();
       if (result.ok) {
         setTenants((result.data as Tenant[]) ?? []);
         setLoadState('loaded');

@@ -8,6 +8,7 @@ import {
   PlayIcon,
 } from 'lucide-react';
 import { type SettingsProps } from './shared';
+import { legion } from '@/lib/ipc-client';
 
 type CheckStatus = 'pass' | 'warn' | 'fail' | 'running' | 'pending';
 
@@ -17,9 +18,6 @@ type CheckResult = {
   message: string;
   duration?: number;
 };
-
-const daemonCall = (method: string, ...args: unknown[]) =>
-  ((window as unknown as { legion: { daemon: Record<string, (...a: unknown[]) => Promise<{ ok: boolean; data?: unknown; error?: string }>> } }).legion.daemon[method](...args));
 
 const StatusIcon: FC<{ status: CheckStatus }> = ({ status }) => {
   switch (status) {
@@ -90,15 +88,16 @@ export const DaemonDoctor: FC<SettingsProps> = () => {
     setRunState('running');
     setChecks(INITIAL_CHECKS.map((c) => ({ ...c })));
 
+    type DiagMethod = 'ready' | 'health' | 'catalog' | 'transport' | 'workers' | 'schedules' | 'auditVerify';
     const run = async (
       index: number,
-      method: string,
+      method: DiagMethod,
       evaluate: (result: { ok: boolean; data?: unknown; error?: string }) => { status: CheckStatus; message: string },
     ) => {
       setCheck(index, { status: 'running', message: 'Running...' });
       const start = Date.now();
       try {
-        const result = await daemonCall(method);
+        const result = await (legion.daemon[method] as () => Promise<{ ok: boolean; data?: unknown; error?: string }>)();
         const duration = Date.now() - start;
         const { status, message } = evaluate(result);
         setCheck(index, { status, message, duration });

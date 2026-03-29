@@ -10,6 +10,7 @@ import {
   ShieldIcon,
 } from 'lucide-react';
 import { type SettingsProps } from './shared';
+import { legion } from '@/lib/ipc-client';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
@@ -39,16 +40,6 @@ type Extension = {
   sandbox?: Record<string, unknown>;
 };
 
-type CatalogResult = {
-  ok: boolean;
-  data?: Extension[];
-  error?: string;
-};
-
-const daemonCall = (method: string, ...args: unknown[]) =>
-  (window as unknown as { legion: Record<string, Record<string, (...a: unknown[]) => Promise<unknown>>> })
-    .legion.daemon[method](...args) as Promise<CatalogResult>;
-
 export const DaemonExtensions: FC<SettingsProps> = ({ config }) => {
   const [extensions, setExtensions] = useState<Extension[]>([]);
   const [loadState, setLoadState] = useState<LoadState>('idle');
@@ -61,9 +52,9 @@ export const DaemonExtensions: FC<SettingsProps> = ({ config }) => {
     setLoadState('loading');
     setLoadError('');
     try {
-      const result = await daemonCall('catalog');
+      const result = await legion.daemon.catalog();
       if (result.ok && result.data) {
-        setExtensions(result.data);
+        setExtensions(result.data as Extension[]);
         setLoadState('loaded');
       } else {
         setLoadError(result.error || 'Failed to fetch extension catalog');
