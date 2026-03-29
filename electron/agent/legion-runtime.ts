@@ -1,7 +1,7 @@
-import { createHmac, randomUUID } from 'crypto';
-import { existsSync, readFileSync, realpathSync } from 'fs';
+import { existsSync, realpathSync } from 'fs';
 import { join, resolve } from 'path';
 import type { LegionConfig } from '../config/schema.js';
+import { resolveDaemonUrl, resolveAuthToken } from '../lib/daemon-client.js';
 import type { LLMModelConfig } from './model-catalog.js';
 import type { StreamEvent } from './mastra-agent.js';
 
@@ -111,46 +111,6 @@ function resolveLegionConfigDir(config: LegionConfig, legionHome: string): strin
   return join(legionHome, 'settings');
 }
 
-function resolveDaemonUrl(config: LegionConfig): string {
-  const configured = runtimeConfig(config).legion.daemonUrl.trim();
-  return configured || 'http://127.0.0.1:4567';
-}
-
-function resolveDaemonAuthToken(config: LegionConfig, legionHome: string): string | null {
-  const cryptPath = join(resolveLegionConfigDir(config, legionHome), 'crypt.json');
-  if (!existsSync(cryptPath)) return null;
-
-  try {
-    const raw = JSON.parse(readFileSync(cryptPath, 'utf-8')) as {
-      crypt?: { cluster_secret?: string };
-    };
-    const clusterSecret = raw.crypt?.cluster_secret?.trim();
-    if (!clusterSecret) return null;
-
-    const now = Math.floor(Date.now() / 1000);
-    const header = base64UrlEncode({ alg: 'HS256', typ: 'JWT' });
-    const payload = base64UrlEncode({
-      sub: process.env.USER || process.env.USERNAME || 'legion-interlink',
-      name: 'Legion Interlink',
-      roles: ['desktop'],
-      scope: 'human',
-      iss: 'legion',
-      iat: now,
-      exp: now + 3600,
-      jti: randomUUID(),
-    });
-    const signature = createHmac('sha256', clusterSecret)
-      .update(`${header}.${payload}`)
-      .digest('base64url');
-    return `${header}.${payload}.${signature}`;
-  } catch {
-    return null;
-  }
-}
-
-function base64UrlEncode(value: unknown): string {
-  return Buffer.from(JSON.stringify(value)).toString('base64url');
-}
 
 function resolveRubyPath(config: LegionConfig): string {
   const configured = runtimeConfig(config).legion.rubyPath.trim();
@@ -256,7 +216,7 @@ async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator
   const daemonUrl = resolveDaemonUrl(options.config);
   const readyUrl = new URL('/api/ready', daemonUrl).toString();
   const chatUrl = new URL('/api/llm/chat', daemonUrl).toString();
-  const authToken = resolveDaemonAuthToken(options.config, options.legionHome);
+  const authToken = resolveAuthToken(options.config, options.legionHome);
 
   let readyResponse: Response;
   try {
