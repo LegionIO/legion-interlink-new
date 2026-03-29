@@ -343,6 +343,12 @@ export const legionConfigSchema = z.object({
     fileAccess: fileAccessSchema,
     processStreaming: processStreamingSchema,
     subAgents: subAgentConfigSchema,
+    webFetch: z.object({
+      enabled: z.boolean().default(true),
+    }).optional(),
+    webSearch: z.object({
+      enabled: z.boolean().default(true),
+    }).optional(),
   }),
   mcpServers: z.array(mcpServerSchema),
   skills: z.object({
