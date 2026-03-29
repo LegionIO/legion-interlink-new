@@ -531,9 +531,6 @@ if (gotSingleInstanceLock) {
       return { canceled: false, filePaths: files };
     });
 
-    // Platform info
-    ipcMain.handle('platform:homedir', () => LEGION_HOME);
-
     // Fetch image bytes from main process (bypasses CORS)
     ipcMain.handle('image:fetch', async (_event, url: string) => {
       try {
