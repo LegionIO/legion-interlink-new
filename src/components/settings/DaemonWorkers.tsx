@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, type FC } from 'react';
-import { RefreshCwIcon, LoaderIcon, WifiOffIcon, ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
+import { RefreshCwIcon, LoaderIcon, WifiOffIcon, ChevronDownIcon, ChevronRightIcon, PauseIcon, PlayIcon, ArchiveIcon, XCircleIcon } from 'lucide-react';
 import type { SettingsProps } from './shared';
 import { legion } from '@/lib/ipc-client';
 
@@ -40,18 +40,17 @@ const LifecycleBadge: FC<{ state: string }> = ({ state }) => {
   );
 };
 
+type LifecycleAction = 'pause' | 'resume' | 'retire' | 'terminate';
+
 const WorkerCard: FC<{ worker: Worker }> = ({ worker }) => {
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState<WorkerDetail | null>(null);
   const [detailState, setDetailState] = useState<LoadState>('idle');
+  const [actionPending, setActionPending] = useState<LifecycleAction | null>(null);
+  const [confirmAction, setConfirmAction] = useState<LifecycleAction | null>(null);
+  const [actionError, setActionError] = useState('');
 
-  const expand = useCallback(async () => {
-    if (expanded) {
-      setExpanded(false);
-      return;
-    }
-    setExpanded(true);
-    if (detail) return;
+  const fetchDetail = useCallback(async () => {
     setDetailState('loading');
     try {
       const [workerRes, costsRes] = await Promise.all([
@@ -69,9 +68,38 @@ const WorkerCard: FC<{ worker: Worker }> = ({ worker }) => {
       setDetailState('error');
       console.error('Failed to load worker detail:', err);
     }
-  }, [expanded, detail, worker]);
+  }, [worker]);
+
+  const expand = useCallback(async () => {
+    if (expanded) {
+      setExpanded(false);
+      return;
+    }
+    setExpanded(true);
+    if (detail) return;
+    await fetchDetail();
+  }, [expanded, detail, fetchDetail]);
+
+  const runAction = useCallback(async (action: LifecycleAction) => {
+    setConfirmAction(null);
+    setActionPending(action);
+    setActionError('');
+    try {
+      const result = await legion.daemon.workerLifecycle(worker.id, { action });
+      if (!result.ok) {
+        setActionError(result.error ?? `Failed to ${action} worker`);
+      } else {
+        await fetchDetail();
+      }
+    } catch (err) {
+      setActionError(String(err));
+    } finally {
+      setActionPending(null);
+    }
+  }, [worker.id, fetchDetail]);
 
   const d = detail ?? worker;
+  const state = d.lifecycle_state ?? 'bootstrap';
 
   return (
     <div className="rounded-lg border bg-card/60">
@@ -131,6 +159,107 @@ const WorkerCard: FC<{ worker: Worker }> = ({ worker }) => {
           )}
           {detailState === 'error' && (
             <p className="text-[10px] text-destructive">Failed to load worker detail.</p>
+          )}
+
+          {/* Lifecycle action buttons */}
+          {(detailState === 'loaded' || detailState === 'idle') && (
+            <div className="pt-1 border-t border-border/20 space-y-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {state === 'active' && (
+                  <button
+                    type="button"
+                    disabled={actionPending !== null}
+                    onClick={() => { void runAction('pause'); }}
+                    className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs hover:bg-muted transition-colors disabled:opacity-50"
+                  >
+                    {actionPending === 'pause'
+                      ? <LoaderIcon className="h-3 w-3 animate-spin" />
+                      : <PauseIcon className="h-3 w-3" />}
+                    Pause
+                  </button>
+                )}
+                {state === 'paused' && (
+                  <button
+                    type="button"
+                    disabled={actionPending !== null}
+                    onClick={() => { void runAction('resume'); }}
+                    className="inline-flex items-center gap-1 rounded-md border border-green-500/30 px-2 py-0.5 text-xs text-green-700 dark:text-green-400 hover:bg-green-500/10 transition-colors disabled:opacity-50"
+                  >
+                    {actionPending === 'resume'
+                      ? <LoaderIcon className="h-3 w-3 animate-spin" />
+                      : <PlayIcon className="h-3 w-3" />}
+                    Resume
+                  </button>
+                )}
+                {state !== 'retired' && state !== 'terminated' && (
+                  confirmAction === 'retire' ? (
+                    <span className="inline-flex items-center gap-1">
+                      <span className="text-xs text-muted-foreground">Retire?</span>
+                      <button
+                        type="button"
+                        disabled={actionPending !== null}
+                        onClick={() => { void runAction('retire'); }}
+                        className="inline-flex items-center gap-1 rounded-md border border-orange-500/40 px-2 py-0.5 text-xs text-orange-700 dark:text-orange-400 hover:bg-orange-500/10 transition-colors disabled:opacity-50"
+                      >
+                        {actionPending === 'retire' ? <LoaderIcon className="h-3 w-3 animate-spin" /> : 'Confirm'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmAction(null)}
+                        className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs hover:bg-muted transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={actionPending !== null}
+                      onClick={() => setConfirmAction('retire')}
+                      className="inline-flex items-center gap-1 rounded-md border border-orange-500/30 px-2 py-0.5 text-xs text-orange-700 dark:text-orange-400 hover:bg-orange-500/10 transition-colors disabled:opacity-50"
+                    >
+                      <ArchiveIcon className="h-3 w-3" />
+                      Retire
+                    </button>
+                  )
+                )}
+                {state !== 'terminated' && (
+                  confirmAction === 'terminate' ? (
+                    <span className="inline-flex items-center gap-1">
+                      <span className="text-xs text-muted-foreground">Terminate?</span>
+                      <button
+                        type="button"
+                        disabled={actionPending !== null}
+                        onClick={() => { void runAction('terminate'); }}
+                        className="inline-flex items-center gap-1 rounded-md border border-destructive/40 px-2 py-0.5 text-xs text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                      >
+                        {actionPending === 'terminate' ? <LoaderIcon className="h-3 w-3 animate-spin" /> : 'Confirm'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmAction(null)}
+                        className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs hover:bg-muted transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={actionPending !== null}
+                      onClick={() => setConfirmAction('terminate')}
+                      className="inline-flex items-center gap-1 rounded-md border border-destructive/30 px-2 py-0.5 text-xs text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                    >
+                      <XCircleIcon className="h-3 w-3" />
+                      Terminate
+                    </button>
+                  )
+                )}
+              </div>
+              {actionError && (
+                <p className="text-[10px] text-destructive">{actionError}</p>
+              )}
+            </div>
           )}
         </div>
       )}
