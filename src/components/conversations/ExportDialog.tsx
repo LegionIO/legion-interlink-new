@@ -1,5 +1,6 @@
 import { useState, useEffect, type FC } from 'react';
 import { DownloadIcon, FileTextIcon, FileJsonIcon, CopyIcon, CheckIcon, XIcon } from 'lucide-react';
+import { copyTextToClipboard, logClipboardError } from '@/lib/clipboard';
 import { legion } from '@/lib/ipc-client';
 
 interface Message {
@@ -104,9 +105,14 @@ export const ExportDialog: FC<Props> = ({ open, onClose, conversationId }) => {
   }, [open, onClose]);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(preview);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await copyTextToClipboard(preview);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      setCopied(false);
+      logClipboardError('Failed to copy export preview', error);
+    }
   };
 
   const handleDownload = () => {

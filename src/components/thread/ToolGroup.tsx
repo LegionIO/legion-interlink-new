@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FC } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, type FC } from 'react';
 import { CodeBlock } from './CodeBlock';
 import {
   ChevronDownIcon,
@@ -7,7 +7,9 @@ import {
   AlertCircleIcon,
   LoaderIcon,
   ScissorsIcon,
+  DownloadIcon,
 } from 'lucide-react';
+import { legion } from '@/lib/ipc-client';
 
 type ToolCallPart = {
   type: 'tool-call';
@@ -58,6 +60,7 @@ export const ToolCallDisplay: FC<{ part: ToolCallPart }> = ({ part }) => {
   const wasCompacted = Boolean(part.compactionMeta?.wasCompacted);
   const canShowOriginal = wasCompacted && part.originalResult !== undefined;
   const isSummarizing = part.compactionPhase === 'start';
+  const mediaResult = hasResult && !isError ? detectMediaResult(part.result) : null;
 
   return (
     <div className="rounded-lg border bg-card text-sm overflow-hidden">
@@ -131,6 +134,8 @@ export const ToolCallDisplay: FC<{ part: ToolCallPart }> = ({ part }) => {
                 <CompactionToggle showOriginal={showOriginal} onToggle={() => setShowOriginal(!showOriginal)} />
               ) : undefined}
             >
+              {/* Media preview for image/video/audio generation results */}
+              {mediaResult && <MediaPreview media={mediaResult} />}
               <CodeBlock
                 code={formatResult(canShowOriginal && showOriginal ? part.originalResult : part.result)}
                 language="json"
@@ -155,6 +160,96 @@ export const ToolCallDisplay: FC<{ part: ToolCallPart }> = ({ part }) => {
     </div>
   );
 };
+
+/* ── Media Result Detection & Preview ── */
+
+type MediaResult = {
+  type: 'image' | 'video';
+  urls: string[];
+  filePaths?: string[];
+};
+
+function detectMediaResult(result: unknown): MediaResult | null {
+  if (!result || typeof result !== 'object') return null;
+  const r = result as Record<string, unknown>;
+
+  if (r.type === 'image_generation_result') {
+    const images = Array.isArray(r.images) ? r.images as Array<Record<string, unknown>> : [];
+    const urls = images.map((img) => String(img.url ?? '')).filter(Boolean);
+    const filePaths = images.map((img) => String(img.filePath ?? '')).filter(Boolean);
+    return urls.length > 0 ? { type: 'image', urls, filePaths } : null;
+  }
+
+  if (r.type === 'video_generation_result') {
+    const url = typeof r.url === 'string' ? r.url : '';
+    const filePath = typeof r.filePath === 'string' ? r.filePath : '';
+    return url ? { type: 'video', urls: [url], filePaths: filePath ? [filePath] : [] } : null;
+  }
+
+  return null;
+}
+
+const MediaPreview: FC<{ media: MediaResult }> = ({ media }) => {
+  const handleSave = useCallback((url: string) => {
+    // Extract filename from the URL for the save dialog suggestion
+    const filename = url.split('/').pop() ?? undefined;
+    legion.image.save(url, filename);
+  }, []);
+
+  if (media.type === 'image') {
+    return (
+      <div className="mb-2 space-y-2">
+        {media.urls.map((url, i) => (
+          <div key={url} className="relative group inline-block">
+            <img
+              src={url}
+              alt={`Generated image${media.urls.length > 1 ? ` ${i + 1}` : ''}`}
+              className="max-w-md max-h-96 rounded-lg object-contain"
+              loading="lazy"
+            />
+            {media.filePaths?.[i] && (
+              <button
+                type="button"
+                onClick={() => handleSave(url)}
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-80 transition-opacity bg-black/60 hover:bg-black/80 text-white rounded-md p-1.5"
+                title="Save image"
+              >
+                <DownloadIcon className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (media.type === 'video') {
+    return (
+      <div className="mb-2 relative group inline-block">
+        <video
+          src={media.urls[0]}
+          controls
+          className="max-w-md max-h-96 rounded-lg"
+          preload="metadata"
+        />
+        {media.filePaths?.[0] && (
+          <button
+            type="button"
+            onClick={() => handleSave(media.urls[0])}
+            className="absolute top-2 right-2 opacity-0 group-hover:opacity-80 transition-opacity bg-black/60 hover:bg-black/80 text-white rounded-md p-1.5"
+            title="Save video"
+          >
+            <DownloadIcon className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return null;
+};
+
+/* ── Status Badges ── */
 
 const StatusBadge: FC<{ isRunning: boolean; isError: boolean }> = ({ isRunning, isError }) => {
   if (isRunning) {
@@ -284,6 +379,8 @@ function getToolSummary(part: ToolCallPart): string {
   if (part.toolName === 'glob' && args.pattern) return String(args.pattern);
   if (part.toolName === 'list_directory' && args.path) return String(args.path);
   if (part.toolName === 'agent_lattice_chat') return 'Remote agent call';
+  if (part.toolName === 'generate_image' && args.prompt) return String(args.prompt).slice(0, 60);
+  if (part.toolName === 'generate_video' && args.prompt) return String(args.prompt).slice(0, 60);
   return '';
 }
 

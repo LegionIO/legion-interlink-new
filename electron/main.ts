@@ -1,6 +1,6 @@
-import { app, BrowserWindow, ipcMain, shell, Menu, nativeTheme, dialog, net, MenuItem, clipboard, systemPreferences } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, Menu, nativeTheme, dialog, net, MenuItem, clipboard, systemPreferences, protocol } from 'electron';
 import { join } from 'path';
-import { mkdirSync, existsSync, readFileSync, writeFileSync, readdirSync } from 'fs';
+import { mkdirSync, existsSync, readFileSync, writeFileSync, readdirSync, statSync } from 'fs';
 import { homedir } from 'os';
 import { readEffectiveConfig, registerConfigHandlers } from './ipc/config.js';
 import { registerAgentHandlers, registerTools, updateMcpTools, updateSkillTools, updatePluginTools, getRegisteredTools } from './ipc/agent.js';
@@ -21,12 +21,26 @@ import { registerRealtimeHandlers, updateActiveRealtimeSessionTools } from './ip
 import type { LegionConfig } from './config/schema.js';
 import { registerComputerUseHandlers } from './ipc/computer-use.js';
 import { registerKnowledgeHandlers } from './ipc/knowledge.js';
+import { registerClipboardHandlers } from './ipc/clipboard.js';
 import { closeAllOverlayWindows } from './computer-use/overlay-window.js';
 
 const LEGION_HOME = join(homedir(), '.legionio');
 
 // Set app name early so macOS menu bar and dock show "Legion Interlink" instead of "Electron"
 app.setName('Legion Interlink');
+
+// Register legion-media:// as a privileged scheme (must happen before app.whenReady)
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'legion-media',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+    },
+  },
+]);
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
@@ -172,14 +186,13 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' };
   });
 
-  // Grant microphone permission for speech dictation
+  // Grant the small set of renderer permissions we explicitly support.
+  const allowedPermissions = ['media', 'microphone', 'audioCapture', 'clipboard-read', 'clipboard-sanitized-write'];
   mainWindow.webContents.session.setPermissionRequestHandler((_webContents, permission, callback) => {
-    const allowed = ['media', 'microphone', 'audioCapture'];
-    callback(allowed.includes(permission));
+    callback(allowedPermissions.includes(permission));
   });
   mainWindow.webContents.session.setPermissionCheckHandler((_webContents, permission) => {
-    const allowed = ['media', 'microphone', 'audioCapture'];
-    return allowed.includes(permission);
+    return allowedPermissions.includes(permission);
   });
 
   // Default right-click context menu
@@ -412,6 +425,7 @@ if (gotSingleInstanceLock) {
     registerLiveSttHandlers(ipcMain);
     registerComputerUseHandlers(ipcMain, LEGION_HOME, getConfig);
     registerKnowledgeHandlers(ipcMain, LEGION_HOME, getConfig);
+    registerClipboardHandlers(ipcMain);
 
     // Auto-seed computer use display settings on startup.
     // If allowedDisplays is empty, populate it with all discovered displays
@@ -544,18 +558,43 @@ if (gotSingleInstanceLock) {
       }
     });
 
-    // Save image to disk via save dialog
+    // Save media (image/video/audio) to disk via native save dialog
     ipcMain.handle('image:save', async (_event, url: string, suggestedName?: string) => {
       const win = BrowserWindow.getFocusedWindow();
       if (!win) return { canceled: true };
 
       const ext = (suggestedName?.split('.').pop() ?? 'png').toLowerCase();
-      const result = await dialog.showSaveDialog(win, {
-        defaultPath: suggestedName || 'image.png',
-        filters: [
-          { name: 'Images', extensions: [ext, 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] },
+
+      // Determine file type filters based on extension
+      const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
+      const videoExts = ['mp4', 'webm', 'mov'];
+      const audioExts = ['mp3', 'wav', 'flac', 'opus', 'ogg', 'aac'];
+
+      let filters: Array<{ name: string; extensions: string[] }>;
+      let defaultName: string;
+      if (videoExts.includes(ext)) {
+        filters = [
+          { name: 'Videos', extensions: [ext, ...videoExts.filter((e) => e !== ext)] },
           { name: 'All Files', extensions: ['*'] },
-        ],
+        ];
+        defaultName = suggestedName || `video.${ext}`;
+      } else if (audioExts.includes(ext)) {
+        filters = [
+          { name: 'Audio', extensions: [ext, ...audioExts.filter((e) => e !== ext)] },
+          { name: 'All Files', extensions: ['*'] },
+        ];
+        defaultName = suggestedName || `audio.${ext}`;
+      } else {
+        filters = [
+          { name: 'Images', extensions: [ext, ...imageExts.filter((e) => e !== ext)] },
+          { name: 'All Files', extensions: ['*'] },
+        ];
+        defaultName = suggestedName || 'image.png';
+      }
+
+      const result = await dialog.showSaveDialog(win, {
+        defaultPath: defaultName,
+        filters,
       });
       if (result.canceled || !result.filePath) return { canceled: true };
 
@@ -568,6 +607,39 @@ if (gotSingleInstanceLock) {
       } catch (err) {
         return { error: String(err) };
       }
+    });
+
+    // Register legion-media:// protocol to serve generated media files from disk
+    // This avoids CSP/file:// restrictions in the renderer
+    const mediaDir = join(LEGION_HOME, 'media');
+    protocol.handle('legion-media', (request) => {
+      // URL format: legion-media://images/filename.png or legion-media://videos/filename.mp4
+      // Strip query string (e.g. cache-busters like ?_r=1) before resolving the file path
+      const rawPath = request.url.replace('legion-media://', '').split('?')[0];
+      const urlPath = decodeURIComponent(rawPath);
+      const filePath = join(mediaDir, urlPath);
+
+      // Security: ensure the resolved path is under the media directory
+      if (!filePath.startsWith(mediaDir)) {
+        return new Response('Forbidden', { status: 403 });
+      }
+
+      if (!existsSync(filePath) || !statSync(filePath).isFile()) {
+        return new Response('Not Found', { status: 404 });
+      }
+
+      const data = readFileSync(filePath);
+      const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+      const mimeTypes: Record<string, string> = {
+        png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif',
+        mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
+        mp3: 'audio/mpeg', wav: 'audio/wav', flac: 'audio/flac', opus: 'audio/opus', ogg: 'audio/ogg',
+      };
+      const contentType = mimeTypes[ext] || 'application/octet-stream';
+
+      return new Response(data, {
+        headers: { 'Content-Type': contentType, 'Cache-Control': 'no-cache' },
+      });
     });
 
     createWindow();

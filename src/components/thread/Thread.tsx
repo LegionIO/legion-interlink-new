@@ -4,6 +4,7 @@ import {
   ComposerPrimitive,
   MessagePrimitive,
   ActionBarPrimitive,
+  useAui,
   useThreadRuntime,
   useMessage,
   useComposerRuntime,
@@ -30,6 +31,7 @@ import {
   MonitorIcon,
 } from 'lucide-react';
 import { legion } from '@/lib/ipc-client';
+import { copyTextToClipboard, logClipboardError } from '@/lib/clipboard';
 import { useAttachments } from '@/providers/AttachmentContext';
 import { useBranchNav } from '@/providers/RuntimeProvider';
 import { useConfig } from '@/providers/ConfigProvider';
@@ -772,13 +774,32 @@ const BranchPicker: FC = () => {
 };
 
 const CopyButton: FC = () => {
+  const aui = useAui();
+  const message = useMessage();
   const [copied, setCopied] = useState(false);
+  const hasCopyableContent = (message.role !== 'assistant' || message.status?.type !== 'running')
+    && message.content.some((part: { type: string; text?: string }) => part.type === 'text' && (part.text?.length ?? 0) > 0);
+
+  const handleCopy = useCallback(async () => {
+    const valueToCopy = aui.message().getCopyText();
+    if (!valueToCopy) return;
+
+    try {
+      await copyTextToClipboard(valueToCopy);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      setCopied(false);
+      logClipboardError('Failed to copy message', error);
+    }
+  }, [aui]);
+
+  if (!hasCopyableContent) return null;
+
   return (
-    <ActionBarPrimitive.Copy asChild copiedDuration={2000} onClick={() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }}>
-      <button type="button" className="flex h-7 w-7 items-center justify-center rounded-xl hover:bg-muted transition-colors" title="Copy">
-        {copied ? <CheckIcon className="h-3.5 w-3.5 text-green-500" /> : <CopyIcon className="h-3.5 w-3.5 text-muted-foreground" />}
-      </button>
-    </ActionBarPrimitive.Copy>
+    <button type="button" className="flex h-7 w-7 items-center justify-center rounded-xl hover:bg-muted transition-colors" title="Copy" onClick={() => { void handleCopy(); }}>
+      {copied ? <CheckIcon className="h-3.5 w-3.5 text-green-500" /> : <CopyIcon className="h-3.5 w-3.5 text-muted-foreground" />}
+    </button>
   );
 };
 

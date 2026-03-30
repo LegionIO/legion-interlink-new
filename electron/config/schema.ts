@@ -325,6 +325,37 @@ const realtimeConfigSchema = z.object({
   }).optional(),
 });
 
+const mediaGenProviderConfigSchema = z.object({
+  enabled: z.boolean(),
+  provider: z.enum(['openai', 'azure', 'custom']),
+  openai: z.object({
+    apiKey: z.string().optional(),
+  }).optional(),
+  azure: z.object({
+    endpoint: z.string().optional(),
+    apiKey: z.string().optional(),
+    deploymentName: z.string().optional(),
+    apiVersion: z.string().optional(),
+  }).optional(),
+  custom: z.object({
+    baseUrl: z.string().optional(),
+    apiKey: z.string().optional(),
+  }).optional(),
+  model: z.string().optional(),
+});
+
+const imageGenerationConfigSchema = mediaGenProviderConfigSchema.extend({
+  size: z.string().optional(),
+  quality: z.string().optional(),
+  style: z.string().optional(),
+  outputFormat: z.string().optional(),
+});
+
+const videoGenerationConfigSchema = mediaGenProviderConfigSchema.extend({
+  size: z.string().optional(),
+  duration: z.string().optional(),
+});
+
 const pluginApprovalSchema = z.object({
   hash: z.string(),
   approvedAt: z.string(),
@@ -376,6 +407,8 @@ export const legionConfigSchema = z.object({
   defaultProfileKey: z.string().optional(),
   fallback: fallbackConfigSchema.optional(),
   knowledge: knowledgeConfigSchema.optional(),
+  imageGeneration: imageGenerationConfigSchema.optional(),
+  videoGeneration: videoGenerationConfigSchema.optional(),
 });
 
 export type LegionConfig = z.infer<typeof legionConfigSchema>;

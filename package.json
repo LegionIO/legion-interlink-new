@@ -73,6 +73,7 @@
     "json5": "^2.2.3",
     "lucide-react": "^0.468.0",
     "microsoft-cognitiveservices-speech-sdk": "^1.48.0",
+    "openai": "^6.33.0",
     "prettier": "^3.8.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
