@@ -1,7 +1,7 @@
 {
   "name": "legion-interlink",
   "productName": "Legion Interlink",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Legion Interlink - Local AI Assistant",
   "main": "./out/main/index.js",
   "type": "module",
