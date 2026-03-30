@@ -669,53 +669,6 @@ async function* pollDaemonTask(
   yield { conversationId, type: 'done' };
 }
 
-type DaemonPayload = {
-  message: string;
-  context?: string;
-};
-
-function buildDaemonPayload(messages: unknown[]): DaemonPayload {
-  const normalized = normalizeMessages(messages);
-  let lastUserIndex = -1;
-  for (let i = normalized.length - 1; i >= 0; i--) {
-    if (normalized[i].role === 'user') {
-      lastUserIndex = i;
-      break;
-    }
-  }
-
-  if (lastUserIndex === -1) {
-    return { message: '' };
-  }
-
-  const message = extractText(normalized[lastUserIndex].content);
-  const priorMessages = normalized.slice(0, lastUserIndex);
-  if (priorMessages.length === 0) {
-    return { message };
-  }
-
-  const context = priorMessages
-    .map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${extractText(message.content)}`)
-    .join('\n\n');
-
-  return { message, context };
-}
-
-function toLegionProvider(provider: LLMModelConfig['provider']): string {
-  switch (provider) {
-    case 'openai-compatible':
-      return 'openai';
-    case 'amazon-bedrock':
-      return 'bedrock';
-    case 'anthropic':
-      return 'anthropic';
-    case 'google':
-      return 'gemini';
-    default:
-      return provider;
-  }
-}
-
 export async function resolveAgentBackend(config: LegionConfig): Promise<AgentBackend> {
   const daemon = await runDaemonHealthCheck(config);
   return daemon.ok ? 'legion-daemon' : 'mastra';

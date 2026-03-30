@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, type FC } from 'react';
-import { Loader2Icon, PuzzleIcon, RefreshCwIcon, TrashIcon, PlayIcon, PauseIcon, SettingsIcon, ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
+import { Loader2Icon, PuzzleIcon, RefreshCwIcon, TrashIcon, PlayIcon, PauseIcon, SettingsIcon, ChevronDownIcon } from 'lucide-react';
 import { legion } from '@/lib/ipc-client';
 
 interface Extension {

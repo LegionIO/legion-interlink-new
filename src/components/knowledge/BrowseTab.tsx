@@ -199,8 +199,7 @@ export function BrowseTab() {
   // Fetch on mount and whenever filters or page change
   useEffect(() => {
     void fetchEntries(tagFilter, sourceFilter, page);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tagFilter, sourceFilter, page]);
+  }, [fetchEntries, tagFilter, sourceFilter, page]);
 
   // Reset to page 1 when filters change
   const handleTagChange = (value: string) => {

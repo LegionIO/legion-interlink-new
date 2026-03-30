@@ -97,7 +97,7 @@ const NotificationRow: FC<{
   );
 };
 
-export const NotificationPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
+export const NotificationPanel: FC<{ onClose: () => void }> = ({ onClose: _onClose }) => {
   const { notifications, unreadCount, markRead, markAllRead, clearAll } = useNotifications();
   const [filter, setFilter] = useState<SeverityFilter>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
