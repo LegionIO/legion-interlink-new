@@ -609,7 +609,7 @@ case "monitor":
     .flagsChanged,
   ]
   let mask = monitoredEventTypes.reduce(CGEventMask(0)) { partialResult, eventType in
-    partialResult | (CGEventMask(1) << eventType.rawValue)
+    partialResult | (CGEventMask(1) << Int(eventType.rawValue))
   }
 
   guard let tap = CGEvent.tapCreate(
