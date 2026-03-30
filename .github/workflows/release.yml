@@ -154,6 +154,8 @@ jobs:
     runs-on: macos-latest
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
     outputs:
       asset_name: ${{ steps.artifact.outputs.name }}
     steps:
@@ -189,7 +191,6 @@ jobs:
 
       - name: Create GitHub release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.prepare-release.outputs.tag }}
         run: |
           gh release create "$TAG" "${{ steps.artifact.outputs.path }}" \
@@ -203,12 +204,15 @@ jobs:
       - prepare-release
       - publish-release
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Download DMG and compute SHA256
         id: sha
         env:
           ASSET_NAME: ${{ needs.publish-release.outputs.asset_name }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.prepare-release.outputs.tag }}
         run: |
           gh release download "$TAG" \
