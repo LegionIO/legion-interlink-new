@@ -76,27 +76,34 @@ jobs:
           fi
           echo "Signing: $APP_PATH"
 
-          # Sign all native binaries inside the bundle
-          find "$APP_PATH" -type f \( -name '*.dylib' -o -name '*.so' -o -name '*.node' \) | while read -r lib; do
-            echo "  Signing: $lib"
+          # 1) Sign native modules outside of frameworks (e.g. .node addons in asar unpacked)
+          find "$APP_PATH/Contents/Resources" -type f \( -name '*.dylib' -o -name '*.so' -o -name '*.node' \) | while read -r lib; do
+            echo "  Signing resource: $lib"
             codesign --force --sign - "$lib"
           done
 
-          # Sign all executables in Frameworks and Helpers
-          find "$APP_PATH/Contents/Frameworks" -type f -perm +111 ! -name '*.dylib' 2>/dev/null | while read -r bin; do
-            codesign --force --sign - "$bin" 2>/dev/null || true
-          done
-
-          # Sign the extra resource binary (LocalMacosHelper)
+          # 2) Sign the extra resource binary (LocalMacosHelper)
           if [ -f "$APP_PATH/Contents/Resources/bin/LocalMacosHelper" ]; then
             echo "  Signing: LocalMacosHelper"
             codesign --force --sign - "$APP_PATH/Contents/Resources/bin/LocalMacosHelper"
           fi
 
-          # Sign the main app bundle
+          # 3) Sign each framework bundle (signs inner contents and seals the framework)
+          find "$APP_PATH/Contents/Frameworks" -maxdepth 1 -name '*.framework' -type d | while read -r fw; do
+            echo "  Signing framework: $fw"
+            codesign --force --deep --sign - "$fw"
+          done
+
+          # 4) Sign helper apps inside Frameworks
+          find "$APP_PATH/Contents/Frameworks" -maxdepth 1 -name '*.app' -type d | while read -r helper; do
+            echo "  Signing helper: $helper"
+            codesign --force --deep --sign - "$helper"
+          done
+
+          # 5) Sign the main app bundle
           codesign --force --sign - "$APP_PATH"
 
-          # Verify everything
+          # 6) Verify everything
           codesign --verify --deep --strict "$APP_PATH" 2>&1
           echo "All binaries signed and verified."
 
@@ -218,27 +225,34 @@ jobs:
           fi
           echo "Signing: $APP_PATH"
 
-          # Sign all native binaries inside the bundle
-          find "$APP_PATH" -type f \( -name '*.dylib' -o -name '*.so' -o -name '*.node' \) | while read -r lib; do
-            echo "  Signing: $lib"
+          # 1) Sign native modules outside of frameworks (e.g. .node addons in asar unpacked)
+          find "$APP_PATH/Contents/Resources" -type f \( -name '*.dylib' -o -name '*.so' -o -name '*.node' \) | while read -r lib; do
+            echo "  Signing resource: $lib"
             codesign --force --sign - "$lib"
           done
 
-          # Sign all executables in Frameworks and Helpers
-          find "$APP_PATH/Contents/Frameworks" -type f -perm +111 ! -name '*.dylib' 2>/dev/null | while read -r bin; do
-            codesign --force --sign - "$bin" 2>/dev/null || true
-          done
-
-          # Sign the extra resource binary (LocalMacosHelper)
+          # 2) Sign the extra resource binary (LocalMacosHelper)
           if [ -f "$APP_PATH/Contents/Resources/bin/LocalMacosHelper" ]; then
             echo "  Signing: LocalMacosHelper"
             codesign --force --sign - "$APP_PATH/Contents/Resources/bin/LocalMacosHelper"
           fi
 
-          # Sign the main app bundle
+          # 3) Sign each framework bundle (signs inner contents and seals the framework)
+          find "$APP_PATH/Contents/Frameworks" -maxdepth 1 -name '*.framework' -type d | while read -r fw; do
+            echo "  Signing framework: $fw"
+            codesign --force --deep --sign - "$fw"
+          done
+
+          # 4) Sign helper apps inside Frameworks
+          find "$APP_PATH/Contents/Frameworks" -maxdepth 1 -name '*.app' -type d | while read -r helper; do
+            echo "  Signing helper: $helper"
+            codesign --force --deep --sign - "$helper"
+          done
+
+          # 5) Sign the main app bundle
           codesign --force --sign - "$APP_PATH"
 
-          # Verify everything
+          # 6) Verify everything
           codesign --verify --deep --strict "$APP_PATH" 2>&1
           echo "All binaries signed and verified."
 
