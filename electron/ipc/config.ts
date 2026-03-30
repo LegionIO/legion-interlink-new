@@ -225,6 +225,16 @@ function getDefaultConfig() {
       captureEnabled: false,
       scope: 'all' as const,
     },
+    imageGeneration: {
+      enabled: false,
+      provider: 'azure' as const,
+      model: 'gpt-image-1.5',
+    },
+    videoGeneration: {
+      enabled: false,
+      provider: 'azure' as const,
+      model: 'sora-2',
+    },
   };
 }
 
@@ -641,6 +651,8 @@ export function desktopConfigPayload(config: LegionConfig): Record<string, unkno
     profiles: config.profiles,
     defaultProfileKey: config.defaultProfileKey,
     fallback: config.fallback,
+    imageGeneration: config.imageGeneration,
+    videoGeneration: config.videoGeneration,
   };
 }
 

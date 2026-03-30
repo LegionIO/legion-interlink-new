@@ -1,5 +1,5 @@
 import { type FC, type ReactNode, useState, useCallback, memo } from 'react';
-import ReactMarkdown, { type Components, type Options } from 'react-markdown';
+import ReactMarkdown, { type Components, type Options, defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
@@ -10,6 +10,10 @@ import { cn } from '@/lib/utils';
 const rehypeSanitizeOptions = {
   ...defaultSchema,
   tagNames: [...(defaultSchema.tagNames || []), 'video'],
+  protocols: {
+    ...defaultSchema.protocols,
+    src: [...(defaultSchema.protocols?.src || []), 'legion-media'],
+  },
   attributes: {
     ...defaultSchema.attributes,
     img: [
@@ -35,7 +39,7 @@ const ChatImage: FC<React.ImgHTMLAttributes<HTMLImageElement>> = ({ alt, src, ..
   const imgSrc = src ? (reloadKey > 0 ? `${src}${src.includes('?') ? '&' : '?'}_r=${reloadKey}` : src) : undefined;
 
   return (
-    <div className="relative inline-block group">
+    <span className="relative inline-block group">
       <img
         alt={alt ?? ''}
         src={imgSrc}
@@ -52,7 +56,7 @@ const ChatImage: FC<React.ImgHTMLAttributes<HTMLImageElement>> = ({ alt, src, ..
       >
         <RefreshCwIcon className="h-3.5 w-3.5" />
       </button>
-    </div>
+    </span>
   );
 };
 
@@ -187,12 +191,24 @@ const markdownComponents = {
 const remarkPlugins: NonNullable<Options['remarkPlugins']> = [remarkGfm];
 const rehypePlugins: NonNullable<Options['rehypePlugins']> = [rehypeRaw, [rehypeSanitize, rehypeSanitizeOptions]];
 
+/**
+ * react-markdown's defaultUrlTransform only allows http(s), irc(s), mailto, and xmpp protocols.
+ * We extend it to also allow our custom legion-media:// protocol used for locally-generated media.
+ */
+const allowedProtocols = /^legion-media:/i;
+
+function urlTransform(url: string, _key: string, _node: unknown): string {
+  if (allowedProtocols.test(url)) return url;
+  return defaultUrlTransform(url);
+}
+
 export const MarkdownText: FC<{ text: string }> = memo(({ text }) => {
   return (
     <div className="max-w-none break-words text-sm text-foreground">
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}
+        urlTransform={urlTransform}
         components={markdownComponents as Components}
       >
         {text}

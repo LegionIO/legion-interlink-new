@@ -258,6 +258,11 @@ const legionAPI = {
     openDirectoryFiles: () => ipcRenderer.invoke('dialog:open-directory-files'),
   },
 
+  clipboard: {
+    writeText: (text: string) =>
+      ipcRenderer.invoke('clipboard:write-text', text) as Promise<{ ok: boolean; error?: string }>,
+  },
+
   // Image utilities (fetched via main process to bypass CORS)
   image: {
     fetch: (url: string) => ipcRenderer.invoke('image:fetch', url) as Promise<{ data?: string; mime?: string; error?: string }>,

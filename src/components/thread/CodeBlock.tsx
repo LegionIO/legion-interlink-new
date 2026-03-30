@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, memo, type FC } from 'react';
 import ShikiHighlighter from 'react-shiki';
 import { CopyIcon, CheckIcon, BracketsIcon, MinimizeIcon, FileTextIcon } from 'lucide-react';
+import { copyTextToClipboard, logClipboardError } from '@/lib/clipboard';
 
 /* ── Lazy-loaded heavy deps ── */
 const lazyHljs = () => import('highlight.js').then((m) => m.default);
@@ -308,10 +309,15 @@ export const CodeBlock: FC<CodeBlockProps> = memo(({ code: rawCode, language, is
     return code;
   })();
 
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(displayCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = useCallback(async () => {
+    try {
+      await copyTextToClipboard(displayCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      setCopied(false);
+      logClipboardError('Failed to copy code block', error);
+    }
   }, [displayCode]);
 
   const next = nextMode(viewMode, availableModes);

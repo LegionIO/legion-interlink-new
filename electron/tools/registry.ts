@@ -22,6 +22,8 @@ import { loadSkillsAsTools } from './skill-loader.js';
 import { createSkillManageTool } from './skill-manage.js';
 import { webFetchTool } from './web-fetch.js';
 import { webSearchTool } from './web-search.js';
+import { createImageGenTool } from './image-gen.js';
+import { createVideoGenTool } from './video-gen.js';
 import { z } from 'zod';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -191,6 +193,14 @@ export async function buildToolRegistry(getConfig: () => LegionConfig, legionHom
   }
   if (config?.tools?.webSearch?.enabled !== false) {
     tools.push(webSearchTool);
+  }
+
+  // Media generation tools
+  if (config?.imageGeneration?.enabled && legionHome) {
+    tools.push(createImageGenTool(getConfig, legionHome));
+  }
+  if (config?.videoGeneration?.enabled && legionHome) {
+    tools.push(createVideoGenTool(getConfig, legionHome));
   }
 
   // Self-management tools (always available)

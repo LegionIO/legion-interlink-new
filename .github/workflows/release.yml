@@ -67,6 +67,39 @@ jobs:
 
       - run: pnpm build:mac
 
+      - name: Ad-hoc codesign the app bundle
+        run: |
+          APP_PATH="$(find dist/mac-arm64 -maxdepth 1 -name '*.app' -type d | head -n 1)"
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: No .app bundle found in dist/mac-arm64/" >&2
+            exit 1
+          fi
+          echo "Signing: $APP_PATH"
+
+          # Sign all native binaries inside the bundle
+          find "$APP_PATH" -type f \( -name '*.dylib' -o -name '*.so' -o -name '*.node' \) | while read -r lib; do
+            echo "  Signing: $lib"
+            codesign --force --sign - "$lib"
+          done
+
+          # Sign all executables in Frameworks and Helpers
+          find "$APP_PATH/Contents/Frameworks" -type f -perm +111 ! -name '*.dylib' 2>/dev/null | while read -r bin; do
+            codesign --force --sign - "$bin" 2>/dev/null || true
+          done
+
+          # Sign the extra resource binary (LocalMacosHelper)
+          if [ -f "$APP_PATH/Contents/Resources/bin/LocalMacosHelper" ]; then
+            echo "  Signing: LocalMacosHelper"
+            codesign --force --sign - "$APP_PATH/Contents/Resources/bin/LocalMacosHelper"
+          fi
+
+          # Sign the main app bundle
+          codesign --force --sign - "$APP_PATH"
+
+          # Verify everything
+          codesign --verify --deep --strict "$APP_PATH" 2>&1
+          echo "All binaries signed and verified."
+
   prepare-release:
     if: ${{ github.event_name == 'workflow_dispatch' }}
     needs: checks
@@ -175,6 +208,39 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm build:mac
+
+      - name: Ad-hoc codesign the app bundle
+        run: |
+          APP_PATH="$(find dist/mac-arm64 -maxdepth 1 -name '*.app' -type d | head -n 1)"
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: No .app bundle found in dist/mac-arm64/" >&2
+            exit 1
+          fi
+          echo "Signing: $APP_PATH"
+
+          # Sign all native binaries inside the bundle
+          find "$APP_PATH" -type f \( -name '*.dylib' -o -name '*.so' -o -name '*.node' \) | while read -r lib; do
+            echo "  Signing: $lib"
+            codesign --force --sign - "$lib"
+          done
+
+          # Sign all executables in Frameworks and Helpers
+          find "$APP_PATH/Contents/Frameworks" -type f -perm +111 ! -name '*.dylib' 2>/dev/null | while read -r bin; do
+            codesign --force --sign - "$bin" 2>/dev/null || true
+          done
+
+          # Sign the extra resource binary (LocalMacosHelper)
+          if [ -f "$APP_PATH/Contents/Resources/bin/LocalMacosHelper" ]; then
+            echo "  Signing: LocalMacosHelper"
+            codesign --force --sign - "$APP_PATH/Contents/Resources/bin/LocalMacosHelper"
+          fi
+
+          # Sign the main app bundle
+          codesign --force --sign - "$APP_PATH"
+
+          # Verify everything
+          codesign --verify --deep --strict "$APP_PATH" 2>&1
+          echo "All binaries signed and verified."
 
       - name: Locate DMG artifact
         id: artifact
