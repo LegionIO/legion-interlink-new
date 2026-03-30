@@ -265,7 +265,9 @@ export class LocalMacosHarness implements ComputerHarness {
   }
 
   async initialize(_session: ComputerSession): Promise<void> {
-    const permissions = await getComputerUsePermissions();
+    // Skip the input monitoring probe here — this runs at session start when the
+    // user is idle; we only need to verify the helper binary is functional.
+    const permissions = await getComputerUsePermissions({ probeInputMonitoring: false });
     if (!permissions.helperReady) {
       throw new Error(permissions.message ?? 'Local macOS helper is unavailable.');
     }
@@ -603,7 +605,7 @@ export class LocalMacosHarness implements ComputerHarness {
   }
 
   async getEnvironmentMetadata(_session: ComputerSession): Promise<ComputerEnvironmentMetadata> {
-    const permissions = await getComputerUsePermissions();
+    const permissions = await getComputerUsePermissions({ probeInputMonitoring: false });
     const appName = await runAppleScript('tell application "System Events" to get name of first application process whose frontmost is true');
     let windowTitle = '';
     try {

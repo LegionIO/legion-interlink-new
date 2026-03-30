@@ -345,9 +345,14 @@ export class ComputerUseSessionManager extends EventEmitter {
     };
   }
 
-  private async getPermissionsForTarget(target: ComputerUseTarget): Promise<ComputerUsePermissions> {
+  private async getPermissionsForTarget(target: ComputerUseTarget, options?: {
+    /** Skip the timing-dependent Input Monitoring probe (used during session start/resume). */
+    skipInputMonitoringProbe?: boolean;
+  }): Promise<ComputerUsePermissions> {
     if (target === 'local-macos') {
-      return getComputerUsePermissions();
+      return getComputerUsePermissions({
+        probeInputMonitoring: !options?.skipInputMonitoringProbe,
+      });
     }
 
     return this.buildDefaultPermissions(target);
@@ -447,7 +452,14 @@ export class ComputerUseSessionManager extends EventEmitter {
     target: ComputerUseTarget,
     options?: { requestMissing?: boolean },
   ): Promise<{ permissions: ComputerUsePermissions; blocker: string | null }> {
-    let permissions = await this.getPermissionsForTarget(target);
+    // Skip the timing-dependent Input Monitoring probe during automated preflight.
+    // The probe requires the user to be actively moving the mouse/keyboard within
+    // a 3-second window, which almost never happens at session start (the user is
+    // idle waiting). The interactive setup UI calls getLocalMacosPermissions()
+    // separately with the probe enabled where the user is prompted to move their
+    // mouse. At this stage we trust that if Accessibility is granted, the
+    // listenOnly event tap used by the takeover monitor will work.
+    let permissions = await this.getPermissionsForTarget(target, { skipInputMonitoringProbe: true });
     let blocker = this.getPreflightBlocker(target, permissions);
 
     if (target === 'local-macos' && blocker && options?.requestMissing && this.getConfig().computerUse.localMacos.autoRequestPermissions) {

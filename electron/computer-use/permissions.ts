@@ -277,22 +277,41 @@ export async function openLocalMacosPrivacySettings(section: ComputerUsePermissi
   await shell.openExternal(LOCAL_MACOS_PRIVACY_URLS[section]);
 }
 
-export async function getComputerUsePermissions(): Promise<ComputerUsePermissions> {
-  // Run the basic permissions check and the input monitoring probe in parallel.
-  // The probe spawns the helper with a short timeout — it resolves early if the
-  // user's mouse/keyboard activity is detected (which is typical since they just
-  // interacted with the UI).
-  const [helperResult, automationGranted, inputMonitoringGranted] = await Promise.all([
+export async function getComputerUsePermissions(options?: {
+  /**
+   * When true (the default), run the functional Input Monitoring probe — spawns
+   * a listenOnly event tap and waits up to `probeTimeoutMs` for a real physical
+   * input event.  This is reliable in interactive contexts where the user has
+   * been prompted to move their mouse, but **unreliable** for automated checks
+   * at session start/resume because the user is typically idle and the probe
+   * times out, falsely reporting the permission as missing.
+   *
+   * Pass `false` to skip the probe entirely and leave `inputMonitoringGranted`
+   * as `null` in the returned object — callers can then decide whether to treat
+   * a missing value as granted or unknown.
+   */
+  probeInputMonitoring?: boolean;
+  /** Timeout (ms) for the input monitoring probe. Default 3 000. */
+  probeTimeoutMs?: number;
+}): Promise<ComputerUsePermissions> {
+  const shouldProbe = options?.probeInputMonitoring ?? true;
+  const probeTimeout = options?.probeTimeoutMs ?? 3000;
+
+  // Run the basic permissions check (and optionally the input monitoring probe) in parallel.
+  const [helperResult, automationGranted, inputMonitoringProbeResult] = await Promise.all([
     runLocalMacHelper(['permissions']),
     probeAutomationPermission(),
-    probeInputMonitoring(3000),
+    shouldProbe ? probeInputMonitoring(probeTimeout) : Promise.resolve(null),
   ]);
+
   return {
     target: 'local-macos',
     accessibilityTrusted: getAccessibilityStatus(),
     screenRecordingGranted: getScreenRecordingStatus(helperResult),
     automationGranted,
-    inputMonitoringGranted,
+    // When the probe was skipped, default to true — the caller opted out of
+    // checking, so we shouldn't block on an unknown value.
+    inputMonitoringGranted: inputMonitoringProbeResult ?? true,
     helperReady: helperResult.ok === true,
     message: helperResult.error,
   };
