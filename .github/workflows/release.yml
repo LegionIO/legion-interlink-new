@@ -51,6 +51,8 @@ jobs:
     runs-on: macos-latest
     permissions:
       contents: read
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
       - uses: actions/checkout@v4
 
@@ -66,46 +68,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm build:mac
-
-      - name: Ad-hoc codesign the app bundle
-        run: |
-          APP_PATH="$(find dist/mac-arm64 -maxdepth 1 -name '*.app' -type d | head -n 1)"
-          if [ -z "$APP_PATH" ]; then
-            echo "ERROR: No .app bundle found in dist/mac-arm64/" >&2
-            exit 1
-          fi
-          echo "Signing: $APP_PATH"
-
-          # 1) Sign native modules outside of frameworks (e.g. .node addons in asar unpacked)
-          find "$APP_PATH/Contents/Resources" -type f \( -name '*.dylib' -o -name '*.so' -o -name '*.node' \) | while read -r lib; do
-            echo "  Signing resource: $lib"
-            codesign --force --sign - "$lib"
-          done
-
-          # 2) Sign the extra resource binary (LocalMacosHelper)
-          if [ -f "$APP_PATH/Contents/Resources/bin/LocalMacosHelper" ]; then
-            echo "  Signing: LocalMacosHelper"
-            codesign --force --sign - "$APP_PATH/Contents/Resources/bin/LocalMacosHelper"
-          fi
-
-          # 3) Sign each framework bundle (signs inner contents and seals the framework)
-          find "$APP_PATH/Contents/Frameworks" -maxdepth 1 -name '*.framework' -type d | while read -r fw; do
-            echo "  Signing framework: $fw"
-            codesign --force --deep --sign - "$fw"
-          done
-
-          # 4) Sign helper apps inside Frameworks
-          find "$APP_PATH/Contents/Frameworks" -maxdepth 1 -name '*.app' -type d | while read -r helper; do
-            echo "  Signing helper: $helper"
-            codesign --force --deep --sign - "$helper"
-          done
-
-          # 5) Sign the main app bundle
-          codesign --force --sign - "$APP_PATH"
-
-          # 6) Verify everything
-          codesign --verify --deep --strict "$APP_PATH" 2>&1
-          echo "All binaries signed and verified."
 
   prepare-release:
     if: ${{ github.event_name == 'workflow_dispatch' }}
@@ -196,6 +158,13 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
+      # Code signing — electron-builder reads these automatically
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      # Notarization — electron-builder reads these automatically
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     outputs:
       asset_name: ${{ steps.artifact.outputs.name }}
     steps:
@@ -216,45 +185,20 @@ jobs:
 
       - run: pnpm build:mac
 
-      - name: Ad-hoc codesign the app bundle
+      - name: Verify code signature
         run: |
           APP_PATH="$(find dist/mac-arm64 -maxdepth 1 -name '*.app' -type d | head -n 1)"
           if [ -z "$APP_PATH" ]; then
             echo "ERROR: No .app bundle found in dist/mac-arm64/" >&2
             exit 1
           fi
-          echo "Signing: $APP_PATH"
 
-          # 1) Sign native modules outside of frameworks (e.g. .node addons in asar unpacked)
-          find "$APP_PATH/Contents/Resources" -type f \( -name '*.dylib' -o -name '*.so' -o -name '*.node' \) | while read -r lib; do
-            echo "  Signing resource: $lib"
-            codesign --force --sign - "$lib"
-          done
+          echo "Verifying signature: $APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
-          # 2) Sign the extra resource binary (LocalMacosHelper)
-          if [ -f "$APP_PATH/Contents/Resources/bin/LocalMacosHelper" ]; then
-            echo "  Signing: LocalMacosHelper"
-            codesign --force --sign - "$APP_PATH/Contents/Resources/bin/LocalMacosHelper"
-          fi
-
-          # 3) Sign each framework bundle (signs inner contents and seals the framework)
-          find "$APP_PATH/Contents/Frameworks" -maxdepth 1 -name '*.framework' -type d | while read -r fw; do
-            echo "  Signing framework: $fw"
-            codesign --force --deep --sign - "$fw"
-          done
-
-          # 4) Sign helper apps inside Frameworks
-          find "$APP_PATH/Contents/Frameworks" -maxdepth 1 -name '*.app' -type d | while read -r helper; do
-            echo "  Signing helper: $helper"
-            codesign --force --deep --sign - "$helper"
-          done
-
-          # 5) Sign the main app bundle
-          codesign --force --sign - "$APP_PATH"
-
-          # 6) Verify everything
-          codesign --verify --deep --strict "$APP_PATH" 2>&1
-          echo "All binaries signed and verified."
+          echo ""
+          echo "Checking notarization staple:"
+          xcrun stapler validate "$APP_PATH" || echo "Warning: staple not found (notarization may still be processing)"
 
       - name: Locate DMG artifact
         id: artifact
