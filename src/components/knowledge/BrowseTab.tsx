@@ -6,7 +6,7 @@ import {
   ChevronDownIcon,
   Trash2Icon,
 } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 const PAGE_SIZE = 50;
 
@@ -62,7 +62,7 @@ const EntryRow: FC<EntryRowProps> = ({ entry, expanded, onToggle, onDelete }) =>
     e.stopPropagation();
     setDeleting(true);
     try {
-      const res = await legion.knowledge.delete(entry.id);
+      const res = await app.knowledge.delete(entry.id);
       if (res.ok) {
         onDelete(entry.id);
       }
@@ -173,7 +173,7 @@ export function BrowseTab() {
       if (tag.trim()) filters.tag = tag.trim();
       if (source.trim()) filters.source = source.trim();
 
-      const res = await legion.knowledge.browse(filters);
+      const res = await app.knowledge.browse(filters);
       if (res.ok) {
         const raw = res.data;
         let list: KnowledgeEntry[];

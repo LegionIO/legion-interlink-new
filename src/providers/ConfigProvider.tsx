@@ -1,10 +1,10 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
-type LegionConfig = Record<string, unknown>;
+type AppConfig = Record<string, unknown>;
 
 type ConfigContextValue = {
-  config: LegionConfig | null;
+  config: AppConfig | null;
   updateConfig: (path: string, value: unknown) => Promise<void>;
 };
 
@@ -14,18 +14,18 @@ const ConfigContext = createContext<ConfigContextValue>({
 });
 
 export function ConfigProvider({ children }: { children: ReactNode }) {
-  const [config, setConfig] = useState<LegionConfig | null>(null);
+  const [config, setConfig] = useState<AppConfig | null>(null);
 
   useEffect(() => {
     try {
       // Load initial config
-      legion.config.get()
-        .then((cfg) => setConfig(cfg as LegionConfig))
+      app.config.get()
+        .then((cfg) => setConfig(cfg as AppConfig))
         .catch((err) => console.error('[Config] Failed to load:', err));
 
       // Listen for config changes
-      const unsubscribe = legion.config.onChanged((cfg) => {
-        setConfig(cfg as LegionConfig);
+      const unsubscribe = app.config.onChanged((cfg) => {
+        setConfig(cfg as AppConfig);
       });
 
       return unsubscribe;
@@ -36,8 +36,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
 
   const updateConfig = async (path: string, value: unknown) => {
     try {
-      const updated = await legion.config.set(path, value);
-      setConfig(updated as LegionConfig);
+      const updated = await app.config.set(path, value);
+      setConfig(updated as AppConfig);
     } catch (err) {
       console.error('[Config] Failed to update:', err);
     }

@@ -2,24 +2,24 @@ import { z } from 'zod';
 import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync, readdirSync, chmodSync } from 'fs';
 import { join } from 'path';
 import type { ToolDefinition } from './types.js';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import { getSkillToolName, loadSkillsFromDisk, type SkillManifest } from './skill-loader.js';
 import { readEffectiveConfig, writeDesktopConfig } from '../ipc/config.js';
 
-function readConfig(legionHome: string): LegionConfig {
-  return readEffectiveConfig(legionHome);
+function readConfig(appHome: string): AppConfig {
+  return readEffectiveConfig(appHome);
 }
 
-function getSkillsDir(legionHome: string, config?: LegionConfig): string {
-  const cfg = config ?? readConfig(legionHome);
-  return cfg.skills?.directory || join(legionHome, 'skills');
+function getSkillsDir(appHome: string, config?: AppConfig): string {
+  const cfg = config ?? readConfig(appHome);
+  return cfg.skills?.directory || join(appHome, 'skills');
 }
 
-export function createSkillManageTool(legionHome: string): ToolDefinition {
+export function createSkillManageTool(appHome: string): ToolDefinition {
   return {
     name: 'skills',
     description: [
-      'Manage Legion Interlink skills. Skills are reusable tools stored on disk that persist across sessions.',
+      'Manage ' + __BRAND_PRODUCT_NAME + ' skills. Skills are reusable tools stored on disk that persist across sessions.',
       'Actions: "list" shows all skills. "get" reads a skill\'s manifest and files. "create" makes a new skill. "edit" updates one. "delete" removes one. "enable"/"disable" toggles availability.',
       'Skill types: "shell" (runs a command), "script" (runs Node.js), "prompt" (template), "http" (calls an endpoint), "composite" (chains tools).',
       `Created skills are immediately available as tools named like "${getSkillToolName('deploy-status')}".`,
@@ -57,8 +57,8 @@ export function createSkillManageTool(legionHome: string): ToolDefinition {
         files?: Record<string, string>;
       };
 
-      const config = readConfig(legionHome);
-      const skillsDir = getSkillsDir(legionHome, config);
+      const config = readConfig(appHome);
+      const skillsDir = getSkillsDir(appHome, config);
 
       switch (action) {
         case 'list': {
@@ -142,8 +142,8 @@ export function createSkillManageTool(legionHome: string): ToolDefinition {
           if (!enabled.includes(name)) {
             enabled.push(name);
           }
-          config.skills = { ...config.skills, enabled, directory: config.skills?.directory ?? join(legionHome, 'skills') };
-          writeDesktopConfig(legionHome, config);
+          config.skills = { ...config.skills, enabled, directory: config.skills?.directory ?? join(appHome, 'skills') };
+          writeDesktopConfig(appHome, config);
 
           return {
             success: true,
@@ -196,8 +196,8 @@ export function createSkillManageTool(legionHome: string): ToolDefinition {
 
           // Remove from enabled list
           const enabled = (config.skills?.enabled ?? []).filter((s: string) => s !== name);
-          config.skills = { ...config.skills, enabled, directory: config.skills?.directory ?? join(legionHome, 'skills') };
-          writeDesktopConfig(legionHome, config);
+          config.skills = { ...config.skills, enabled, directory: config.skills?.directory ?? join(appHome, 'skills') };
+          writeDesktopConfig(appHome, config);
 
           return { success: true, deleted: name, note: 'Skill removed. Changes take effect on your next turn.' };
         }
@@ -211,8 +211,8 @@ export function createSkillManageTool(legionHome: string): ToolDefinition {
           if (!enabled.includes(name)) {
             enabled.push(name);
           }
-          config.skills = { ...config.skills, enabled, directory: config.skills?.directory ?? join(legionHome, 'skills') };
-          writeDesktopConfig(legionHome, config);
+          config.skills = { ...config.skills, enabled, directory: config.skills?.directory ?? join(appHome, 'skills') };
+          writeDesktopConfig(appHome, config);
 
           return { success: true, enabled: name, note: 'Skill enabled. Changes take effect on your next turn.' };
         }
@@ -220,8 +220,8 @@ export function createSkillManageTool(legionHome: string): ToolDefinition {
         case 'disable': {
           if (!name) return { error: 'Skill name is required.' };
           const enabled = (config.skills?.enabled ?? []).filter((s: string) => s !== name);
-          config.skills = { ...config.skills, enabled, directory: config.skills?.directory ?? join(legionHome, 'skills') };
-          writeDesktopConfig(legionHome, config);
+          config.skills = { ...config.skills, enabled, directory: config.skills?.directory ?? join(appHome, 'skills') };
+          writeDesktopConfig(appHome, config);
 
           return { success: true, disabled: name, note: 'Skill disabled. Changes take effect on your next turn.' };
         }

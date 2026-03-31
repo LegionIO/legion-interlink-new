@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback, type FC, type KeyboardEvent }
 import { ExternalLinkIcon, LoaderIcon, MonitorIcon, ShieldCheckIcon, MaximizeIcon } from 'lucide-react';
 import { useConfig } from '@/providers/ConfigProvider';
 import { useComputerUse } from '@/providers/ComputerUseProvider';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import { ModelSelector } from './ModelSelector';
 import { ProfileSelector } from './ProfileSelector';
 import { FallbackToggle } from './FallbackToggle';
@@ -161,7 +161,7 @@ export const ComputerSetupPanel: FC<ComputerSetupPanelProps> = ({
       return;
     }
     let cancelled = false;
-    void legion.computerUse.checkFullScreenApps().then(({ problematicApps }) => {
+    void app.computerUse.checkFullScreenApps().then(({ problematicApps }) => {
       if (!cancelled) setFullScreenApps(problematicApps);
     }).catch(() => {
       if (!cancelled) setFullScreenApps([]);
@@ -173,9 +173,9 @@ export const ComputerSetupPanel: FC<ComputerSetupPanelProps> = ({
     if (isExitingFullScreen || fullScreenApps.length === 0) return;
     setIsExitingFullScreen(true);
     try {
-      await legion.computerUse.exitFullScreenApps(fullScreenApps);
+      await app.computerUse.exitFullScreenApps(fullScreenApps);
       // Re-check after exiting
-      const { problematicApps } = await legion.computerUse.checkFullScreenApps();
+      const { problematicApps } = await app.computerUse.checkFullScreenApps();
       setFullScreenApps(problematicApps);
     } finally {
       setIsExitingFullScreen(false);
@@ -265,7 +265,7 @@ export const ComputerSetupPanel: FC<ComputerSetupPanelProps> = ({
         value={computerGoal}
         onChange={(event) => setComputerGoal(event.target.value)}
         onKeyDown={handleGoalKeyDown}
-        placeholder={!conversationId ? 'Select a conversation first...' : canContinue ? 'Continue the session with a follow-up... (Enter to resume)' : 'What should Interlink do on your computer? (Enter to start)'}
+        placeholder={!conversationId ? 'Select a conversation first...' : canContinue ? 'Continue the session with a follow-up... (Enter to resume)' : `What should ${__BRAND_PRODUCT_NAME} do on your computer? (Enter to start)`}
         disabled={!conversationId}
         rows={2}
         className="w-full resize-none rounded-xl border border-border/70 bg-card/80 px-3 py-2.5 text-sm outline-none placeholder:text-muted-foreground/50 disabled:cursor-not-allowed disabled:opacity-50"

@@ -2,15 +2,15 @@ import type { IpcMain } from 'electron';
 import { readFileSync, writeFileSync, existsSync, watch, mkdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import type { LegionConfig } from '../config/schema.js';
-import { detectLegionRuntime } from '../agent/legion-runtime.js';
+import type { AppConfig } from '../config/schema.js';
+import { detectAppRuntime } from '../agent/app-runtime.js';
 import { broadcastToAllWindows } from '../utils/window-send.js';
 
-export type { LegionConfig } from '../config/schema.js';
+export type { AppConfig } from '../config/schema.js';
 
-export const LEGION_LLM_CONFIG_PATH = join(homedir(), '.legionio', 'settings', 'llm.json');
+export const APP_LLM_CONFIG_PATH = join(homedir(), '.' + __BRAND_APP_SLUG, 'settings', 'llm.json');
 const DESKTOP_SETTINGS_FILENAME = 'desktop.json';
-const DEFAULT_SYSTEM_PROMPT = 'You are Interlink, a powerful local AI assistant with access to the user\'s computer. You can execute shell commands, read/write files, search codebases, and connect to external services via MCP. Be proactive, thorough, and helpful. When executing tools, explain what you\'re doing and why.';
+const DEFAULT_SYSTEM_PROMPT = `You are ${__BRAND_ASSISTANT_NAME}, a powerful local AI assistant with access to the user's computer. You can execute shell commands, read/write files, search codebases, and connect to external services via MCP. Be proactive, thorough, and helpful. When executing tools, explain what you're doing and why.`;
 const LEGACY_DEFAULT_SYSTEM_PROMPTS = new Set([
   'You are Aithena, a powerful local AI assistant with access to the user\'s computer. You can execute shell commands, read/write files, search codebases, and connect to external services via MCP. Be proactive, thorough, and helpful. When executing tools, explain what you\'re doing and why.',
   'You are Legion Aithena, a powerful local AI assistant with access to the user\'s computer. You can execute shell commands, read/write files, search codebases, and connect to external services via MCP. Be proactive, thorough, and helpful. When executing tools, explain what you\'re doing and why.',
@@ -18,8 +18,8 @@ const LEGACY_DEFAULT_SYSTEM_PROMPTS = new Set([
   'You are Legion, a powerful local AI assistant with access to the user\'s computer. You can execute shell commands, read/write files, search codebases, and connect to external services via MCP. Be proactive, thorough, and helpful. When executing tools, explain what you\'re doing and why.',
 ]);
 
-export function getDesktopSettingsPath(legionHome: string): string {
-  return join(legionHome, 'settings', DESKTOP_SETTINGS_FILENAME);
+export function getDesktopSettingsPath(appHome: string): string {
+  return join(appHome, 'settings', DESKTOP_SETTINGS_FILENAME);
 }
 
 function getDefaultConfig() {
@@ -31,7 +31,7 @@ function getDefaultConfig() {
     },
     runtime: {
       agentBackend: 'mastra' as const,
-      legion: {
+      daemon: {
         rootPath: '',
         configDir: '',
         daemonUrl: 'http://127.0.0.1:4567',
@@ -110,7 +110,7 @@ function getDefaultConfig() {
     },
     mcpServers: [] as Array<{ name: string; command?: string; args?: string[]; url?: string; env?: Record<string, string> }>,
     skills: {
-      directory: '~/.legionio/skills',
+      directory: '~/.' + __BRAND_APP_SLUG + '/skills',
       enabled: [] as string[],
     },
     systemPrompt: DEFAULT_SYSTEM_PROMPT,
@@ -238,11 +238,11 @@ function getDefaultConfig() {
   };
 }
 
-function applyRuntimeDefaults(config: LegionConfig, legionHome: string): LegionConfig {
-  const detected = detectLegionRuntime(config, legionHome);
+function applyRuntimeDefaults(config: AppConfig, appHome: string): AppConfig {
+  const detected = detectAppRuntime(config, appHome);
   const currentRuntime = config.runtime ?? {
     agentBackend: 'mastra',
-    legion: {
+    daemon: {
       rootPath: '',
       configDir: '',
       daemonUrl: '',
@@ -254,20 +254,20 @@ function applyRuntimeDefaults(config: LegionConfig, legionHome: string): LegionC
     ...config,
     runtime: {
       ...currentRuntime,
-      legion: {
-        ...currentRuntime.legion,
-        rootPath: currentRuntime.legion?.rootPath || '',
-        configDir: currentRuntime.legion?.configDir || detected.configDir,
-        daemonUrl: currentRuntime.legion?.daemonUrl || detected.daemonUrl,
-        rubyPath: currentRuntime.legion?.rubyPath || detected.rubyPath,
+      daemon: {
+        ...currentRuntime.daemon,
+        rootPath: currentRuntime.daemon?.rootPath || '',
+        configDir: currentRuntime.daemon?.configDir || detected.configDir,
+        daemonUrl: currentRuntime.daemon?.daemonUrl || detected.daemonUrl,
+        rubyPath: currentRuntime.daemon?.rubyPath || detected.rubyPath,
       },
     },
   };
 }
 
-type LegionProviderType = 'anthropic' | 'openai' | 'gemini' | 'bedrock' | 'ollama';
+type AppProviderType = 'anthropic' | 'openai' | 'gemini' | 'bedrock' | 'ollama';
 
-type LegionProviderConfig = {
+type AppProviderConfig = {
   enabled?: boolean;
   api_key?: string | null;
   openai_api_key?: string | null;
@@ -280,12 +280,12 @@ type LegionProviderConfig = {
   large_model?: string | null;
 };
 
-type LegionLlmFile = {
+type AppLlmFile = {
   llm?: {
     enabled?: boolean;
-    default_provider?: LegionProviderType | null;
+    default_provider?: AppProviderType | null;
     default_model?: string | null;
-    providers?: Partial<Record<LegionProviderType, LegionProviderConfig>>;
+    providers?: Partial<Record<AppProviderType, AppProviderConfig>>;
   };
 };
 
@@ -343,7 +343,7 @@ function inferDisplayName(modelName: string): string {
   return formatModelDisplayName(toTitleCase(cleaned || normalized || modelName));
 }
 
-function defaultLegionConfig(): LegionLlmFile {
+function defaultAppConfig(): AppLlmFile {
   return {
     llm: {
       enabled: true,
@@ -368,24 +368,24 @@ function defaultLegionConfig(): LegionLlmFile {
   };
 }
 
-function readLegionLlmConfig(): LegionLlmFile {
-  if (!existsSync(LEGION_LLM_CONFIG_PATH)) {
-    return defaultLegionConfig();
+function readAppLlmConfig(): AppLlmFile {
+  if (!existsSync(APP_LLM_CONFIG_PATH)) {
+    return defaultAppConfig();
   }
 
   try {
-    return deepMerge(defaultLegionConfig() as Record<string, unknown>, JSON.parse(readFileSync(LEGION_LLM_CONFIG_PATH, 'utf-8'))) as LegionLlmFile;
+    return deepMerge(defaultAppConfig() as Record<string, unknown>, JSON.parse(readFileSync(APP_LLM_CONFIG_PATH, 'utf-8'))) as AppLlmFile;
   } catch (error) {
-    console.error('[Config] Failed to parse Legion LLM config, using defaults:', error);
-    return defaultLegionConfig();
+    console.error('[Config] Failed to parse LLM config, using defaults:', error);
+    return defaultAppConfig();
   }
 }
 
-function writeLegionLlmConfig(config: LegionLlmFile): void {
-  writeFileSync(LEGION_LLM_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
+function writeAppLlmConfig(config: AppLlmFile): void {
+  writeFileSync(APP_LLM_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
 }
 
-function toLegionProvider(providerKey: LegionProviderType, provider: LegionProviderConfig | undefined): Record<string, unknown> {
+function toAppProvider(providerKey: AppProviderType, provider: AppProviderConfig | undefined): Record<string, unknown> {
   const enabled = provider?.enabled ?? false;
 
   if (providerKey === 'bedrock') {
@@ -429,7 +429,7 @@ function toLegionProvider(providerKey: LegionProviderType, provider: LegionProvi
   };
 }
 
-function collectProviderModelNames(provider: LegionProviderConfig | undefined): string[] {
+function collectProviderModelNames(provider: AppProviderConfig | undefined): string[] {
   return [
     provider?.default_model,
     provider?.small_model,
@@ -438,7 +438,7 @@ function collectProviderModelNames(provider: LegionProviderConfig | undefined): 
   ].filter((value, index, array): value is string => Boolean(value?.trim()) && array.indexOf(value) === index);
 }
 
-function hasProviderCredentials(providerKey: LegionProviderType, provider: LegionProviderConfig | undefined): boolean {
+function hasProviderCredentials(providerKey: AppProviderType, provider: AppProviderConfig | undefined): boolean {
   if (!provider?.enabled) return false;
   if (providerKey === 'bedrock') {
     return Boolean(provider.bearer_token?.trim() || provider.region?.trim());
@@ -447,8 +447,8 @@ function hasProviderCredentials(providerKey: LegionProviderType, provider: Legio
 }
 
 function resolveProviderModelNames(
-  providerKey: LegionProviderType,
-  provider: LegionProviderConfig | undefined,
+  providerKey: AppProviderType,
+  provider: AppProviderConfig | undefined,
 ): string[] {
   const explicit = collectProviderModelNames(provider);
   if (explicit.length > 0) return explicit;
@@ -458,7 +458,7 @@ function resolveProviderModelNames(
   return explicit;
 }
 
-function toCatalogEntries(providerKey: LegionProviderType, provider: LegionProviderConfig | undefined): Array<Record<string, unknown>> {
+function toCatalogEntries(providerKey: AppProviderType, provider: AppProviderConfig | undefined): Array<Record<string, unknown>> {
   return resolveProviderModelNames(providerKey, provider).map((modelName) => ({
     key: modelName,
     displayName: inferDisplayName(modelName),
@@ -467,18 +467,18 @@ function toCatalogEntries(providerKey: LegionProviderType, provider: LegionProvi
   }));
 }
 
-function loadLegionModelsConfig(defaults: LegionConfig['models']): LegionConfig['models'] {
+function loadAppModelsConfig(defaults: AppConfig['models']): AppConfig['models'] {
   try {
-    const raw = readLegionLlmConfig();
+    const raw = readAppLlmConfig();
     const llm = raw.llm;
     if (!llm?.enabled) {
       return defaults;
     }
 
-    const legionProviders = llm.providers ?? {};
+    const appProviders = llm.providers ?? {};
     const providers: Record<string, Record<string, unknown>> = {};
     const catalog: Array<Record<string, unknown>> = [];
-    const providerOrder: LegionProviderType[] = ['anthropic', 'openai', 'gemini', 'bedrock', 'ollama'];
+    const providerOrder: AppProviderType[] = ['anthropic', 'openai', 'gemini', 'bedrock', 'ollama'];
 
     // Start with any providers/catalog already in defaults (e.g. from desktop.json plugin data)
     // These are providers not managed by llm.json (like plugin-contributed providers)
@@ -497,8 +497,8 @@ function loadLegionModelsConfig(defaults: LegionConfig['models']): LegionConfig[
 
     // Layer llm.json providers/catalog on top
     for (const providerKey of providerOrder) {
-      const provider = legionProviders[providerKey];
-      providers[providerKey] = toLegionProvider(providerKey, provider);
+      const provider = appProviders[providerKey];
+      providers[providerKey] = toAppProvider(providerKey, provider);
       catalog.push(...toCatalogEntries(providerKey, provider));
     }
 
@@ -514,22 +514,22 @@ function loadLegionModelsConfig(defaults: LegionConfig['models']): LegionConfig[
 
     return {
       defaultModelKey,
-      providers: providers as LegionConfig['models']['providers'],
-      catalog: catalog as LegionConfig['models']['catalog'],
+      providers: providers as AppConfig['models']['providers'],
+      catalog: catalog as AppConfig['models']['catalog'],
     };
   } catch (error) {
-    console.error('[Config] Failed to parse Legion LLM config, using empty model catalog:', error);
+    console.error('[Config] Failed to parse LLM config, using empty model catalog:', error);
     return defaults;
   }
 }
 
-function getModelNameByKey(catalog: LegionConfig['models']['catalog'], key: string): string | null {
+function getModelNameByKey(catalog: AppConfig['models']['catalog'], key: string): string | null {
   const entry = catalog.find((model) => model.key === key);
   return entry?.modelName ?? null;
 }
 
-function updateLegionProviderModelSlots(
-  provider: LegionProviderConfig,
+function updateAppProviderModelSlots(
+  provider: AppProviderConfig,
   modelNames: string[],
   preferredDefaultModelName?: string | null,
 ): void {
@@ -543,15 +543,15 @@ function updateLegionProviderModelSlots(
   provider.large_model = ordered[3] ?? null;
 }
 
-export function persistLegionModelsToLegion(
+export function persistAppModels(
   path: string,
   value: unknown,
-  currentConfig: LegionConfig,
+  currentConfig: AppConfig,
 ): void {
-  const legionConfig = readLegionLlmConfig();
-  const llm = legionConfig.llm ?? (legionConfig.llm = defaultLegionConfig().llm!);
+  const appLlmConfig = readAppLlmConfig();
+  const llm = appLlmConfig.llm ?? (appLlmConfig.llm = defaultAppConfig().llm!);
   const providers = llm.providers ?? (llm.providers = {});
-  const providerOrder: LegionProviderType[] = ['anthropic', 'openai', 'gemini', 'bedrock', 'ollama'];
+  const providerOrder: AppProviderType[] = ['anthropic', 'openai', 'gemini', 'bedrock', 'ollama'];
 
   for (const providerKey of providerOrder) {
     providers[providerKey] ??= {};
@@ -561,18 +561,18 @@ export function persistLegionModelsToLegion(
     const modelKey = String(value);
     const entry = currentConfig.models.catalog.find((model) => model.key === modelKey);
     llm.default_model = entry?.modelName ?? getModelNameByKey(currentConfig.models.catalog, modelKey) ?? modelKey;
-    if (entry && providerOrder.includes(entry.provider as LegionProviderType)) {
-      llm.default_provider = entry.provider as LegionProviderType;
+    if (entry && providerOrder.includes(entry.provider as AppProviderType)) {
+      llm.default_provider = entry.provider as AppProviderType;
     }
-    writeLegionLlmConfig(legionConfig);
+    writeAppLlmConfig(appLlmConfig);
     return;
   }
 
   if (path.startsWith('models.providers.')) {
     const [, , providerKey, field] = path.split('.');
-    if (!providerOrder.includes(providerKey as LegionProviderType) || !field) return;
+    if (!providerOrder.includes(providerKey as AppProviderType) || !field) return;
 
-    const provider = providers[providerKey as LegionProviderType] ?? {};
+    const provider = providers[providerKey as AppProviderType] ?? {};
     const stringValue = typeof value === 'string' ? value : String(value ?? '');
 
     if (field === 'enabled') {
@@ -591,13 +591,13 @@ export function persistLegionModelsToLegion(
       provider.region = stringValue || null;
     }
 
-    providers[providerKey as LegionProviderType] = provider;
-    writeLegionLlmConfig(legionConfig);
+    providers[providerKey as AppProviderType] = provider;
+    writeAppLlmConfig(appLlmConfig);
     return;
   }
 
   if (path === 'models.catalog') {
-    const catalog = Array.isArray(value) ? value as LegionConfig['models']['catalog'] : currentConfig.models.catalog;
+    const catalog = Array.isArray(value) ? value as AppConfig['models']['catalog'] : currentConfig.models.catalog;
     const defaultModelName = getModelNameByKey(catalog, currentConfig.models.defaultModelKey)
       ?? llm.default_model
       ?? null;
@@ -611,26 +611,26 @@ export function persistLegionModelsToLegion(
         .map((entry) => entry.modelName);
       const provider = providers[providerKey] ?? {};
       const preferredDefault = defaultProvider === providerKey ? defaultModelName : null;
-      updateLegionProviderModelSlots(provider, providerCatalog, preferredDefault);
+      updateAppProviderModelSlots(provider, providerCatalog, preferredDefault);
       providers[providerKey] = provider;
     }
 
-    if (defaultProvider && providerOrder.includes(defaultProvider as LegionProviderType)) {
-      llm.default_provider = defaultProvider as LegionProviderType;
+    if (defaultProvider && providerOrder.includes(defaultProvider as AppProviderType)) {
+      llm.default_provider = defaultProvider as AppProviderType;
     }
     llm.default_model = defaultModelName;
-    writeLegionLlmConfig(legionConfig);
+    writeAppLlmConfig(appLlmConfig);
   }
 }
 
-function applyExternalModelConfig(config: LegionConfig, legionHome: string): LegionConfig {
+function applyExternalModelConfig(config: AppConfig, appHome: string): AppConfig {
   return applyRuntimeDefaults({
     ...config,
-    models: loadLegionModelsConfig(config.models),
-  }, legionHome);
+    models: loadAppModelsConfig(config.models),
+  }, appHome);
 }
 
-export function desktopConfigPayload(config: LegionConfig): Record<string, unknown> {
+export function desktopConfigPayload(config: AppConfig): Record<string, unknown> {
   return {
     models: config.models,
     runtime: config.runtime,
@@ -656,33 +656,33 @@ export function desktopConfigPayload(config: LegionConfig): Record<string, unkno
   };
 }
 
-export function readEffectiveConfig(legionHome: string): LegionConfig {
-  const configPath = getDesktopSettingsPath(legionHome);
+export function readEffectiveConfig(appHome: string): AppConfig {
+  const configPath = getDesktopSettingsPath(appHome);
   const defaults = getDefaultConfig();
 
   if (existsSync(configPath)) {
     try {
       const raw = JSON.parse(readFileSync(configPath, 'utf-8'));
-      return migrateLegacySystemPrompt(applyExternalModelConfig(deepMerge(defaults, raw) as LegionConfig, legionHome));
+      return migrateLegacySystemPrompt(applyExternalModelConfig(deepMerge(defaults, raw) as AppConfig, appHome));
     } catch (error) {
       console.error('[Config] Failed to parse desktop.json, using defaults:', error);
-      return migrateLegacySystemPrompt(applyExternalModelConfig(defaults as unknown as LegionConfig, legionHome));
+      return migrateLegacySystemPrompt(applyExternalModelConfig(defaults as unknown as AppConfig, appHome));
     }
   }
 
-  return migrateLegacySystemPrompt(applyExternalModelConfig(defaults as unknown as LegionConfig, legionHome));
+  return migrateLegacySystemPrompt(applyExternalModelConfig(defaults as unknown as AppConfig, appHome));
 }
 
-function migrateLegacySystemPrompt(config: LegionConfig): LegionConfig {
+function migrateLegacySystemPrompt(config: AppConfig): AppConfig {
   if (LEGACY_DEFAULT_SYSTEM_PROMPTS.has(config.systemPrompt)) {
     return { ...config, systemPrompt: DEFAULT_SYSTEM_PROMPT };
   }
   return config;
 }
 
-export function writeDesktopConfig(legionHome: string, config: LegionConfig): void {
-  const configPath = getDesktopSettingsPath(legionHome);
-  mkdirSync(join(legionHome, 'settings'), { recursive: true });
+export function writeDesktopConfig(appHome: string, config: AppConfig): void {
+  const configPath = getDesktopSettingsPath(appHome);
+  mkdirSync(join(appHome, 'settings'), { recursive: true });
   writeFileSync(configPath, JSON.stringify(desktopConfigPayload(config), null, 2), 'utf-8');
 }
 
@@ -720,14 +720,14 @@ export function setNestedValue(obj: Record<string, unknown>, path: string, value
 
 export function registerConfigHandlers(
   ipcMain: IpcMain,
-  legionHome: string,
-  onChanged?: (config: LegionConfig) => void,
+  appHome: string,
+  onChanged?: (config: AppConfig) => void,
 ): { setConfig: (path: string, value: unknown) => void } {
-  let currentConfig = readEffectiveConfig(legionHome);
+  let currentConfig = readEffectiveConfig(appHome);
   let lastBroadcastSnapshot = JSON.stringify(currentConfig);
 
   // Watch for external config changes
-  const configPath = getDesktopSettingsPath(legionHome);
+  const configPath = getDesktopSettingsPath(appHome);
   let reloadDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   let broadcastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -750,7 +750,7 @@ export function registerConfigHandlers(
     if (reloadDebounceTimer) clearTimeout(reloadDebounceTimer);
     reloadDebounceTimer = setTimeout(() => {
       try {
-        currentConfig = readEffectiveConfig(legionHome);
+        currentConfig = readEffectiveConfig(appHome);
         scheduleConfigBroadcast();
       } catch {
         // Ignore read errors during write
@@ -761,8 +761,8 @@ export function registerConfigHandlers(
   if (existsSync(configPath)) {
     watch(configPath, reloadConfig);
   }
-  if (existsSync(LEGION_LLM_CONFIG_PATH)) {
-    watch(LEGION_LLM_CONFIG_PATH, reloadConfig);
+  if (existsSync(APP_LLM_CONFIG_PATH)) {
+    watch(APP_LLM_CONFIG_PATH, reloadConfig);
   }
 
   // Unified setConfig that handles models.* persistence correctly.
@@ -771,7 +771,7 @@ export function registerConfigHandlers(
 
   const setConfigImpl = (path: string, value: unknown): void => {
     if (path === 'models') {
-      currentConfig = readEffectiveConfig(legionHome);
+      currentConfig = readEffectiveConfig(appHome);
       scheduleConfigBroadcast();
       return;
     }
@@ -779,26 +779,26 @@ export function registerConfigHandlers(
     if (path.startsWith('models.')) {
       // Always persist to desktop.json (covers plugin-contributed providers/catalog)
       setNestedValue(currentConfig as unknown as Record<string, unknown>, path, value);
-      writeDesktopConfig(legionHome, currentConfig);
+      writeDesktopConfig(appHome, currentConfig);
 
       // Also persist to llm.json for built-in provider paths
       if (path === 'models.defaultModelKey' || path === 'models.catalog') {
-        persistLegionModelsToLegion(path, value, currentConfig);
+        persistAppModels(path, value, currentConfig);
       } else if (path.startsWith('models.providers.')) {
         const providerKey = path.split('.')[2];
         if (llmProviderKeys.has(providerKey)) {
-          persistLegionModelsToLegion(path, value, currentConfig);
+          persistAppModels(path, value, currentConfig);
         }
       }
 
-      currentConfig = readEffectiveConfig(legionHome);
+      currentConfig = readEffectiveConfig(appHome);
       scheduleConfigBroadcast();
       return;
     }
 
     setNestedValue(currentConfig as unknown as Record<string, unknown>, path, value);
-    writeDesktopConfig(legionHome, currentConfig);
-    currentConfig = readEffectiveConfig(legionHome);
+    writeDesktopConfig(appHome, currentConfig);
+    currentConfig = readEffectiveConfig(appHome);
     scheduleConfigBroadcast();
   };
 
@@ -807,7 +807,7 @@ export function registerConfigHandlers(
   });
 
   ipcMain.handle('config:auto-detect-runtime', () => {
-    const detected = detectLegionRuntime(currentConfig, legionHome);
+    const detected = detectAppRuntime(currentConfig, appHome);
     return detected;
   });
 
@@ -816,7 +816,7 @@ export function registerConfigHandlers(
     return currentConfig;
   });
 
-  ipcMain.handle('platform:homedir', () => legionHome);
+  ipcMain.handle('platform:homedir', () => appHome);
 
   return { setConfig: setConfigImpl };
 }

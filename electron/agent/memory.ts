@@ -5,11 +5,11 @@ import { embed } from 'ai';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname } from 'path';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 
 type MemoryConfig = ConstructorParameters<typeof Memory>[0];
 
-const RESOURCE_ID = 'legion-local-user';
+const RESOURCE_ID = __BRAND_RESOURCE_ID;
 
 let sharedMemory: Memory | null | undefined;
 
@@ -34,7 +34,7 @@ function ensureDir(filePath: string): void {
   }
 }
 
-function buildAzureOpenAIProvider(config: LegionConfig): ReturnType<typeof createOpenAI> | null {
+function buildAzureOpenAIProvider(config: AppConfig): ReturnType<typeof createOpenAI> | null {
   const azureProvider = config.models.providers['azure_primary'];
   const baseURL = normalizeOpenAIBaseUrl(azureProvider?.endpoint);
   if (!baseURL || !azureProvider?.apiKey) return null;
@@ -88,7 +88,7 @@ function normalizeAzureBaseUrl(endpoint: string): string | undefined {
  * Build the embedding model from the semantic recall embedding config.
  * Falls back to the legacy Azure primary provider when no explicit embedding provider is configured.
  */
-function buildEmbeddingProvider(config: LegionConfig): EmbeddingResult | null {
+function buildEmbeddingProvider(config: AppConfig): EmbeddingResult | null {
   const embCfg = config.memory.semanticRecall.embeddingProvider;
   const providerType = embCfg?.type ?? 'azure';
 
@@ -150,7 +150,7 @@ function buildEmbeddingProvider(config: LegionConfig): EmbeddingResult | null {
  * Test the embedding connection by generating a test embedding vector.
  * Returns success info (model, dimensions) or an error message.
  */
-export async function testEmbeddingConnection(config: LegionConfig): Promise<{
+export async function testEmbeddingConnection(config: AppConfig): Promise<{
   ok?: boolean;
   model?: string;
   dimensions?: number;
@@ -188,7 +188,7 @@ export function resetMemory(): void {
   sharedMemory = undefined;
 }
 
-export function getSharedMemory(config: LegionConfig, dbPath: string): Memory | null {
+export function getSharedMemory(config: AppConfig, dbPath: string): Memory | null {
   if (sharedMemory !== undefined) return sharedMemory;
 
   if (!config.memory.enabled) {
@@ -202,7 +202,7 @@ export function getSharedMemory(config: LegionConfig, dbPath: string): Memory | 
 
     const openAIProvider = buildAzureOpenAIProvider(config);
     const embeddingResult = buildEmbeddingProvider(config);
-    const storage = new LibSQLStore({ id: 'legion-memory', url: sqliteUrl });
+    const storage = new LibSQLStore({ id: __BRAND_APP_SLUG + '-memory', url: sqliteUrl });
 
     // Working memory config
     const workingMemory = config.memory.workingMemory.enabled
@@ -233,7 +233,7 @@ export function getSharedMemory(config: LegionConfig, dbPath: string): Memory | 
           messageRange: { before: 1, after: 1 },
           scope: config.memory.semanticRecall.scope,
         },
-        vector: new LibSQLVector({ id: 'legion-vector', url: sqliteUrl }),
+        vector: new LibSQLVector({ id: __BRAND_APP_SLUG + '-vector', url: sqliteUrl }),
         embedder: embeddingResult.embeddingModel,
       };
     }

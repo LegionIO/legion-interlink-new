@@ -12,7 +12,7 @@ export const webFetchTool: ToolDefinition = {
     const { url, maxLength } = input as { url: string; maxLength: number };
     try {
       const resp = await fetch(url, {
-        headers: { 'User-Agent': 'Legion-Interlink/1.0' },
+        headers: { 'User-Agent': __BRAND_USER_AGENT },
         signal: AbortSignal.timeout(15000),
       });
       if (!resp.ok) return { error: `HTTP ${resp.status} ${resp.statusText}` };

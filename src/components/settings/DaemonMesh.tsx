@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, type FC } from 'react';
 import { NetworkIcon, CircleIcon, RefreshCwIcon, Loader2Icon, AlertTriangleIcon, HeartPulseIcon, WifiIcon, WifiOffIcon, PlayIcon, PauseIcon } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import type { SettingsProps } from './shared';
 
 interface MeshPeer {
@@ -136,8 +136,8 @@ export const DaemonMesh: FC<SettingsProps> = () => {
     setError(null);
     try {
       const [sRes, pRes] = await Promise.all([
-        legion.daemon.meshStatus(),
-        legion.daemon.meshPeers(),
+        app.daemon.meshStatus(),
+        app.daemon.meshPeers(),
       ]);
 
       if (sRes.ok && sRes.data) {

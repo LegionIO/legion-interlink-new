@@ -21,7 +21,7 @@ import type {
   PluginPermission,
 } from './types.js';
 import { createPluginAPI, cleanupPluginAPI } from './plugin-api.js';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import type { ToolDefinition } from '../tools/types.js';
 import { broadcastToAllWindows } from '../utils/window-send.js';
 
@@ -43,8 +43,8 @@ export class PluginManager {
 
   constructor(
     private pluginsDir: string,
-    private _legionHome: string,
-    private getConfig: () => LegionConfig,
+    private _appHome: string,
+    private getConfig: () => AppConfig,
     private setConfig: (path: string, value: unknown) => void,
   ) {}
 
@@ -134,7 +134,7 @@ export class PluginManager {
     return hash.digest('hex');
   }
 
-  private getPluginApprovals(): LegionConfig['pluginApprovals'] {
+  private getPluginApprovals(): AppConfig['pluginApprovals'] {
     return this.getConfig().pluginApprovals ?? {};
   }
 
@@ -170,7 +170,7 @@ export class PluginManager {
       declaredPermissions,
       '',
       `Approval fingerprint: ${fileHash.slice(0, 16)}`,
-      'This approval is tied to the current plugin files. If the plugin changes, Legion will ask again before loading it.',
+      'This approval is tied to the current plugin files. If the plugin changes, ' + __BRAND_PRODUCT_NAME + ' will ask again before loading it.',
     ].join('\n');
 
     const messageBoxOptions: Electron.MessageBoxOptions = {
@@ -304,7 +304,7 @@ export class PluginManager {
 
   /* ── Config Change Forwarding ── */
 
-  onConfigChanged(config: LegionConfig): void {
+  onConfigChanged(config: AppConfig): void {
     for (const [name, instance] of this.plugins) {
       if (instance.state !== 'active') continue;
 

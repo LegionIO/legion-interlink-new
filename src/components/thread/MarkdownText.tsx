@@ -12,7 +12,7 @@ const rehypeSanitizeOptions = {
   tagNames: [...(defaultSchema.tagNames || []), 'video'],
   protocols: {
     ...defaultSchema.protocols,
-    src: [...(defaultSchema.protocols?.src || []), 'legion-media'],
+    src: [...(defaultSchema.protocols?.src || []), __BRAND_MEDIA_PROTOCOL],
   },
   attributes: {
     ...defaultSchema.attributes,
@@ -193,9 +193,9 @@ const rehypePlugins: NonNullable<Options['rehypePlugins']> = [rehypeRaw, [rehype
 
 /**
  * react-markdown's defaultUrlTransform only allows http(s), irc(s), mailto, and xmpp protocols.
- * We extend it to also allow our custom legion-media:// protocol used for locally-generated media.
+ * We extend it to also allow our custom media protocol used for locally-generated media.
  */
-const allowedProtocols = /^legion-media:/i;
+const allowedProtocols = new RegExp('^' + __BRAND_MEDIA_PROTOCOL + ':', 'i');
 
 function urlTransform(url: string, _key: string, _node: unknown): string {
   if (allowedProtocols.test(url)) return url;

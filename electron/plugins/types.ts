@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '../tools/types.js';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 
 /* ── Manifest ── */
 
@@ -47,7 +47,7 @@ export type PluginInstance = {
   uiBanners: PluginBannerDescriptor[];
   uiModals: PluginModalDescriptor[];
   uiSettingsSections: PluginSettingsSectionDescriptor[];
-  configChangeListeners: Array<(config: LegionConfig) => void>;
+  configChangeListeners: Array<(config: AppConfig) => void>;
 };
 
 /* ── Plugin Module (what main.js must export) ── */
@@ -55,7 +55,7 @@ export type PluginInstance = {
 export type PluginModule = {
   activate: (api: PluginAPI) => Promise<void> | void;
   deactivate?: () => Promise<void> | void;
-  onConfigChanged?: (config: LegionConfig) => void;
+  onConfigChanged?: (config: AppConfig) => void;
 };
 
 /* ── Message Hooks ── */
@@ -75,7 +75,7 @@ export type HookMessage = {
 export type PreSendHookArgs = {
   messages: HookMessage[];
   modelKey: string;
-  config: LegionConfig;
+  config: AppConfig;
 };
 
 export type PreSendHookResult = {
@@ -89,7 +89,7 @@ export type PreSendHook = (args: PreSendHookArgs) => Promise<PreSendHookResult> 
 export type PostReceiveHookArgs = {
   response: HookMessage;
   messages: HookMessage[];
-  config: LegionConfig;
+  config: AppConfig;
 };
 
 export type PostReceiveHookResult = {
@@ -151,11 +151,11 @@ export type PluginAPI = {
   pluginDir: string;
 
   config: {
-    get: () => LegionConfig;
+    get: () => AppConfig;
     set: (path: string, value: unknown) => void;
     getPluginData: () => Record<string, unknown>;
     setPluginData: (path: string, value: unknown) => void;
-    onChanged: (callback: (config: LegionConfig) => void) => () => void;
+    onChanged: (callback: (config: AppConfig) => void) => () => void;
   };
 
   tools: {

@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, type FC } from 'react';
 import { MonitorIcon, SunIcon, MoonIcon } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 type ThemeMode = 'system' | 'light' | 'dark';
 
-const STORAGE_KEY = 'legion-theme';
+const STORAGE_KEY = __BRAND_APP_SLUG + '-theme';
 
 function getStoredTheme(): ThemeMode {
   try {
@@ -47,12 +47,12 @@ export const ThemeToggle: FC = () => {
   useEffect(() => {
     applyTheme(mode);
     try { localStorage.setItem(STORAGE_KEY, mode); } catch { /* ignore */ }
-    try { legion.config.set('ui.theme', mode); } catch { /* ignore */ }
+    try { app.config.set('ui.theme', mode); } catch { /* ignore */ }
   }, [mode]);
 
   // On mount, sync from config if localStorage is empty
   useEffect(() => {
-    legion.config.get().then((cfg) => {
+    app.config.get().then((cfg) => {
       const configTheme = (cfg as { ui?: { theme?: string } })?.ui?.theme;
       if (configTheme === 'light' || configTheme === 'dark' || configTheme === 'system') {
         const stored = localStorage.getItem(STORAGE_KEY);

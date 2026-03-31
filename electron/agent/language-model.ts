@@ -124,7 +124,7 @@ async function createBedrockModel(modelConfig: LLMModelConfig) {
 
 export async function createLanguageModelFromConfig(modelConfig: LLMModelConfig): Promise<LanguageModel> {
   if (modelConfig.provider === 'google') {
-    throw new Error('Gemini models are not supported by Legion runtime yet.');
+    throw new Error('Gemini models are not supported by ' + __BRAND_PRODUCT_NAME + ' runtime yet.');
   }
 
   // console.info(

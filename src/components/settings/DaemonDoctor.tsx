@@ -8,7 +8,7 @@ import {
   PlayIcon,
 } from 'lucide-react';
 import { type SettingsProps } from './shared';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 type CheckStatus = 'pass' | 'warn' | 'fail' | 'running' | 'pending';
 
@@ -97,7 +97,7 @@ export const DaemonDoctor: FC<SettingsProps> = () => {
       setCheck(index, { status: 'running', message: 'Running...' });
       const start = Date.now();
       try {
-        const result = await (legion.daemon[method] as () => Promise<{ ok: boolean; data?: unknown; error?: string }>)();
+        const result = await (app.daemon[method] as () => Promise<{ ok: boolean; data?: unknown; error?: string }>)();
         const duration = Date.now() - start;
         const { status, message } = evaluate(result);
         setCheck(index, { status, message, duration });

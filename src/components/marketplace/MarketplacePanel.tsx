@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { PuzzleIcon, StoreIcon, PackageIcon, XIcon, RefreshCwIcon, AlertCircleIcon, Loader2Icon } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import { BrowseTab } from './BrowseTab';
 import { InstalledTab } from './InstalledTab';
 
@@ -22,7 +22,7 @@ export function MarketplacePanel({ onClose }: Props) {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const checkDaemon = useCallback(async () => {
-    const result = await legion.daemon.catalog();
+    const result = await app.daemon.catalog();
     setDaemonOk(result.ok);
     if (result.ok && result.data) {
       const count = Array.isArray(result.data) ? result.data.length : 0;
@@ -89,7 +89,7 @@ export function MarketplacePanel({ onClose }: Props) {
             <AlertCircleIcon className="h-10 w-10 text-muted-foreground/50" />
             <div>
               <p className="font-medium text-foreground">Daemon not connected</p>
-              <p className="mt-1 text-sm text-muted-foreground">Extension management requires the Legion daemon to be running.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Extension management requires the {__BRAND_PRODUCT_NAME} daemon to be running.</p>
             </div>
             <button type="button" onClick={checkDaemon} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">
               Retry

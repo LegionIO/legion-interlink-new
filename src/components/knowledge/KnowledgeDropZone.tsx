@@ -1,6 +1,6 @@
 import { useState, useCallback, type FC, type ReactNode, type DragEvent } from 'react';
 import { UploadCloudIcon, CheckCircle2Icon, AlertCircleIcon, Loader2Icon, FileIcon } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 interface IngestResult {
   name: string;
@@ -52,7 +52,7 @@ export const KnowledgeDropZone: FC<{ children: ReactNode }> = ({ children }) => 
         continue;
       }
       try {
-        const res = await legion.knowledge.ingestFile(filePath);
+        const res = await app.knowledge.ingestFile(filePath);
         newResults.push({ name: file.name, ok: res.ok, error: res.error });
       } catch (err) {
         newResults.push({ name: file.name, ok: false, error: err instanceof Error ? err.message : 'Ingest failed' });

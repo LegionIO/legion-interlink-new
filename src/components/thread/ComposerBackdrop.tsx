@@ -15,7 +15,7 @@ export const ComposerBackdrop: FC = () => {
     let active = true;
     const sync = () => {
       if (!active) return;
-      const textarea = document.querySelector('.legion-composer-grid textarea') as HTMLTextAreaElement | null;
+      const textarea = document.querySelector('.app-composer-grid textarea') as HTMLTextAreaElement | null;
       if (textarea) {
         const val = textarea.value;
         const st = textarea.scrollTop;

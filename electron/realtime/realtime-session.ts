@@ -10,7 +10,7 @@
 import { BrowserWindow } from 'electron';
 import WebSocket from 'ws';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import { resolveModelForThread } from '../agent/model-catalog.js';
 import { compactToolResult, estimateToolTokens } from '../agent/compaction.js';
 import type { ToolCompactionConfig } from '../agent/compaction.js';
@@ -89,9 +89,9 @@ export class RealtimeSession {
   private ws: WebSocket | null = null;
   private _status: RealtimeSessionStatus = 'idle';
   private conversationId: string = '';
-  private config: LegionConfig['realtime'];
+  private config: AppConfig['realtime'];
   private tools: ToolDefinition[];
-  private getFullConfig: () => LegionConfig;
+  private getFullConfig: () => AppConfig;
   private pendingToolCalls: Map<string, PendingToolCall> = new Map();
 
   /** Whether the AI has requested to end the call (deferred until response completes) */
@@ -122,7 +122,7 @@ export class RealtimeSession {
   private assistantTranscriptBuffers: Map<string, string> = new Map();
 
   constructor(
-    getConfig: () => LegionConfig,
+    getConfig: () => AppConfig,
     tools: ToolDefinition[],
   ) {
     this.getFullConfig = getConfig;
@@ -313,7 +313,7 @@ export class RealtimeSession {
 
   private formatComputerEvent(
     event: ComputerUseEvent,
-    cfg?: LegionConfig['realtime']['computerUseUpdates'],
+    cfg?: AppConfig['realtime']['computerUseUpdates'],
   ): string | null {
     switch (event.type) {
       case 'session-updated': {

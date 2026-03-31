@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, type FC } from 'react';
 import { Loader2Icon, PuzzleIcon, DownloadIcon, SearchIcon, RefreshCwIcon, TagIcon, StarIcon } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 interface AvailableExtension {
   name: string;
@@ -33,7 +33,7 @@ export const BrowseTab: FC<Props> = ({ onInstalled }) => {
     const filters: Record<string, string> = {};
     if (search) filters.query = search;
     if (category !== 'All') filters.category = category.toLowerCase();
-    const res = await legion.daemon.marketplace(filters);
+    const res = await app.daemon.marketplace(filters);
     if (res.ok && res.data) {
       const data = Array.isArray(res.data) ? res.data : (res.data as { extensions?: AvailableExtension[] }).extensions || [];
       setExtensions(data as AvailableExtension[]);
@@ -46,7 +46,7 @@ export const BrowseTab: FC<Props> = ({ onInstalled }) => {
   const handleInstall = async (ext: AvailableExtension) => {
     const id = ext.gem_name || ext.name;
     setInstalling((prev) => new Set(prev).add(id));
-    const res = await legion.daemon.extensionInstall(id);
+    const res = await app.daemon.extensionInstall(id);
     setInstalling((prev) => { const n = new Set(prev); n.delete(id); return n; });
     if (res.ok) {
       setExtensions((prev) => prev.map((e) => (e.name === ext.name ? { ...e, installed: true } : e)));

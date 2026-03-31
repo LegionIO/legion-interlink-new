@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, type FC } from 'react';
 import { Loader2Icon, GitCommitHorizontalIcon, RefreshCwIcon } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 interface Commit {
   sha: string;
@@ -28,7 +28,7 @@ export const CommitsTab: FC<Props> = ({ repoFilter }) => {
     setLoading(true);
     const filters: Record<string, string> = { limit: '50' };
     if (repoFilter) filters.repo = repoFilter;
-    const res = await legion.daemon.githubCommits(filters);
+    const res = await app.daemon.githubCommits(filters);
     if (res.ok && res.data) {
       const data = Array.isArray(res.data) ? res.data : (res.data as { commits?: Commit[] }).commits || [];
       setCommits(data as Commit[]);

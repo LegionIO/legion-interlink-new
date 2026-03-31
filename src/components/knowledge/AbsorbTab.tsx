@@ -3,7 +3,7 @@ import {
   LinkIcon, PlayIcon, SearchIcon, Loader2Icon, CheckCircle2Icon,
   XCircleIcon, GlobeIcon, CircleIcon, RefreshCwIcon,
 } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 interface AbsorberPattern {
   type: string;
@@ -36,7 +36,7 @@ export const AbsorbTab: FC = () => {
   const loadPatterns = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await legion.daemon.absorbers();
+      const res = await app.daemon.absorbers();
       if (res.ok && Array.isArray(res.data)) {
         setPatterns(res.data as AbsorberPattern[]);
       }
@@ -58,7 +58,7 @@ export const AbsorbTab: FC = () => {
     const intervalId = setInterval(() => {
       void (async () => {
         try {
-          const res = await legion.daemon.absorberJob(jobId);
+          const res = await app.daemon.absorberJob(jobId);
           if (!res.ok) return;
           const d = res.data as { status?: string; absorber?: string; error?: string };
           const terminal = d.status === 'completed' || d.status === 'failed';
@@ -90,7 +90,7 @@ export const AbsorbTab: FC = () => {
     setResolving(true);
     setResolveResult(null);
     try {
-      const res = await legion.daemon.absorberResolve(urlInput.trim());
+      const res = await app.daemon.absorberResolve(urlInput.trim());
       if (res.ok && res.data) {
         const d = res.data as { absorber?: string; match?: boolean };
         setResolveResult(d.match ? `${d.absorber}` : 'No matching absorber');
@@ -111,7 +111,7 @@ export const AbsorbTab: FC = () => {
     setJobs((prev) => [{ id: jobId, input, status: 'running', startedAt: Date.now() }, ...prev]);
 
     try {
-      const res = await legion.daemon.absorberDispatch(input, scope);
+      const res = await app.daemon.absorberDispatch(input, scope);
       if (res.ok && res.data) {
         const d = res.data as { job_id?: string; absorber?: string; success?: boolean; error?: string };
         if (d.job_id) {

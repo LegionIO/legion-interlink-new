@@ -14,7 +14,7 @@ import {
   PowerIcon,
 } from 'lucide-react';
 import { type SettingsProps } from './shared';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 type Tab = 'installed' | 'available';
@@ -67,13 +67,13 @@ export const DaemonExtensions: FC<SettingsProps> = ({ config }) => {
   const [confirmUninstall, setConfirmUninstall] = useState<string | null>(null);
   const [installingId, setInstallingId] = useState<string | null>(null);
 
-  const daemonUrl = (config.runtime as { legion?: { daemonUrl?: string } })?.legion?.daemonUrl || 'http://127.0.0.1:4567';
+  const daemonUrl = (config.runtime as { daemon?: { daemonUrl?: string } })?.daemon?.daemonUrl || 'http://127.0.0.1:4567';
 
   const fetchCatalog = useCallback(async () => {
     setLoadState('loading');
     setLoadError('');
     try {
-      const result = await legion.daemon.catalog();
+      const result = await app.daemon.catalog();
       if (result.ok && result.data) {
         setExtensions(result.data as Extension[]);
         setLoadState('loaded');
@@ -90,7 +90,7 @@ export const DaemonExtensions: FC<SettingsProps> = ({ config }) => {
   const fetchMarketplace = useCallback(async () => {
     setMarketplaceLoadState('loading');
     try {
-      const result = await legion.daemon.marketplace();
+      const result = await app.daemon.marketplace();
       if (result.ok && result.data) {
         setMarketplace(result.data as MarketplaceExtension[]);
         setMarketplaceLoadState('loaded');
@@ -143,9 +143,9 @@ export const DaemonExtensions: FC<SettingsProps> = ({ config }) => {
     try {
       const isActive = ext.state === 'active' || ext.state === 'running';
       if (isActive) {
-        await legion.daemon.extensionDisable(id);
+        await app.daemon.extensionDisable(id);
       } else {
-        await legion.daemon.extensionEnable(id);
+        await app.daemon.extensionEnable(id);
       }
       await fetchCatalog();
     } finally {
@@ -158,7 +158,7 @@ export const DaemonExtensions: FC<SettingsProps> = ({ config }) => {
     setInFlight(name, true);
     setConfirmUninstall(null);
     try {
-      await legion.daemon.extensionUninstall(name);
+      await app.daemon.extensionUninstall(name);
       await fetchCatalog();
     } finally {
       setInFlight(name, false);
@@ -169,7 +169,7 @@ export const DaemonExtensions: FC<SettingsProps> = ({ config }) => {
     if (installingId) return;
     setInstallingId(id);
     try {
-      await legion.daemon.extensionInstall(id);
+      await app.daemon.extensionInstall(id);
       await fetchCatalog();
       // Refresh marketplace to reflect updated install state
       setMarketplaceLoadState('idle');

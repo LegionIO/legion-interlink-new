@@ -30,7 +30,7 @@ import {
   PhoneIcon,
   MonitorIcon,
 } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import { copyTextToClipboard, logClipboardError } from '@/lib/clipboard';
 import { useAttachments } from '@/providers/AttachmentContext';
 import { useBranchNav } from '@/providers/RuntimeProvider';
@@ -75,8 +75,8 @@ export const Thread: FC<{
   const { callState } = useRealtime();
 
   useEffect(() => {
-    if (!window.legion?.onFind) return;
-    const cleanup = window.legion.onFind(() => setSearchOpen(true));
+    if (!window.app?.onFind) return;
+    const cleanup = window.app.onFind(() => setSearchOpen(true));
     return cleanup;
   }, []);
 
@@ -161,7 +161,7 @@ function useActiveConversationId(): string | null {
   useEffect(() => {
     let cancelled = false;
 
-    legion.conversations.getActiveId()
+    app.conversations.getActiveId()
       .then((id) => {
         if (!cancelled) setActiveConversationId(id as string | null);
       })
@@ -169,7 +169,7 @@ function useActiveConversationId(): string | null {
         if (!cancelled) setActiveConversationId(null);
       });
 
-    const unsubscribe = legion.conversations.onChanged((store) => {
+    const unsubscribe = app.conversations.onChanged((store) => {
       const payload = store as { activeConversationId?: string | null } | null;
       if (!cancelled) {
         setActiveConversationId(payload?.activeConversationId ?? null);
@@ -288,7 +288,7 @@ const ThreadWelcome: FC = () => {
       <div className="flex flex-1 items-center justify-center py-24">
         <div className="relative z-10 flex select-none flex-col items-center justify-center">
           <div className="mb-3 inline-flex items-center gap-0.5 text-4xl font-semibold">
-            <span className="legion-gradient-text legion-wordmark">INTERLINK</span>
+            <span className="app-gradient-text app-wordmark">{__BRAND_WORDMARK}</span>
             <CpuIcon className="h-9 w-9 text-primary/80" />
           </div>
           <p className="max-w-xl text-center text-sm text-muted-foreground">
@@ -365,10 +365,10 @@ function useMatrixCanvas() {
       const height = canvas.clientHeight;
       const styles = getComputedStyle(document.documentElement);
 
-      context.fillStyle = styles.getPropertyValue('--legion-matrix-fade').trim() || 'rgba(10, 8, 18, 0.08)';
+      context.fillStyle = styles.getPropertyValue('--app-matrix-fade').trim() || 'rgba(10, 8, 18, 0.08)';
       context.fillRect(0, 0, width, height);
 
-      context.fillStyle = styles.getPropertyValue('--legion-matrix-glyph').trim() || 'rgba(197, 194, 245, 0.7)';
+      context.fillStyle = styles.getPropertyValue('--app-matrix-glyph').trim() || 'rgba(197, 194, 245, 0.7)';
       context.font = `${fontSize}px Monaco, "Cascadia Code", monospace`;
 
       for (let index = 0; index < drops.length; index += 1) {
@@ -421,10 +421,10 @@ const UserMessage: FC = () => {
     <MessagePrimitive.Root className="group mb-6 flex justify-end">
       <div className="max-w-[72%]">
         <div
-          className="rounded-[1.6rem] border px-5 py-3 text-foreground backdrop-blur-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.22),var(--legion-user-bubble-shadow)]"
+          className="rounded-[1.6rem] border px-5 py-3 text-foreground backdrop-blur-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.22),var(--app-user-bubble-shadow)]"
           style={{
-            backgroundColor: 'var(--legion-user-bubble)',
-            borderColor: 'var(--legion-user-bubble-border)',
+            backgroundColor: 'var(--app-user-bubble)',
+            borderColor: 'var(--app-user-bubble-border)',
           }}
         >
           <MessagePrimitive.Content components={userContentComponents} />
@@ -486,14 +486,14 @@ const UserFilePart: FC<{ data?: string; mimeType?: string; filename?: string; fi
         onClick={() => isPreviewable && data && setPreviewOpen(true)}
         className={`flex items-center gap-2.5 my-1.5 rounded-lg border px-3 py-2 text-left transition-colors ${isPreviewable ? 'cursor-pointer' : 'cursor-default'}`}
         style={{
-          backgroundColor: 'var(--legion-file-chip)',
-          borderColor: 'var(--legion-user-bubble-border)',
+          backgroundColor: 'var(--app-file-chip)',
+          borderColor: 'var(--app-user-bubble-border)',
         }}
         onMouseEnter={(event) => {
-          if (isPreviewable) event.currentTarget.style.backgroundColor = 'var(--legion-file-chip-hover)';
+          if (isPreviewable) event.currentTarget.style.backgroundColor = 'var(--app-file-chip-hover)';
         }}
         onMouseLeave={(event) => {
-          event.currentTarget.style.backgroundColor = 'var(--legion-file-chip)';
+          event.currentTarget.style.backgroundColor = 'var(--app-file-chip)';
         }}
       >
         <div className={`flex h-9 w-9 items-center justify-center rounded-md text-[10px] font-bold ${badgeClass}`}>
@@ -915,13 +915,13 @@ const DictationButton: FC = () => {
   // Load devices and start level monitoring when picker opens
   useEffect(() => {
     if (!pickerOpen) {
-      window.legion?.mic?.stopMonitor();
+      window.app?.mic?.stopMonitor();
       if (levelTimerRef.current) { clearInterval(levelTimerRef.current); levelTimerRef.current = null; }
       setLevels({});
       return;
     }
 
-    const mic = window.legion?.mic;
+    const mic = window.app?.mic;
     if (!mic) return;
 
     // Load device list, then start monitoring all devices
@@ -1135,7 +1135,7 @@ const CallButton: FC = () => {
 
   const handleClick = useCallback(async () => {
     try {
-      const id = await legion.conversations.getActiveId() as string | null;
+      const id = await app.conversations.getActiveId() as string | null;
       if (id) {
         await startCall(id);
       }
@@ -1180,7 +1180,7 @@ const Composer: FC<{
 
   const handleAttach = async () => {
     try {
-      const result = await legion.dialog.openFile() as { canceled: boolean; files?: Array<{ name: string; mime: string; isImage: boolean; size: number; dataUrl: string; text?: string }> };
+      const result = await app.dialog.openFile() as { canceled: boolean; files?: Array<{ name: string; mime: string; isImage: boolean; size: number; dataUrl: string; text?: string }> };
       if (!result.canceled && result.files) addAttachments(result.files);
     } catch (err) { console.error('Attach failed:', err); }
   };
@@ -1232,12 +1232,12 @@ const Composer: FC<{
                 fallbackEnabled={fallbackEnabled}
                 onToggleFallback={onToggleFallback}
                 activeComputerSession={activeComputerSession}
-                onOpenPopout={() => { void legion.computerUse.openSetupWindow(activeConversationId ?? undefined); }}
+                onOpenPopout={() => { void app.computerUse.openSetupWindow(activeConversationId ?? undefined); }}
               />
             ) : (
               <>
                 <ComposerInput
-                  placeholder="Message Interlink..."
+                  placeholder={__BRAND_COMPOSER_PLACEHOLDER}
                   className="min-h-[48px] max-h-[220px] w-full overflow-y-auto px-1 py-0.5 text-[15px]"
                   autoFocus
                 />

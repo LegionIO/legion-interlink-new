@@ -16,7 +16,7 @@ import {
   type FC,
   type PropsWithChildren,
 } from 'react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import { useConfig } from './ConfigProvider';
 import { RealtimeAudioPlayer } from '@/lib/audio/realtime-playback';
 import { Ringtone } from '@/lib/audio/ringtone';
@@ -169,7 +169,7 @@ export const RealtimeProvider: FC<PropsWithChildren> = ({ children }) => {
     }
 
     // Stop mic
-    void legion.mic?.liveMicStop?.();
+    void app.mic?.liveMicStop?.();
 
     // Stop player
     if (playerRef.current) {
@@ -207,7 +207,7 @@ export const RealtimeProvider: FC<PropsWithChildren> = ({ children }) => {
       }, 1000);
 
       // Start the realtime session (includes memory gathering — the "ringing" phase)
-      const result = await legion.realtime.startSession(conversationId);
+      const result = await app.realtime.startSession(conversationId);
 
       // Stop the ringtone
       if (ringDelayTimerRef.current) {
@@ -229,7 +229,7 @@ export const RealtimeProvider: FC<PropsWithChildren> = ({ children }) => {
 
       // Start mic capture
       const inputDeviceId = realtimeConfig?.inputDeviceId;
-      await legion.mic.liveMicStart(inputDeviceId);
+      await app.mic.liveMicStart(inputDeviceId);
 
       // Poll mic for PCM chunks and send to realtime session
       let totalChunksSent = 0;
@@ -237,14 +237,14 @@ export const RealtimeProvider: FC<PropsWithChildren> = ({ children }) => {
       micDrainTimerRef.current = setInterval(async () => {
         if (!callActiveRef.current) return;
         try {
-          const chunks = await legion.mic.liveMicDrain();
+          const chunks = await app.mic.liveMicDrain();
           if (chunks.length > 0) {
             // Compute input level from the latest chunk's PCM16 data
             const lastChunk = chunks[chunks.length - 1];
             setInputLevel(computePcmLevel(lastChunk));
 
             for (const chunk of chunks) {
-              legion.realtime.sendAudio(chunk);
+              app.realtime.sendAudio(chunk);
               totalChunksSent++;
             }
             // Log every 2 seconds
@@ -323,7 +323,7 @@ export const RealtimeProvider: FC<PropsWithChildren> = ({ children }) => {
   const endCallInner = useCallback(async () => {
     cleanup();
     try {
-      await legion.realtime.endSession();
+      await app.realtime.endSession();
     } catch {
       // Ignore
     }
@@ -358,8 +358,8 @@ export const RealtimeProvider: FC<PropsWithChildren> = ({ children }) => {
     // Restart mic capture with the new device
     void (async () => {
       try {
-        await legion.mic.liveMicStop();
-        await legion.mic.liveMicStart(deviceId);
+        await app.mic.liveMicStop();
+        await app.mic.liveMicStart(deviceId);
       } catch (err) {
         console.warn('[RealtimeProvider] Failed to swap input device:', err);
       }
@@ -368,7 +368,7 @@ export const RealtimeProvider: FC<PropsWithChildren> = ({ children }) => {
 
   // Subscribe to realtime events
   useEffect(() => {
-    const unsubscribe = legion.realtime?.onEvent?.((event: unknown) => {
+    const unsubscribe = app.realtime?.onEvent?.((event: unknown) => {
       const e = event as Record<string, unknown>;
       const eventType = e.type as string;
 
@@ -482,7 +482,7 @@ export const RealtimeProvider: FC<PropsWithChildren> = ({ children }) => {
     return () => {
       if (callActiveRef.current) {
         cleanup();
-        void legion.realtime?.endSession?.();
+        void app.realtime?.endSession?.();
       }
     };
   }, [cleanup]);

@@ -6,7 +6,7 @@ import type { AnyWorkflow } from '@mastra/core/workflows';
 import { registerSkillWorkflow } from '../agent/mastra-instance.js';
 import type { ToolDefinition, ToolExecutionContext } from './types.js';
 import { buildScopedToolName, findToolByName } from './naming.js';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import { runCommandWithStreaming, resolveProcessStreamingConfig } from './process-runner.js';
 import { runToolExecution } from './execution.js';
 
@@ -164,7 +164,7 @@ async function runShellExecution(
   manifest: SkillManifest,
   skillDir: string,
   input: Record<string, unknown>,
-  getConfig: () => LegionConfig,
+  getConfig: () => AppConfig,
 ): Promise<Record<string, unknown>> {
   const command = manifest.execution.command ?? './run.sh';
   const resolvedCommand = interpolateTemplate(command, input);
@@ -196,7 +196,7 @@ async function runScriptExecution(
   manifest: SkillManifest,
   skillDir: string,
   input: Record<string, unknown>,
-  getConfig: () => LegionConfig,
+  getConfig: () => AppConfig,
 ): Promise<Record<string, unknown>> {
   const scriptFile = manifest.execution.scriptFile ?? 'index.mjs';
   const config = getConfig();
@@ -286,7 +286,7 @@ const anySchema = z.record(z.any());
 export function skillToWorkflow(
   manifest: SkillManifest,
   skillDir: string,
-  getConfig: () => LegionConfig,
+  getConfig: () => AppConfig,
   allTools?: ToolDefinition[],
 ): AnyWorkflow {
   const inputSchema = manifest.inputSchema
@@ -338,7 +338,7 @@ function buildCompositeWorkflow(
   manifest: SkillManifest,
   inputSchema: z.ZodTypeAny,
   outputSchema: z.ZodTypeAny,
-  getConfig: () => LegionConfig,
+  getConfig: () => AppConfig,
   allTools: ToolDefinition[],
 ): AnyWorkflow {
   const compositeSteps = manifest.execution.steps ?? [];
@@ -469,7 +469,7 @@ export function workflowToToolDefinition(
 export function loadSkillsAsWorkflows(
   skillsDir: string,
   enabledSkills: string[],
-  getConfig: () => LegionConfig,
+  getConfig: () => AppConfig,
   allTools?: ToolDefinition[],
 ): Map<string, AnyWorkflow> {
   const skills = loadSkillsFromDisk(skillsDir);
@@ -494,7 +494,7 @@ export function loadSkillsAsWorkflows(
 export function loadSkillsAsTools(
   skillsDir: string,
   enabledSkills: string[],
-  getConfig: () => LegionConfig,
+  getConfig: () => AppConfig,
   allTools?: ToolDefinition[],
 ): ToolDefinition[] {
   const skills = loadSkillsFromDisk(skillsDir);

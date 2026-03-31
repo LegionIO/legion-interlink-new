@@ -9,7 +9,7 @@ import {
   GlobeIcon,
   LayersIcon,
 } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import type { SettingsProps } from './shared';
 
 type SkillEntry = {
@@ -52,7 +52,7 @@ export const SkillSettings: FC<SettingsProps> = ({ config, updateConfig: _update
 
   const loadSkills = async () => {
     try {
-      const list = await legion.skills.list();
+      const list = await app.skills.list();
       setSkills(list);
     } catch {
       setSkills([]);
@@ -66,12 +66,12 @@ export const SkillSettings: FC<SettingsProps> = ({ config, updateConfig: _update
   }, [config]);
 
   const handleToggle = async (name: string, enable: boolean) => {
-    await legion.skills.toggle(name, enable);
+    await app.skills.toggle(name, enable);
     setSkills((prev) => prev.map((s) => (s.name === name ? { ...s, enabled: enable } : s)));
   };
 
   const handleDelete = async (name: string) => {
-    await legion.skills.delete(name);
+    await app.skills.delete(name);
     setSkills((prev) => prev.filter((s) => s.name !== name));
     if (expandedSkill === name) {
       setExpandedSkill(null);
@@ -88,7 +88,7 @@ export const SkillSettings: FC<SettingsProps> = ({ config, updateConfig: _update
     setExpandedSkill(name);
     setSkillDetail(null);
     try {
-      const detail = await legion.skills.get(name);
+      const detail = await app.skills.get(name);
       setSkillDetail(detail);
     } catch {
       setSkillDetail({ error: 'Failed to load skill details' });
@@ -108,7 +108,7 @@ export const SkillSettings: FC<SettingsProps> = ({ config, updateConfig: _update
     <div className="space-y-4">
       <h3 className="text-sm font-semibold">Skills</h3>
       <p className="text-xs text-muted-foreground">
-        Skills are reusable tools stored in <code className="bg-muted rounded px-1">~/.legionio/skills/</code>.
+        Skills are reusable tools stored in <code className="bg-muted rounded px-1">~/.{__BRAND_APP_SLUG}/skills/</code>.
         The AI can create new skills during conversations, or you can add them manually.
       </p>
 

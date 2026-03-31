@@ -3,12 +3,12 @@ import { useComposerRuntime } from '@assistant-ui/react';
 import { useAttachments } from '@/providers/AttachmentContext';
 
 /**
- * Custom composer input using contentEditable that renders "Legion Interlink"
+ * Custom composer input using contentEditable that renders the product name
  * with the gradient animation. Replaces ComposerPrimitive.Input but
  * uses the same composer runtime for state management.
  */
 export const ComposerInput: FC<{ placeholder?: string; className?: string; autoFocus?: boolean }> = ({
-  placeholder = 'Message Legion Interlink...',
+  placeholder = __BRAND_COMPOSER_PLACEHOLDER,
   className = '',
   autoFocus,
 }) => {
@@ -244,7 +244,7 @@ export const ComposerInput: FC<{ placeholder?: string; className?: string; autoF
       onFocus={handleFocus}
       onCompositionStart={() => { isComposingRef.current = true; }}
       onCompositionEnd={() => { isComposingRef.current = false; handleInput(); }}
-      className={`outline-none whitespace-pre-wrap break-words legion-ce-placeholder ${className}`}
+      className={`outline-none whitespace-pre-wrap break-words app-ce-placeholder ${className}`}
       role="textbox"
       aria-multiline
       data-placeholder={isEmpty ? placeholder : undefined}

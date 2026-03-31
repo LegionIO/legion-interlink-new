@@ -3,7 +3,7 @@ import {
   CalendarIcon, PlusIcon, Trash2Icon, PlayIcon, PauseIcon,
   RefreshCwIcon, Loader2Icon, AlertTriangleIcon, ClockIcon, EditIcon, CheckIcon, XIcon,
 } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import type { SettingsProps } from './shared';
 
 interface Schedule {
@@ -199,7 +199,7 @@ export const DaemonScheduleBuilder: FC<SettingsProps> = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await legion.daemon.schedules();
+      const res = await app.daemon.schedules();
       if (res.ok && res.data) {
         const arr = Array.isArray(res.data) ? res.data : (res.data as { schedules?: Schedule[] }).schedules || [];
         setSchedules(arr as Schedule[]);
@@ -225,7 +225,7 @@ export const DaemonScheduleBuilder: FC<SettingsProps> = () => {
     if (form.mode === 'cron') body.cron = form.cron;
     else body.interval_seconds = parseInt(form.interval, 10) || 300;
 
-    await legion.daemon.scheduleCreate(body);
+    await app.daemon.scheduleCreate(body);
     setShowCreate(false);
     void refresh();
   };
@@ -239,18 +239,18 @@ export const DaemonScheduleBuilder: FC<SettingsProps> = () => {
     if (form.mode === 'cron') { body.cron = form.cron; body.interval_seconds = null; }
     else { body.interval_seconds = parseInt(form.interval, 10) || 300; body.cron = null; }
 
-    await legion.daemon.scheduleUpdate(id, body);
+    await app.daemon.scheduleUpdate(id, body);
     setEditId(null);
     void refresh();
   };
 
   const handleToggle = async (s: Schedule) => {
-    await legion.daemon.scheduleUpdate(s.id, { enabled: !s.enabled });
+    await app.daemon.scheduleUpdate(s.id, { enabled: !s.enabled });
     void refresh();
   };
 
   const handleDelete = async (id: string) => {
-    await legion.daemon.scheduleDelete(id);
+    await app.daemon.scheduleDelete(id);
     void refresh();
   };
 

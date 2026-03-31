@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import type { ToolDefinition, ToolExecutionContext } from './types.js';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import { createMediaGenClient, saveMediaToFile, filePathToUrl, streamToBuffer } from './media-gen-utils.js';
 
 const POLL_INTERVAL_MS = 10000; // 10 seconds, matching visual-mcp
 
-export function createVideoGenTool(getConfig: () => LegionConfig, legionHome: string): ToolDefinition {
+export function createVideoGenTool(getConfig: () => AppConfig, appHome: string): ToolDefinition {
   return {
     name: 'generate_video',
     description:
@@ -117,7 +117,7 @@ export function createVideoGenTool(getConfig: () => LegionConfig, legionHome: st
         }
 
         const videoBuffer = await streamToBuffer(videoResponse.body);
-        const filePath = saveMediaToFile(videoBuffer, 'videos', 'mp4', legionHome);
+        const filePath = saveMediaToFile(videoBuffer, 'videos', 'mp4', appHome);
         const fileUrl = filePathToUrl(filePath);
 
         return {

@@ -9,7 +9,7 @@ import {
   ScissorsIcon,
   DownloadIcon,
 } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 type ToolCallPart = {
   type: 'tool-call';
@@ -193,7 +193,7 @@ const MediaPreview: FC<{ media: MediaResult }> = ({ media }) => {
   const handleSave = useCallback((url: string) => {
     // Extract filename from the URL for the save dialog suggestion
     const filename = url.split('/').pop() ?? undefined;
-    legion.image.save(url, filename);
+    app.image.save(url, filename);
   }, []);
 
   if (media.type === 'image') {

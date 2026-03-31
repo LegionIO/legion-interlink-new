@@ -3,7 +3,7 @@ import {
   UsersIcon, RefreshCwIcon, Loader2Icon, StopCircleIcon,
   SendIcon, CircleIcon, MessageSquareIcon, BotIcon,
 } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 interface SubAgentInfo {
   id: string;
@@ -125,14 +125,14 @@ export const SubAgentDashboard: FC<Props> = () => {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await legion.agent.listSubAgents();
+      const res = await app.agent.listSubAgents();
       const ids = res.ids || [];
 
       // Fetch status for each agent
       const infos: SubAgentInfo[] = [];
       for (const id of ids) {
         try {
-          const statusRes = await legion.daemon.subAgentStatus(id);
+          const statusRes = await app.daemon.subAgentStatus(id);
           if (statusRes.ok && statusRes.data) {
             const d = statusRes.data as Record<string, unknown>;
             infos.push({
@@ -169,12 +169,12 @@ export const SubAgentDashboard: FC<Props> = () => {
   }, [refresh]);
 
   const handleStop = async (agentId: string) => {
-    await legion.agent.stopSubAgent(agentId);
+    await app.agent.stopSubAgent(agentId);
     void refresh();
   };
 
   const handleSendMessage = async (agentId: string, message: string) => {
-    await legion.agent.sendSubAgentMessage(agentId, message);
+    await app.agent.sendSubAgentMessage(agentId, message);
   };
 
   const active = agents.filter((a) => a.status === 'running' || a.status === 'active' || a.status === 'idle');

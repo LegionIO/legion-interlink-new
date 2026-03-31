@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import type { ToolDefinition } from './types.js';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import { readEffectiveConfig, writeDesktopConfig } from '../ipc/config.js';
 
-function readConfig(legionHome: string): LegionConfig {
-  return readEffectiveConfig(legionHome);
+function readConfig(appHome: string): AppConfig {
+  return readEffectiveConfig(appHome);
 }
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
@@ -37,11 +37,11 @@ function settingChanged(field: string, previous: unknown, value: unknown) {
 
 /* ── Memory Settings ── */
 
-export function createMemorySettingsTool(legionHome: string): ToolDefinition {
+export function createMemorySettingsTool(appHome: string): ToolDefinition {
   return {
     name: 'memory_settings',
     description: [
-      'View or update Legion Interlink memory settings. Controls working memory, observational memory, semantic recall, embedding provider, and context window.',
+      'View or update ' + __BRAND_PRODUCT_NAME + ' memory settings. Controls working memory, observational memory, semantic recall, embedding provider, and context window.',
       'Use "get" to see current values, "set" to change one.',
       'Embedding provider fields: semanticRecall.embeddingProvider.type (openai|azure|custom), .model, .openai.apiKey, .azure.endpoint, .azure.apiKey, .azure.deploymentName, .azure.apiVersion, .custom.baseUrl, .custom.apiKey.',
     ].join(' '),
@@ -71,12 +71,12 @@ export function createMemorySettingsTool(legionHome: string): ToolDefinition {
     }),
     execute: async (input) => {
       const { action, field, value } = input as { action: string; field?: string; value?: unknown };
-      const config = readConfig(legionHome);
+      const config = readConfig(appHome);
       if (action === 'get') return { memory: config.memory };
       if (!field || value === undefined) return { error: 'Field and value required for "set".' };
       const previous = getNested(config.memory as unknown as Record<string, unknown>, field);
       setNested(config.memory as unknown as Record<string, unknown>, field, value);
-      writeDesktopConfig(legionHome, config);
+      writeDesktopConfig(appHome, config);
       return settingChanged(field, previous, value);
     },
   };
@@ -84,7 +84,7 @@ export function createMemorySettingsTool(legionHome: string): ToolDefinition {
 
 /* ── Compaction Settings ── */
 
-export function createCompactionSettingsTool(legionHome: string): ToolDefinition {
+export function createCompactionSettingsTool(appHome: string): ToolDefinition {
   return {
     name: 'compaction_settings',
     description: [
@@ -113,12 +113,12 @@ export function createCompactionSettingsTool(legionHome: string): ToolDefinition
     }),
     execute: async (input) => {
       const { action, field, value } = input as { action: string; field?: string; value?: unknown };
-      const config = readConfig(legionHome);
+      const config = readConfig(appHome);
       if (action === 'get') return { compaction: config.compaction };
       if (!field || value === undefined) return { error: 'Field and value required for "set".' };
       const previous = getNested(config.compaction as unknown as Record<string, unknown>, field);
       setNested(config.compaction as unknown as Record<string, unknown>, field, value);
-      writeDesktopConfig(legionHome, config);
+      writeDesktopConfig(appHome, config);
       return settingChanged(field, previous, value);
     },
   };
@@ -126,7 +126,7 @@ export function createCompactionSettingsTool(legionHome: string): ToolDefinition
 
 /* ── Tool Settings ── */
 
-export function createToolSettingsTool(legionHome: string): ToolDefinition {
+export function createToolSettingsTool(appHome: string): ToolDefinition {
   return {
     name: 'tool_settings',
     description: [
@@ -160,12 +160,12 @@ export function createToolSettingsTool(legionHome: string): ToolDefinition {
     }),
     execute: async (input) => {
       const { action, field, value } = input as { action: string; field?: string; value?: unknown };
-      const config = readConfig(legionHome);
+      const config = readConfig(appHome);
       if (action === 'get') return { tools: config.tools };
       if (!field || value === undefined) return { error: 'Field and value required for "set".' };
       const previous = getNested(config.tools as unknown as Record<string, unknown>, field);
       setNested(config.tools as unknown as Record<string, unknown>, field, value);
-      writeDesktopConfig(legionHome, config);
+      writeDesktopConfig(appHome, config);
       return settingChanged(field, previous, value);
     },
   };
@@ -173,7 +173,7 @@ export function createToolSettingsTool(legionHome: string): ToolDefinition {
 
 /* ── Advanced / LLM Settings ── */
 
-export function createAdvancedSettingsTool(legionHome: string): ToolDefinition {
+export function createAdvancedSettingsTool(appHome: string): ToolDefinition {
   return {
     name: 'advanced_settings',
     description: [
@@ -196,7 +196,7 @@ export function createAdvancedSettingsTool(legionHome: string): ToolDefinition {
     }),
     execute: async (input) => {
       const { action, field, value } = input as { action: string; field?: string; value?: unknown };
-      const config = readConfig(legionHome);
+      const config = readConfig(appHome);
       if (action === 'get') {
         return {
           advanced: config.advanced,
@@ -219,7 +219,7 @@ export function createAdvancedSettingsTool(legionHome: string): ToolDefinition {
         previous = getNested(config.advanced as unknown as Record<string, unknown>, field);
         setNested(config.advanced as unknown as Record<string, unknown>, field, value);
       }
-      writeDesktopConfig(legionHome, config);
+      writeDesktopConfig(appHome, config);
       return settingChanged(field, previous, value);
     },
   };
@@ -227,22 +227,22 @@ export function createAdvancedSettingsTool(legionHome: string): ToolDefinition {
 
 /* ── System Prompt ── */
 
-export function createSystemPromptTool(legionHome: string): ToolDefinition {
+export function createSystemPromptTool(appHome: string): ToolDefinition {
   return {
     name: 'system_prompt',
-    description: 'View or update the Legion Interlink system prompt. Use "get" to read, "set" to replace it.',
+    description: 'View or update the ' + __BRAND_PRODUCT_NAME + ' system prompt. Use "get" to read, "set" to replace it.',
     inputSchema: z.object({
       action: z.enum(['get', 'set']).describe('Read or write the system prompt'),
       prompt: z.string().optional().describe('The new system prompt text (required for "set")'),
     }),
     execute: async (input) => {
       const { action, prompt } = input as { action: string; prompt?: string };
-      const config = readConfig(legionHome);
+      const config = readConfig(appHome);
       if (action === 'get') return { systemPrompt: config.systemPrompt };
       if (prompt === undefined) return { error: 'Prompt text required for "set".' };
       const previous = config.systemPrompt;
       config.systemPrompt = prompt;
-      writeDesktopConfig(legionHome, config);
+      writeDesktopConfig(appHome, config);
       return { success: true, changed: { previous, new: prompt } };
     },
   };
@@ -250,7 +250,7 @@ export function createSystemPromptTool(legionHome: string): ToolDefinition {
 
 /* ── Audio Settings ── */
 
-export function createAudioSettingsTool(legionHome: string): ToolDefinition {
+export function createAudioSettingsTool(appHome: string): ToolDefinition {
   return {
     name: 'audio_settings',
     description: [
@@ -280,12 +280,12 @@ export function createAudioSettingsTool(legionHome: string): ToolDefinition {
     }),
     execute: async (input) => {
       const { action, field, value } = input as { action: string; field?: string; value?: unknown };
-      const config = readConfig(legionHome);
+      const config = readConfig(appHome);
       if (action === 'get') return { audio: config.audio };
       if (!field || value === undefined) return { error: 'Field and value required for "set".' };
       const previous = getNested(config.audio as unknown as Record<string, unknown>, field);
       setNested(config.audio as unknown as Record<string, unknown>, field, value);
-      writeDesktopConfig(legionHome, config);
+      writeDesktopConfig(appHome, config);
       return settingChanged(field, previous, value);
     },
   };
@@ -293,7 +293,7 @@ export function createAudioSettingsTool(legionHome: string): ToolDefinition {
 
 /* ── Realtime Audio Settings ── */
 
-export function createRealtimeSettingsTool(legionHome: string): ToolDefinition {
+export function createRealtimeSettingsTool(appHome: string): ToolDefinition {
   return {
     name: 'realtime_settings',
     description: [
@@ -328,12 +328,12 @@ export function createRealtimeSettingsTool(legionHome: string): ToolDefinition {
     }),
     execute: async (input) => {
       const { action, field, value } = input as { action: string; field?: string; value?: unknown };
-      const config = readConfig(legionHome);
+      const config = readConfig(appHome);
       if (action === 'get') return { realtime: config.realtime };
       if (!field || value === undefined) return { error: 'Field and value required for "set".' };
       const previous = getNested(config.realtime as unknown as Record<string, unknown>, field);
       setNested(config.realtime as unknown as Record<string, unknown>, field, value);
-      writeDesktopConfig(legionHome, config);
+      writeDesktopConfig(appHome, config);
       return settingChanged(field, previous, value);
     },
   };

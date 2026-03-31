@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, type FC } from 'react';
 import { Loader2Icon, CircleDotIcon, CheckCircle2Icon, RefreshCwIcon, TagIcon } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 interface Issue {
   number: number;
@@ -31,7 +31,7 @@ export const IssuesTab: FC<Props> = ({ repoFilter }) => {
     setLoading(true);
     const filters: Record<string, string> = { state: stateFilter, limit: '50' };
     if (repoFilter) filters.repo = repoFilter;
-    const res = await legion.daemon.githubIssues(filters);
+    const res = await app.daemon.githubIssues(filters);
     if (res.ok && res.data) {
       const data = Array.isArray(res.data) ? res.data : (res.data as { issues?: Issue[] }).issues || [];
       setIssues(data as Issue[]);

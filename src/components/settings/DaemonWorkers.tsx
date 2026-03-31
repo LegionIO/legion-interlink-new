@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, type FC } from 'react';
 import { RefreshCwIcon, LoaderIcon, WifiOffIcon, ChevronDownIcon, ChevronRightIcon, PauseIcon, PlayIcon, ArchiveIcon, XCircleIcon } from 'lucide-react';
 import type { SettingsProps } from './shared';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
@@ -54,8 +54,8 @@ const WorkerCard: FC<{ worker: Worker }> = ({ worker }) => {
     setDetailState('loading');
     try {
       const [workerRes, costsRes] = await Promise.all([
-        legion.daemon.worker(worker.id),
-        legion.daemon.workerCosts(worker.id),
+        app.daemon.worker(worker.id),
+        app.daemon.workerCosts(worker.id),
       ]);
       const merged: WorkerDetail = {
         ...worker,
@@ -85,7 +85,7 @@ const WorkerCard: FC<{ worker: Worker }> = ({ worker }) => {
     setActionPending(action);
     setActionError('');
     try {
-      const result = await legion.daemon.workerLifecycle(worker.id, { action });
+      const result = await app.daemon.workerLifecycle(worker.id, { action });
       if (!result.ok) {
         setActionError(result.error ?? `Failed to ${action} worker`);
       } else {
@@ -283,7 +283,7 @@ export const DaemonWorkers: FC<SettingsProps> = () => {
     setLoadState('loading');
     setLoadError('');
     try {
-      const result = await legion.daemon.workers();
+      const result = await app.daemon.workers();
       if (result.ok && Array.isArray(result.data)) {
         setWorkers(result.data as Worker[]);
         setLoadState('loaded');

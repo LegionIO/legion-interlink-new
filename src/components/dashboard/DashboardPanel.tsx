@@ -4,7 +4,7 @@ import {
   CheckCircle2Icon, AlertCircleIcon, AlertTriangleIcon, Loader2Icon,
   RefreshCwIcon, BrainIcon, NetworkIcon, ClockIcon,
 } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import { useNotifications } from '@/providers/NotificationProvider';
 
 interface HealthData {
@@ -105,12 +105,12 @@ export const DashboardPanel: FC<{ onClose: () => void }> = () => {
     setLoading(true);
     try {
       const [hRes, tRes, wRes, gRes, mRes, eRes] = await Promise.all([
-        legion.daemon.health(),
-        legion.daemon.tasks(),
-        legion.daemon.workers(),
-        legion.daemon.gaiaStatus(),
-        legion.daemon.metering(),
-        legion.daemon.extensions(),
+        app.daemon.health(),
+        app.daemon.tasks(),
+        app.daemon.workers(),
+        app.daemon.gaiaStatus(),
+        app.daemon.metering(),
+        app.daemon.extensions(),
       ]);
 
       if (hRes.ok) {
@@ -192,7 +192,7 @@ export const DashboardPanel: FC<{ onClose: () => void }> = () => {
         </div>
         <h2 className="text-sm font-semibold">Daemon Offline</h2>
         <p className="max-w-xs text-center text-xs text-muted-foreground">
-          Cannot reach the Legion daemon. Start it with <code className="rounded bg-muted/50 px-1 py-0.5 font-mono text-[10px]">legion start</code> and try again.
+          Cannot reach the {__BRAND_PRODUCT_NAME} daemon. Start it with <code className="rounded bg-muted/50 px-1 py-0.5 font-mono text-[10px]">legion start</code> and try again.
         </p>
         <button
           type="button"

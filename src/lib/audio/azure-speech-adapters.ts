@@ -120,7 +120,7 @@ export function createAzureSpeechAdapter(config: AzureTtsConfig): SpeechSynthesi
               'Ocp-Apim-Subscription-Key': config.subscriptionKey,
               'Content-Type': 'application/ssml+xml',
               'X-Microsoft-OutputFormat': config.outputFormat,
-              'User-Agent': 'LegionInterlink',
+              'User-Agent': __BRAND_USER_AGENT,
             },
             body: ssml,
             signal: abortController.signal,
@@ -265,7 +265,7 @@ export function createAzureDictationAdapter(config: AzureSttConfig): DictationAd
 
       const teardown = async () => {
         if (drainTimer) { clearInterval(drainTimer); drainTimer = null; }
-        const mic = window.legion?.mic;
+        const mic = window.app?.mic;
         if (mic) {
           await mic.liveMicStop().catch(() => {});
           await mic.liveStop().catch(() => {});
@@ -275,7 +275,7 @@ export function createAzureDictationAdapter(config: AzureSttConfig): DictationAd
       // Start everything
       (async () => {
         try {
-          const mic = window.legion?.mic;
+          const mic = window.app?.mic;
           if (!mic) throw new Error('Mic IPC not available');
 
           // 1. Start mic capture in hidden window

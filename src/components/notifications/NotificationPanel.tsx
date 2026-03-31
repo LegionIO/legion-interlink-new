@@ -4,7 +4,7 @@ import {
   AlertCircleIcon, AlertTriangleIcon, InfoIcon, CheckCircle2Icon,
   ChevronDownIcon, ExternalLinkIcon,
 } from 'lucide-react';
-import { useNotifications, type LegionNotification } from '@/providers/NotificationProvider';
+import { useNotifications, type AppNotification } from '@/providers/NotificationProvider';
 
 type SeverityFilter = 'all' | 'error' | 'warn' | 'success' | 'info';
 
@@ -31,7 +31,7 @@ function fmtTime(iso: string): string {
 }
 
 const NotificationRow: FC<{
-  notification: LegionNotification;
+  notification: AppNotification;
   onRead: () => void;
   expanded: boolean;
   onToggle: () => void;

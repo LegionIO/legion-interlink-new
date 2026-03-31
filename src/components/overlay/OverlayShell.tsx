@@ -1,5 +1,5 @@
 import { useEffect, useState, type FC } from 'react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import type { ComputerOverlayState } from '../../../shared/computer-use';
 import { OverlayContent } from './OverlayContent';
 
@@ -17,7 +17,7 @@ export const OverlayShell: FC<{ sessionId: string }> = ({ sessionId }) => {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = legion.computerUse.onOverlayState((data) => {
+    const unsubscribe = app.computerUse.onOverlayState((data) => {
       const overlayState = data as ComputerOverlayState;
       if (overlayState.sessionId === sessionId) {
         setState(overlayState);

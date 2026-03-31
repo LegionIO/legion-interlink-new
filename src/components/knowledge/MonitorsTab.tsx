@@ -8,7 +8,7 @@ import {
   Loader2Icon,
   AlertCircleIcon,
 } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 interface Monitor {
   id: string;
@@ -47,7 +47,7 @@ export function MonitorsTab() {
     setLoading(true);
     setError('');
     try {
-      const result = await legion.knowledge.monitorsList();
+      const result = await app.knowledge.monitorsList();
       if (result.ok) {
         setMonitors(parseMonitors(result.data));
       } else {
@@ -67,7 +67,7 @@ export function MonitorsTab() {
   const handleAddMonitor = async () => {
     setAdding(true);
     try {
-      const raw = await legion.dialog.openFile();
+      const raw = await app.dialog.openFile();
       const result = raw as DialogResult;
       if (result.canceled || !result.files?.length) return;
 
@@ -77,7 +77,7 @@ export function MonitorsTab() {
         ? selectedPath.substring(0, selectedPath.lastIndexOf('/'))
         : selectedPath;
 
-      const addResult = await legion.knowledge.monitorAdd(dirPath);
+      const addResult = await app.knowledge.monitorAdd(dirPath);
       if (addResult.ok) {
         await fetchMonitors();
       } else {
@@ -93,7 +93,7 @@ export function MonitorsTab() {
   const handleScan = async (id: string) => {
     setScanningIds((prev) => new Set(prev).add(id));
     try {
-      await legion.knowledge.monitorScan(id);
+      await app.knowledge.monitorScan(id);
       await fetchMonitors();
     } catch {
       // scan errors are non-fatal; list refresh will reflect any state change
@@ -108,7 +108,7 @@ export function MonitorsTab() {
 
   const handleRemove = async (id: string) => {
     try {
-      await legion.knowledge.monitorRemove(id);
+      await app.knowledge.monitorRemove(id);
       setMonitors((prev) => prev.filter((m) => m.id !== id));
     } catch (err) {
       setError(String(err));

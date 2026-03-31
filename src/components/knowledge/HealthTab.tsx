@@ -6,7 +6,7 @@ import {
   Loader2Icon,
   AlertCircleIcon,
 } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 interface HealthData {
   total_entries?: number;
@@ -36,7 +36,7 @@ export function HealthTab() {
     setLoadState('loading');
     setLoadError('');
     try {
-      const result = await legion.knowledge.health();
+      const result = await app.knowledge.health();
       if (result.ok) {
         setHealth((result.data as HealthData) ?? {});
         setLoadState('loaded');
@@ -58,7 +58,7 @@ export function HealthTab() {
     setMaintainState('running');
     setMaintainMessage('');
     try {
-      const result = await legion.knowledge.maintain();
+      const result = await app.knowledge.maintain();
       if (result.ok) {
         setMaintainState('success');
         const data = result.data as { message?: string } | undefined;

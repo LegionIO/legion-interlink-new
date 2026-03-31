@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type FC, type ReactNode } from 'react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
-export interface LegionNotification {
+export interface AppNotification {
   id: string;
   type: string;
   severity: 'info' | 'warn' | 'error' | 'success';
@@ -15,12 +15,12 @@ export interface LegionNotification {
 
 interface Toast {
   id: string;
-  notification: LegionNotification;
+  notification: AppNotification;
   dismissing: boolean;
 }
 
 interface NotificationContextValue {
-  notifications: LegionNotification[];
+  notifications: AppNotification[];
   unreadCount: number;
   toasts: Toast[];
   markRead: (id: string) => void;
@@ -44,7 +44,7 @@ export const useNotifications = () => useContext(NotificationContext);
 const MAX_NOTIFICATIONS = 200;
 const TOAST_DURATION = 5000;
 
-const SEVERITY_MAP: Record<string, LegionNotification['severity']> = {
+const SEVERITY_MAP: Record<string, AppNotification['severity']> = {
   error: 'error',
   failure: 'error',
   failed: 'error',
@@ -68,7 +68,7 @@ const TOAST_TYPES = new Set([
   'alert', 'error',
 ]);
 
-function classifyEvent(raw: unknown): LegionNotification {
+function classifyEvent(raw: unknown): AppNotification {
   const evt = raw as Record<string, unknown>;
   const type = String(evt.type || evt.event || evt.kind || 'event');
   const severityHint = String(evt.severity || evt.level || evt.status || '');
@@ -93,7 +93,7 @@ function classifyEvent(raw: unknown): LegionNotification {
 }
 
 export const NotificationProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  const [notifications, setNotifications] = useState<LegionNotification[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const subscribedRef = useRef(false);
 
@@ -102,10 +102,10 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({ children }) 
     if (subscribedRef.current) return;
     subscribedRef.current = true;
 
-    void legion.daemon.eventsSubscribe().catch(() => {});
+    void app.daemon.eventsSubscribe().catch(() => {});
 
     // Load recent events as initial notifications
-    void legion.daemon.eventsRecent(50).then((res) => {
+    void app.daemon.eventsRecent(50).then((res) => {
       if (res.ok && res.data) {
         const arr = Array.isArray(res.data) ? res.data : (res.data as { events?: unknown[] }).events || [];
         const initial = (arr as unknown[]).map(classifyEvent).map((n) => ({ ...n, read: true }));
@@ -113,7 +113,7 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({ children }) 
       }
     }).catch(() => {});
 
-    const unsub = legion.daemon.onEvent((event) => {
+    const unsub = app.daemon.onEvent((event) => {
       const notification = classifyEvent(event);
       setNotifications((prev) => [notification, ...prev].slice(0, MAX_NOTIFICATIONS));
 
@@ -133,7 +133,7 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({ children }) 
 
     return () => {
       unsub();
-      void legion.daemon.eventsUnsubscribe().catch(() => {});
+      void app.daemon.eventsUnsubscribe().catch(() => {});
       subscribedRef.current = false;
     };
   }, []);

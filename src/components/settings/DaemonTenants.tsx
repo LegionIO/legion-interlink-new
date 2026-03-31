@@ -7,7 +7,7 @@ import {
   ChevronRightIcon,
 } from 'lucide-react';
 import { type SettingsProps } from './shared';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
@@ -59,7 +59,7 @@ const TenantCard: FC<{ tenant: Tenant }> = ({ tenant }) => {
     setDetailState('loading');
     setDetailError('');
     try {
-      const result = await legion.daemon.tenant(tenant.tenant_id);
+      const result = await app.daemon.tenant(tenant.tenant_id);
       if (result.ok) {
         setDetail((result.data as TenantDetail) ?? null);
         setDetailState('loaded');
@@ -266,7 +266,7 @@ export const DaemonTenants: FC<SettingsProps> = () => {
     setLoadState('loading');
     setLoadError('');
     try {
-      const result = await legion.daemon.tenants();
+      const result = await app.daemon.tenants();
       if (result.ok) {
         setTenants((result.data as Tenant[]) ?? []);
         setLoadState('loaded');

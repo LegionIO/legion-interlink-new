@@ -230,7 +230,7 @@ export const EditableTextarea: FC<EditableTextareaProps> = ({
       onFocus={handleFocus}
       onCompositionStart={() => { isComposingRef.current = true; }}
       onCompositionEnd={() => { isComposingRef.current = false; handleInput(); }}
-      className={`whitespace-pre-wrap break-words outline-none legion-ce-placeholder ${className}`}
+      className={`whitespace-pre-wrap break-words outline-none app-ce-placeholder ${className}`}
       role="textbox"
       aria-multiline
       data-placeholder={isEmpty ? placeholder : undefined}

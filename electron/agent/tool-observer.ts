@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { z } from 'zod';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import type { LLMModelConfig } from './model-catalog.js';
 import { createLanguageModelFromConfig } from './language-model.js';
 
@@ -147,7 +147,7 @@ const ObserverDecisionSchema = z.object({
 type ObserverDecision = z.infer<typeof ObserverDecisionSchema>;
 type ObserverAction = z.infer<typeof ObserverActionSchema>;
 
-export function resolveToolObserverConfig(config: LegionConfig): ToolObserverConfig {
+export function resolveToolObserverConfig(config: AppConfig): ToolObserverConfig {
   const raw = config.tools.processStreaming.observer;
   return {
     enabled: raw.enabled,

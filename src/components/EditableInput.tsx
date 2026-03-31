@@ -179,7 +179,7 @@ export const EditableInput: FC<EditableInputProps> = ({
       onKeyDown={handleKeyDown}
       onPaste={handlePaste}
       onFocus={handleFocus}
-      className={`outline-none whitespace-nowrap overflow-hidden legion-ce-placeholder ${className}`}
+      className={`outline-none whitespace-nowrap overflow-hidden app-ce-placeholder ${className}`}
       role="textbox"
       data-placeholder={isEmpty ? placeholder : undefined}
     />

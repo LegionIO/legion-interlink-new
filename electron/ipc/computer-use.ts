@@ -10,7 +10,7 @@ import type {
 } from '../../shared/computer-use.js';
 import { getComputerUseManager } from '../computer-use/service.js';
 import { getLocalMacDisplayLayout, probeInputMonitoring } from '../computer-use/permissions.js';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import { readConversationStore, writeConversationStore, broadcastConversationChange } from './conversations.js';
 
 const execFileAsync = promisify(execFile);
@@ -103,10 +103,10 @@ function findMainWindow(): BrowserWindow | null {
 
 export function registerComputerUseHandlers(
   ipcMain: IpcMain,
-  legionHome: string,
-  getConfig: () => LegionConfig,
+  appHome: string,
+  getConfig: () => AppConfig,
 ): void {
-  const manager = getComputerUseManager(legionHome, getConfig);
+  const manager = getComputerUseManager(appHome, getConfig);
   manager.on('event', (event: ComputerUseEvent) => {
     broadcast(event);
   });
@@ -202,10 +202,10 @@ export function registerComputerUseHandlers(
     if (!session) return { ok: false, error: 'Session not found' };
 
     // Switch active conversation to the one owning this computer-use session
-    const store = readConversationStore(legionHome);
+    const store = readConversationStore(appHome);
     if (store.conversations[session.conversationId]) {
       store.activeConversationId = session.conversationId;
-      writeConversationStore(legionHome, store);
+      writeConversationStore(appHome, store);
       broadcastConversationChange(store);
     }
 

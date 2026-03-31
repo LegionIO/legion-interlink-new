@@ -2,7 +2,7 @@ import { useEffect, useState, type FC } from 'react';
 import { PlusIcon, Trash2Icon, PencilIcon, XIcon, CheckIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
 import { EditableInput } from '@/components/EditableInput';
 import { formatModelDisplayName } from '@/lib/model-display';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import { Toggle, settingsSelectClass, type SettingsProps } from './shared';
 
 type Provider = {
@@ -37,7 +37,7 @@ type AgentBackend = 'mastra' | 'legion-daemon';
 
 type RuntimeConfig = {
   agentBackend?: AgentBackend;
-  legion: {
+  daemon: {
     configDir: string;
     daemonUrl: string;
     rubyPath: string;
@@ -50,7 +50,7 @@ type DetectedRuntime = {
   rubyPath: string;
 };
 
-type LegionStatus = {
+type AppStatus = {
   backend: AgentBackend;
   daemon: {
     ok: boolean;
@@ -68,7 +68,7 @@ export const ModelSettings: FC<SettingsProps> = ({ config, updateConfig }) => {
   };
   const runtime = ((config.runtime as RuntimeConfig | undefined) ?? {
     agentBackend: 'mastra',
-    legion: {
+    daemon: {
       configDir: '',
       daemonUrl: 'http://127.0.0.1:4567',
       rubyPath: '',
@@ -138,14 +138,14 @@ const RuntimeCard: FC<{
   runtime: RuntimeConfig;
   updateConfig: (path: string, value: unknown) => Promise<void>;
 }> = ({ runtime, updateConfig }) => {
-  const [status, setStatus] = useState<LegionStatus | null>(null);
+  const [status, setStatus] = useState<AppStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [detecting, setDetecting] = useState(false);
 
   const loadStatus = async () => {
     setLoading(true);
     try {
-      setStatus(await legion.agent.legionStatus() as LegionStatus);
+      setStatus(await app.agent.appStatus() as AppStatus);
     } catch {
       setStatus(null);
     } finally {
@@ -155,15 +155,15 @@ const RuntimeCard: FC<{
 
   useEffect(() => {
     void loadStatus();
-  }, [runtime.legion.configDir, runtime.legion.daemonUrl]);
+  }, [runtime.daemon.configDir, runtime.daemon.daemonUrl]);
 
   const applyDetectedRuntime = async () => {
     setDetecting(true);
     try {
-      const detected = await legion.config.autoDetectRuntime() as DetectedRuntime;
-      await updateConfig('runtime.legion.configDir', detected.configDir);
-      await updateConfig('runtime.legion.daemonUrl', detected.daemonUrl);
-      await updateConfig('runtime.legion.rubyPath', detected.rubyPath);
+      const detected = await app.config.autoDetectRuntime() as DetectedRuntime;
+      await updateConfig('runtime.daemon.configDir', detected.configDir);
+      await updateConfig('runtime.daemon.daemonUrl', detected.daemonUrl);
+      await updateConfig('runtime.daemon.rubyPath', detected.rubyPath);
       await loadStatus();
     } finally {
       setDetecting(false);
@@ -171,8 +171,8 @@ const RuntimeCard: FC<{
   };
 
   const activeRuntimeDetail = status?.backend === 'legion-daemon'
-    ? `Interlink will route chats through the daemon at ${status.daemon.url}.`
-    : 'Interlink will use Mastra until a local Legion Daemon becomes reachable.';
+    ? `${__BRAND_PRODUCT_NAME} will route chats through the daemon at ${status.daemon.url}.`
+    : `${__BRAND_PRODUCT_NAME} will use Mastra until a local daemon becomes reachable.`;
 
   return (
     <div className="rounded-lg border p-3 space-y-3">
@@ -180,7 +180,7 @@ const RuntimeCard: FC<{
         <div>
           <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Agent Runtime</h4>
           <p className="mt-1 text-xs text-muted-foreground">
-            Interlink automatically uses the Legion Daemon when it is running, and falls back to Mastra otherwise.
+            {__BRAND_PRODUCT_NAME} automatically uses the daemon when it is running, and falls back to Mastra otherwise.
           </p>
         </div>
         <button
@@ -208,17 +208,17 @@ const RuntimeCard: FC<{
           {detecting ? 'Detecting...' : 'Use Detected Setup'}
         </button>
         <p className="text-[10px] text-muted-foreground">
-          Auto-fills Legion config dir, daemon URL, and common Ruby shim paths.
+          Auto-fills {__BRAND_PRODUCT_NAME} config dir, daemon URL, and common Ruby shim paths.
         </p>
       </div>
 
       <div>
-        <label className="text-[10px] text-muted-foreground block mb-0.5">Legion Config Dir</label>
+        <label className="text-[10px] text-muted-foreground block mb-0.5">{__BRAND_PRODUCT_NAME} Config Dir</label>
         <EditableInput
           className="w-full rounded border bg-card px-2 py-1 text-xs font-mono"
-          value={runtime.legion.configDir}
-          onChange={(value) => updateConfig('runtime.legion.configDir', value)}
-          placeholder="~/.legionio/settings"
+          value={runtime.daemon.configDir}
+          onChange={(value) => updateConfig('runtime.daemon.configDir', value)}
+          placeholder={`~/.${__BRAND_APP_SLUG}/settings`}
         />
       </div>
 
@@ -226,8 +226,8 @@ const RuntimeCard: FC<{
         <label className="text-[10px] text-muted-foreground block mb-0.5">Daemon URL</label>
         <EditableInput
           className="w-full rounded border bg-card px-2 py-1 text-xs font-mono"
-          value={runtime.legion.daemonUrl}
-          onChange={(value) => updateConfig('runtime.legion.daemonUrl', value)}
+          value={runtime.daemon.daemonUrl}
+          onChange={(value) => updateConfig('runtime.daemon.daemonUrl', value)}
           placeholder="http://127.0.0.1:4567"
         />
       </div>

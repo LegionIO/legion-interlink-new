@@ -6,7 +6,7 @@ import {
   TrendingUpIcon,
 } from 'lucide-react';
 import { type SettingsProps } from './shared';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 type ForecastState = 'idle' | 'loading' | 'loaded' | 'error';
@@ -68,7 +68,7 @@ export const DaemonCapacity: FC<SettingsProps> = () => {
     setLoadState('loading');
     setLoadError('');
     try {
-      const result = await legion.daemon.capacity();
+      const result = await app.daemon.capacity();
       if (result.ok) {
         setCapacity(result.data as CapacityData);
         setLoadState('loaded');
@@ -86,7 +86,7 @@ export const DaemonCapacity: FC<SettingsProps> = () => {
     setForecastState('loading');
     setForecastError('');
     try {
-      const result = await legion.daemon.capacityForecast({ days: '7' });
+      const result = await app.daemon.capacityForecast({ days: '7' });
       if (result.ok) {
         setForecast((result.data as ForecastEntry[]) ?? []);
         setForecastState('loaded');

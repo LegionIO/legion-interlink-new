@@ -9,3 +9,6 @@ build/bin/
 !.env.example
 pnpm-debug.log*
 *.tsbuildinfo
+
+# Auto-generated from electron-builder.template.yml by scripts/generate-builder-config.ts
+electron-builder.yml

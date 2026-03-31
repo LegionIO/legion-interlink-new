@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { streamAgentResponse } from './mastra-agent.js';
 import type { StreamEvent } from './mastra-agent.js';
 import type { LLMModelConfig } from './model-catalog.js';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import type { ToolDefinition, ToolExecutionContext } from '../tools/types.js';
 import {
   ToolObserverManager,
@@ -47,7 +47,7 @@ export type SubAgentRunOptions = {
   task: string;
   context?: string;
   depth: number;
-  config: LegionConfig;
+  config: AppConfig;
   modelConfig: LLMModelConfig;
   tools: ToolDefinition[];
   dbPath: string;
@@ -162,7 +162,7 @@ export async function* runSubAgent(opts: SubAgentRunOptions): AsyncGenerator<Sub
       { role: 'user', content: task },
     ];
 
-    const subAgentConfig: LegionConfig = { ...config, systemPrompt };
+    const subAgentConfig: AppConfig = { ...config, systemPrompt };
 
     // Control signal shared with the control tool
     const controlSignal: { current: ControlSignal | null } = { current: null };

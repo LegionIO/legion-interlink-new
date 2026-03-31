@@ -62,26 +62,26 @@ const sections: Array<{ key: SettingsSection; label: string; group?: string }> =
   { key: 'media-generation', label: 'Media Generation' },
   { key: 'computer-use', label: 'Computer Use' },
   { key: 'advanced', label: 'Advanced' },
-  { key: 'daemon', label: 'Config', group: 'Legion Daemon' },
-  { key: 'extensions', label: 'Extensions', group: 'Legion Daemon' },
-  { key: 'tasks', label: 'Tasks', group: 'Legion Daemon' },
-  { key: 'workers', label: 'Workers', group: 'Legion Daemon' },
-  { key: 'events', label: 'Events', group: 'Legion Daemon' },
-  { key: 'audit', label: 'Audit', group: 'Legion Daemon' },
-  { key: 'prompts', label: 'Prompts', group: 'Legion Daemon' },
-  { key: 'webhooks', label: 'Webhooks', group: 'Legion Daemon' },
-  { key: 'tenants', label: 'Tenants', group: 'Legion Daemon' },
-  { key: 'capacity', label: 'Capacity', group: 'Legion Daemon' },
-  { key: 'governance', label: 'Governance', group: 'Legion Daemon' },
-  { key: 'metrics', label: 'Metrics', group: 'Legion Daemon' },
-  { key: 'doctor', label: 'Diagnostics', group: 'Legion Daemon' },
-  { key: 'topology', label: 'Topology', group: 'Legion Daemon' },
-  { key: 'memory-inspector', label: 'Memory', group: 'Legion Daemon' },
-  { key: 'task-graph', label: 'Task Graph', group: 'Legion Daemon' },
-  { key: 'gaia', label: 'GAIA', group: 'Legion Daemon' },
-  { key: 'cost-tracker', label: 'Costs', group: 'Legion Daemon' },
-  { key: 'mesh', label: 'Mesh', group: 'Legion Daemon' },
-  { key: 'schedule-builder', label: 'Schedule Builder', group: 'Legion Daemon' },
+  { key: 'daemon', label: 'Config', group: 'Daemon' },
+  { key: 'extensions', label: 'Extensions', group: 'Daemon' },
+  { key: 'tasks', label: 'Tasks', group: 'Daemon' },
+  { key: 'workers', label: 'Workers', group: 'Daemon' },
+  { key: 'events', label: 'Events', group: 'Daemon' },
+  { key: 'audit', label: 'Audit', group: 'Daemon' },
+  { key: 'prompts', label: 'Prompts', group: 'Daemon' },
+  { key: 'webhooks', label: 'Webhooks', group: 'Daemon' },
+  { key: 'tenants', label: 'Tenants', group: 'Daemon' },
+  { key: 'capacity', label: 'Capacity', group: 'Daemon' },
+  { key: 'governance', label: 'Governance', group: 'Daemon' },
+  { key: 'metrics', label: 'Metrics', group: 'Daemon' },
+  { key: 'doctor', label: 'Diagnostics', group: 'Daemon' },
+  { key: 'topology', label: 'Topology', group: 'Daemon' },
+  { key: 'memory-inspector', label: 'Memory', group: 'Daemon' },
+  { key: 'task-graph', label: 'Task Graph', group: 'Daemon' },
+  { key: 'gaia', label: 'GAIA', group: 'Daemon' },
+  { key: 'cost-tracker', label: 'Costs', group: 'Daemon' },
+  { key: 'mesh', label: 'Mesh', group: 'Daemon' },
+  { key: 'schedule-builder', label: 'Schedule Builder', group: 'Daemon' },
 ];
 
 export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
@@ -93,7 +93,7 @@ export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
 
   const builtInSections: Array<{ key: string; label: string; group?: string }> = sections;
   const primarySections = builtInSections.filter((section) => !section.group);
-  const daemonSections = builtInSections.filter((section) => section.group === 'Legion Daemon');
+  const daemonSections = builtInSections.filter((section) => section.group === 'Daemon');
   const isDaemonSectionActive = daemonSections.some((section) => section.key === activeSection);
   const sortedPluginSections = [...pluginSections].sort((a, b) => a.priority - b.priority);
   const hasPluginSections = sortedPluginSections.length > 0;
@@ -113,7 +113,7 @@ export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
   return (
     <div className="flex h-full bg-background">
       {/* Section list */}
-      <div className="w-[220px] overflow-y-auto border-r border-border/70 bg-sidebar/55 p-3 space-y-1 legion-shell-panel">
+      <div className="w-[220px] overflow-y-auto border-r border-border/70 bg-sidebar/55 p-3 space-y-1 app-shell-panel">
         <div className="flex items-center justify-between px-2 py-1.5 mb-3">
           <span className="text-xs font-semibold uppercase tracking-[0.16em]">Settings</span>
           <button type="button" onClick={onClose} className="p-1.5 rounded-xl hover:bg-muted transition-colors">
@@ -282,7 +282,7 @@ const SystemPromptSettings: FC<SettingsProps> = ({ config, updateConfig }) => {
         onFocus={() => { isFocusedRef.current = true; }}
         onBlur={() => { isFocusedRef.current = false; }}
         onChange={(v) => handleChange(v)}
-        placeholder="Enter the system prompt for Legion Interlink..."
+        placeholder={`Enter the system prompt for ${__BRAND_PRODUCT_NAME}...`}
       />
     </div>
   );

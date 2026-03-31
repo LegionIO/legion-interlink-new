@@ -1,7 +1,7 @@
 import { useState, useCallback, type FC, type KeyboardEvent } from 'react';
 import { SearchIcon, ListIcon, LoaderIcon } from 'lucide-react';
 import { SparklesIcon } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import { QueryResultCard, type KnowledgeResult } from './QueryResultCard';
 import { SynthesizedAnswer } from './SynthesizedAnswer';
 
@@ -38,7 +38,7 @@ export const QueryTab: FC = () => {
     setHasSearched(true);
 
     try {
-      const result = await legion.knowledge.query(q, scope, synthesize);
+      const result = await app.knowledge.query(q, scope, synthesize);
 
       if (result.ok) {
         setResponse((result.data as QueryResponse) ?? {});

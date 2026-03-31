@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, type FC } from 'react';
 import { NetworkIcon, RefreshCwIcon, Loader2Icon, AlertCircleIcon, PlayIcon, PauseIcon } from 'lucide-react';
 import type { SettingsProps } from './shared';
 import { TaskGraphCanvas, type GraphNode } from './TaskGraphCanvas';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 const POLL_INTERVAL = 5000;
 
@@ -36,9 +36,9 @@ export const DaemonTaskGraph: FC<SettingsProps> = () => {
     if (statusFilter !== 'all') filters.status = statusFilter;
 
     // Try the graph endpoint first, fall back to regular tasks
-    let res = await legion.daemon.taskGraph(filters);
+    let res = await app.daemon.taskGraph(filters);
     if (!res.ok) {
-      res = await legion.daemon.tasks(filters);
+      res = await app.daemon.tasks(filters);
     }
 
     if (res.ok && res.data) {
@@ -77,7 +77,7 @@ export const DaemonTaskGraph: FC<SettingsProps> = () => {
   // Fetch detail when selecting a node
   useEffect(() => {
     if (!selectedId) { setSelectedDetail(null); return; }
-    legion.daemon.task(selectedId).then((res) => {
+    app.daemon.task(selectedId).then((res) => {
       if (res.ok && res.data) {
         setSelectedDetail(res.data as TaskDetail);
       }

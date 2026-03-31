@@ -165,16 +165,16 @@ export function resolveMediaGenEndpoint(
  * @param data - The media data as a Buffer
  * @param type - Subdirectory: 'images', 'videos', or 'audio'
  * @param ext - File extension (e.g. 'png', 'mp4', 'mp3')
- * @param legionHome - The Legion home directory (e.g. ~/.legionio)
+ * @param appHome - The app home directory (e.g. ~/.<slug>)
  * @returns The absolute file path of the saved file
  */
 export function saveMediaToFile(
   data: Buffer,
   type: 'images' | 'videos' | 'audio',
   ext: string,
-  legionHome: string,
+  appHome: string,
 ): string {
-  const dir = join(legionHome, 'media', type);
+  const dir = join(appHome, 'media', type);
   mkdirSync(dir, { recursive: true });
 
   const timestamp = Date.now();
@@ -187,9 +187,9 @@ export function saveMediaToFile(
 }
 
 /**
- * Convert a media file path to a legion-media:// URL for the Electron renderer.
- * The path must be under ~/.legionio/media/ (e.g. ~/.legionio/media/images/file.png).
- * Returns a URL like legion-media://images/file.png
+ * Convert a media file path to a media protocol URL for the Electron renderer.
+ * The path must be under ~/.<slug>/media/ (e.g. ~/.<slug>/media/images/file.png).
+ * Returns a URL like <protocol>://images/file.png
  */
 export function filePathToUrl(filePath: string): string {
   // Extract the relative path after /media/ to form the protocol URL
@@ -197,10 +197,10 @@ export function filePathToUrl(filePath: string): string {
   const idx = filePath.indexOf(mediaMarker);
   if (idx !== -1) {
     const relativePath = filePath.slice(idx + mediaMarker.length);
-    return `legion-media://${relativePath}`;
+    return __BRAND_MEDIA_PROTOCOL + '://' + relativePath;
   }
   // Fallback: use the full path (shouldn't happen in practice)
-  return `legion-media://${filePath}`;
+  return __BRAND_MEDIA_PROTOCOL + '://' + filePath;
 }
 
 /**

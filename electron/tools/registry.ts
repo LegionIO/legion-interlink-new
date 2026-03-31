@@ -1,5 +1,5 @@
 import type { ToolDefinition } from './types.js';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import type { ComputerSession } from '../../shared/computer-use.js';
 import { createShellTool } from './shell.js';
 import { createFileReadTool } from './file-read.js';
@@ -139,8 +139,8 @@ function buildConversationContextSummary(conversation: ConversationRecordLike | 
     : summary.slice(0, 1797).trimEnd() + '...';
 }
 
-function readConversationRecord(legionHome: string, conversationId: string): ConversationRecordLike | null {
-  const storePath = join(legionHome, 'data', 'conversations.json');
+function readConversationRecord(appHome: string, conversationId: string): ConversationRecordLike | null {
+  const storePath = join(appHome, 'data', 'conversations.json');
   if (!existsSync(storePath)) return null;
 
   try {
@@ -153,8 +153,8 @@ function readConversationRecord(legionHome: string, conversationId: string): Con
   }
 }
 
-export async function buildToolRegistry(getConfig: () => LegionConfig, legionHome?: string): Promise<ToolDefinition[]> {
-  let config: LegionConfig;
+export async function buildToolRegistry(getConfig: () => AppConfig, appHome?: string): Promise<ToolDefinition[]> {
+  let config: AppConfig;
   try {
     config = getConfig();
   } catch {
@@ -196,41 +196,41 @@ export async function buildToolRegistry(getConfig: () => LegionConfig, legionHom
   }
 
   // Media generation tools
-  if (config?.imageGeneration?.enabled && legionHome) {
-    tools.push(createImageGenTool(getConfig, legionHome));
+  if (config?.imageGeneration?.enabled && appHome) {
+    tools.push(createImageGenTool(getConfig, appHome));
   }
-  if (config?.videoGeneration?.enabled && legionHome) {
-    tools.push(createVideoGenTool(getConfig, legionHome));
+  if (config?.videoGeneration?.enabled && appHome) {
+    tools.push(createVideoGenTool(getConfig, appHome));
   }
 
   // Self-management tools (always available)
-  if (legionHome) {
-    tools.push(createMcpManageTool(legionHome));
-    tools.push(createMemorySettingsTool(legionHome));
-    tools.push(createCompactionSettingsTool(legionHome));
-    tools.push(createToolSettingsTool(legionHome));
-    tools.push(createAdvancedSettingsTool(legionHome));
-    tools.push(createSystemPromptTool(legionHome));
-    tools.push(createAudioSettingsTool(legionHome));
-    tools.push(createRealtimeSettingsTool(legionHome));
-    tools.push(createModelSwitchTool(legionHome));
+  if (appHome) {
+    tools.push(createMcpManageTool(appHome));
+    tools.push(createMemorySettingsTool(appHome));
+    tools.push(createCompactionSettingsTool(appHome));
+    tools.push(createToolSettingsTool(appHome));
+    tools.push(createAdvancedSettingsTool(appHome));
+    tools.push(createSystemPromptTool(appHome));
+    tools.push(createAudioSettingsTool(appHome));
+    tools.push(createRealtimeSettingsTool(appHome));
+    tools.push(createModelSwitchTool(appHome));
   }
 
   // Sub-agent tool
-  if (config?.tools?.subAgents?.enabled !== false && legionHome) {
-    tools.push(createSubAgentTool(getConfig, legionHome, 0, tools));
+  if (config?.tools?.subAgents?.enabled !== false && appHome) {
+    tools.push(createSubAgentTool(getConfig, appHome, 0, tools));
   }
 
   // Skill management tool (always available)
-  if (legionHome) {
-    tools.push(createSkillManageTool(legionHome));
+  if (appHome) {
+    tools.push(createSkillManageTool(appHome));
   }
 
   const cuSurface = config.computerUse?.toolSurface ?? 'both';
   const cuEnabledForChat = config.computerUse?.enabled !== false && (cuSurface === 'both' || cuSurface === 'only-chat');
 
-  if (legionHome && cuEnabledForChat) {
-    const manager = getComputerUseManager(legionHome, getConfig);
+  if (appHome && cuEnabledForChat) {
+    const manager = getComputerUseManager(appHome, getConfig);
     tools.push({
       name: 'computer_use_session',
       description: 'Start a long-lived computer-use session that can control a browser or local desktop with live viewport updates and approval handling.',
@@ -259,7 +259,7 @@ export async function buildToolRegistry(getConfig: () => LegionConfig, legionHom
         }
         const contextSummary = payload.conversationContext === 'none'
           ? undefined
-          : buildConversationContextSummary(readConversationRecord(legionHome, conversationId));
+          : buildConversationContextSummary(readConversationRecord(appHome, conversationId));
         const session = await manager.startSession(payload.goal, {
           conversationId,
           target: payload.target,
@@ -496,8 +496,8 @@ export async function buildToolRegistry(getConfig: () => LegionConfig, legionHom
   }
 
   // Skill tools
-  if (legionHome) {
-    const skillsDir = config.skills?.directory || (legionHome + '/skills');
+  if (appHome) {
+    const skillsDir = config.skills?.directory || (appHome + '/skills');
     const enabledSkills = config.skills?.enabled ?? [];
     const skillTools = loadSkillsAsTools(skillsDir, enabledSkills, getConfig, tools);
     tools.push(...skillTools);

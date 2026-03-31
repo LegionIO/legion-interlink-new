@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback, type FC } from 'react';
 import { PlusIcon, SearchIcon, Trash2Icon, MessageSquareIcon, LoaderIcon, XIcon, PanelTopOpenIcon, SlidersHorizontalIcon, MonitorIcon, PinIcon } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import { EditableInput } from '@/components/EditableInput';
 import { useComputerUse } from '@/providers/ComputerUseProvider';
 import type { ConversationRecord } from '@/providers/RuntimeProvider';
@@ -132,7 +132,7 @@ export const ConversationList: FC<ConversationListProps> = ({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => {
-    try { return new Set(JSON.parse(localStorage.getItem('legion:pinned-conversations') || '[]')); } catch { return new Set(); }
+    try { return new Set(JSON.parse(localStorage.getItem(__BRAND_APP_SLUG + ':pinned-conversations') || '[]')); } catch { return new Set(); }
   });
   const { sessionsByConversation } = useComputerUse();
 
@@ -140,7 +140,7 @@ export const ConversationList: FC<ConversationListProps> = ({
     setPinnedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
-      localStorage.setItem('legion:pinned-conversations', JSON.stringify([...next]));
+      localStorage.setItem(__BRAND_APP_SLUG + ':pinned-conversations', JSON.stringify([...next]));
       return next;
     });
   }, []);
@@ -161,13 +161,13 @@ export const ConversationList: FC<ConversationListProps> = ({
     const sessions = sessionsByConversation.get(activeConversationId);
     const hasUnseen = sessions?.some((s) => s.status === 'completed' && !s.completionSeen);
     if (hasUnseen) {
-      void legion.computerUse.markSessionsSeen(activeConversationId);
+      void app.computerUse.markSessionsSeen(activeConversationId);
     }
   }, [activeConversationId, activeThreadMode, sessionsByConversation]);
 
   const loadConversations = async () => {
     try {
-      const list = await legion.conversations.list() as ConversationSummary[];
+      const list = await app.conversations.list() as ConversationSummary[];
 
       // Detect conversations that were removed since last load (auto-cleanup)
       // and animate them out before removing from state
@@ -225,7 +225,7 @@ export const ConversationList: FC<ConversationListProps> = ({
     setDeletingId(id);
 
     try {
-      await legion.conversations.delete(id);
+      await app.conversations.delete(id);
 
       if (shouldCreateReplacementThread) {
         await onNewConversation();
@@ -241,7 +241,7 @@ export const ConversationList: FC<ConversationListProps> = ({
     const idsToDelete = filteredConversations.map((c) => c.id);
 
     for (const id of idsToDelete) {
-      await legion.conversations.delete(id);
+      await app.conversations.delete(id);
     }
 
     if (activeConversationId && idsToDelete.includes(activeConversationId)) {
@@ -252,9 +252,9 @@ export const ConversationList: FC<ConversationListProps> = ({
   };
 
   const handleClearUnread = async (id: string) => {
-    const conv = await legion.conversations.get(id) as ConversationRecord | null;
+    const conv = await app.conversations.get(id) as ConversationRecord | null;
     if (conv?.hasUnread) {
-      await legion.conversations.put({ ...conv, hasUnread: false });
+      await app.conversations.put({ ...conv, hasUnread: false });
     }
     onSwitchConversation(id);
   };
@@ -345,10 +345,10 @@ export const ConversationList: FC<ConversationListProps> = ({
                     onKeyDown={(e) => e.key === 'Enter' && handleClearUnread(conv.id)}
                     className={`
                       flex w-full items-start gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition-all group cursor-pointer relative
-                      ${isActive ? 'shadow-[inset_0_0_0_1px_var(--legion-active-item-ring)]' : 'hover:bg-sidebar-accent/65'}
+                      ${isActive ? 'shadow-[inset_0_0_0_1px_var(--app-active-item-ring)]' : 'hover:bg-sidebar-accent/65'}
                       ${hasUnread && !isActive ? 'bg-sidebar-accent/45' : ''}
                     `}
-                    style={isActive ? { backgroundColor: 'var(--legion-active-item)' } : undefined}
+                    style={isActive ? { backgroundColor: 'var(--app-active-item)' } : undefined}
                   >
                     <MessageSquareIcon className={`mt-0.5 h-4 w-4 shrink-0 ${hasUnread ? 'text-primary' : 'text-muted-foreground'}`} />
                     <div className="flex-1 min-w-0">

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, type FC } from 'react';
 import { Loader2Icon, GitPullRequestIcon, CheckCircle2Icon, XCircleIcon, CircleDotIcon, MessageSquareIcon, RefreshCwIcon } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 interface PullRequest {
   number: number;
@@ -36,7 +36,7 @@ export const PullRequestsTab: FC<Props> = ({ repoFilter }) => {
     setLoading(true);
     const filters: Record<string, string> = { state: 'open', limit: '50' };
     if (repoFilter) filters.repo = repoFilter;
-    const res = await legion.daemon.githubPulls(filters);
+    const res = await app.daemon.githubPulls(filters);
     if (res.ok && res.data) {
       const data = Array.isArray(res.data) ? res.data : (res.data as { pulls?: PullRequest[] }).pulls || [];
       setPrs(data as PullRequest[]);

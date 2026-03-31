@@ -55,7 +55,7 @@ export function openComputerSetupWindow(conversationId?: string | null): Browser
     return existing;
   }
 
-  const win = createOperatorBrowserWindow('Interlink Computer Setup');
+  const win = createOperatorBrowserWindow(__BRAND_PRODUCT_NAME + ' Computer Setup');
   loadOperatorRoute(win, {
     operator: '1',
     setup: '1',
@@ -86,12 +86,12 @@ export function openOperatorWindow(
     ?? (setupKey !== DEFAULT_SETUP_KEY ? setupWindows.get(DEFAULT_SETUP_KEY) : undefined);
   const win = setupWindow && !setupWindow.isDestroyed()
     ? setupWindow
-    : createOperatorBrowserWindow('Interlink Operator');
+    : createOperatorBrowserWindow(__BRAND_PRODUCT_NAME + ' Operator');
 
   if (setupWindow && !setupWindow.isDestroyed()) {
     setupWindows.delete(setupKey);
     setupWindows.delete(DEFAULT_SETUP_KEY);
-    win.setTitle('Interlink Operator');
+    win.setTitle(__BRAND_PRODUCT_NAME + ' Operator');
   }
 
   loadOperatorRoute(win, { operator: '1', sessionId });

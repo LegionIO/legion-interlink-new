@@ -8,7 +8,7 @@ import {
   CheckCircle2Icon,
 } from 'lucide-react';
 import { settingsSelectClass, type SettingsProps } from './shared';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 type VerifyState = 'idle' | 'verifying' | 'ok' | 'fail';
@@ -46,7 +46,7 @@ export const DaemonAudit: FC<SettingsProps> = () => {
     setLoadError('');
     const filters: Record<string, string> | undefined = eventTypeFilter ? { event_type: eventTypeFilter } : undefined;
     try {
-      const result = await legion.daemon.audit(filters);
+      const result = await app.daemon.audit(filters);
       if (result.ok && Array.isArray(result.data)) {
         setEntries(result.data as AuditEntry[]);
         setLoadState('loaded');
@@ -68,7 +68,7 @@ export const DaemonAudit: FC<SettingsProps> = () => {
     setVerifyState('verifying');
     setVerifyMessage('');
     try {
-      const result = await legion.daemon.auditVerify();
+      const result = await app.daemon.auditVerify();
       if (result.ok) {
         setVerifyState('ok');
         setVerifyMessage(typeof result.data === 'string' ? result.data : 'Chain integrity verified.');

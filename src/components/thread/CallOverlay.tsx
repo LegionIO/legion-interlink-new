@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, type FC } from 'react';
 import { useRealtime } from '@/providers/RealtimeProvider';
 import { useConfig } from '@/providers/ConfigProvider';
 import { DeviceRow } from './DeviceRow';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import { listOutputDevices } from '@/lib/audio/realtime-playback';
 import { PhoneOffIcon, MicIcon, Volume2Icon, ChevronUpIcon } from 'lucide-react';
 
@@ -163,7 +163,7 @@ export const CallOverlay: FC = () => {
 
   // Load devices on mount
   useEffect(() => {
-    legion.mic?.listDevices?.().then(setInputDevices).catch(() => setInputDevices([]));
+    app.mic?.listDevices?.().then(setInputDevices).catch(() => setInputDevices([]));
     listOutputDevices().then(setOutputDevices).catch(() => setOutputDevices([]));
   }, []);
 
