@@ -7,7 +7,7 @@ import {
   CheckCircleIcon,
   XCircleIcon,
 } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 type IngestStatus = 'pending' | 'ingesting' | 'done' | 'error';
 
@@ -37,7 +37,7 @@ export function IngestTab() {
     for (const item of items) {
       updateItem(item.id, { status: 'ingesting' });
       try {
-        const result = await legion.knowledge.ingestFile(item.path);
+        const result = await app.knowledge.ingestFile(item.path);
         if (result.ok) {
           updateItem(item.id, { status: 'done' });
         } else {
@@ -85,7 +85,7 @@ export function IngestTab() {
   }, [enqueuePaths]);
 
   const handlePickFiles = useCallback(async () => {
-    const raw = await legion.dialog.openFile({
+    const raw = await app.dialog.openFile({
       filters: [
         { name: 'Documents', extensions: ['pdf', 'docx', 'xlsx', 'pptx', 'html', 'htm', 'md', 'csv', 'json', 'txt'] },
         { name: 'All Files', extensions: ['*'] },
@@ -99,7 +99,7 @@ export function IngestTab() {
   }, [enqueuePaths]);
 
   const handlePickDirectory = useCallback(async () => {
-    const result = await legion.dialog.openDirectoryFiles();
+    const result = await app.dialog.openDirectoryFiles();
     if (result.canceled || result.filePaths.length === 0) return;
     enqueuePaths(result.filePaths);
   }, [enqueuePaths]);

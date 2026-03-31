@@ -1,4 +1,4 @@
-export const LEGION_BRIDGE_SCRIPT = String.raw`# frozen_string_literal: true
+export const DAEMON_BRIDGE_SCRIPT = String.raw`# frozen_string_literal: true
 
 require 'json'
 require 'time'

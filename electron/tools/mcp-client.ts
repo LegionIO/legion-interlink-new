@@ -7,9 +7,9 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { z as Z } from 'zod';
 import type { ToolDefinition } from './types.js';
 import { buildScopedToolName } from './naming.js';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 
-type McpServerConfig = LegionConfig['mcpServers'][number];
+type McpServerConfig = AppConfig['mcpServers'][number];
 
 type McpConnection = {
   name: string;
@@ -95,7 +95,7 @@ export async function connectMcpServer(server: McpServerConfig): Promise<McpConn
 
   try {
     const transport = await createTransport(server);
-    const client = new Client({ name: 'legion', version: '1.0.0' });
+    const client = new Client({ name: __BRAND_MCP_CLIENT_NAME, version: '1.0.0' });
 
     await client.connect(transport);
 
@@ -145,7 +145,7 @@ export async function connectMcpServer(server: McpServerConfig): Promise<McpConn
   }
 }
 
-export async function connectAllMcpServers(config: LegionConfig): Promise<ToolDefinition[]> {
+export async function connectAllMcpServers(config: AppConfig): Promise<ToolDefinition[]> {
   const allTools: ToolDefinition[] = [];
 
   for (const server of config.mcpServers) {

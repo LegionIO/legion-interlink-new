@@ -9,7 +9,7 @@ import type {
   ComputerSession,
 } from '../../../shared/computer-use.js';
 import { makeComputerUseId, nowIso } from '../../../shared/computer-use.js';
-import type { LegionConfig } from '../../config/schema.js';
+import type { AppConfig } from '../../config/schema.js';
 import {
   buildDisplayLayout,
   buildSwiftFallbackEnv,
@@ -258,9 +258,9 @@ function downscaleFrame(
 
 export class LocalMacosHarness implements ComputerHarness {
   readonly target = 'local-macos' as const;
-  private readonly getConfig: () => LegionConfig;
+  private readonly getConfig: () => AppConfig;
 
-  constructor(getConfig: () => LegionConfig) {
+  constructor(getConfig: () => AppConfig) {
     this.getConfig = getConfig;
   }
 

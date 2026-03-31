@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BookOpenIcon, SearchIcon, TableIcon, UploadIcon, FolderSyncIcon, HeartPulseIcon, MagnetIcon, XIcon, RefreshCwIcon, AlertCircleIcon, Loader2Icon } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import { QueryTab } from './QueryTab';
 import { BrowseTab } from './BrowseTab';
 import { IngestTab } from './IngestTab';
@@ -30,7 +30,7 @@ export function KnowledgePanel({ onClose }: Props) {
   const [statusText, setStatusText] = useState('');
 
   const checkDaemon = useCallback(async () => {
-    const result = await legion.knowledge.status();
+    const result = await app.knowledge.status();
     setDaemonOk(result.ok);
     if (result.ok && result.data) {
       const d = result.data as { available?: boolean; data_connected?: boolean };
@@ -93,7 +93,7 @@ export function KnowledgePanel({ onClose }: Props) {
             <AlertCircleIcon className="h-10 w-10 text-muted-foreground/50" />
             <div>
               <p className="font-medium text-foreground">Daemon not connected</p>
-              <p className="mt-1 text-sm text-muted-foreground">Knowledge features require the Legion daemon to be running.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Knowledge features require the {__BRAND_PRODUCT_NAME} daemon to be running.</p>
             </div>
             <button type="button" onClick={checkDaemon} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">
               Retry

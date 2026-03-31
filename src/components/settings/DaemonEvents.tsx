@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, type FC } from 'react';
 import { RefreshCwIcon, LoaderIcon, WifiOffIcon, RadioIcon, CircleStopIcon } from 'lucide-react';
 import { type SettingsProps } from './shared';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
@@ -28,7 +28,7 @@ export const DaemonEvents: FC<SettingsProps> = () => {
       setLoadError('');
     }
     try {
-      const result = await legion.daemon.eventsRecent(50);
+      const result = await app.daemon.eventsRecent(50);
       if (result.ok && Array.isArray(result.data)) {
         const incoming = result.data as DaemonEvent[];
         if (append) {
@@ -87,7 +87,7 @@ export const DaemonEvents: FC<SettingsProps> = () => {
   const toggleLive = async () => {
     if (!live) {
       try {
-        await legion.daemon.eventsSubscribe();
+        await app.daemon.eventsSubscribe();
       } catch {
         // subscribe is best-effort
       }
@@ -95,7 +95,7 @@ export const DaemonEvents: FC<SettingsProps> = () => {
     } else {
       setLive(false);
       try {
-        await legion.daemon.eventsUnsubscribe();
+        await app.daemon.eventsUnsubscribe();
       } catch {
         // unsubscribe is best-effort
       }

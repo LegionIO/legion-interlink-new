@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FC } from 'react';
 import { CheckCircle2Icon, ChevronDownIcon, ChevronRightIcon, ExternalLinkIcon, LoaderIcon, PauseIcon, PlayIcon, ShieldAlertIcon, SquareIcon } from 'lucide-react';
 import { useComputerUse } from '@/providers/ComputerUseProvider';
 import { useConfig } from '@/providers/ConfigProvider';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import { ComputerStepLog } from './ComputerStepLog';
 import { ModelSelector } from './ModelSelector';
 import { ProfileSelector } from './ProfileSelector';
@@ -89,7 +89,7 @@ export const ComputerSessionPanel: FC<PanelProps> = ({ session }) => {
       setProfilePrimaryModelKey(null);
       return;
     }
-    legion.profileCatalog()
+    app.profileCatalog()
       .then((catalog) => {
         const profile = (catalog as { profiles: Array<{ key: string; primaryModelKey: string }> }).profiles
           .find((p) => p.key === profileKey);

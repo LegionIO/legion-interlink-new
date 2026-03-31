@@ -7,7 +7,7 @@ import {
   Trash2Icon,
 } from 'lucide-react';
 import { type SettingsProps } from './shared';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
@@ -35,7 +35,7 @@ export const DaemonWebhooks: FC<SettingsProps> = () => {
     setLoadState('loading');
     setLoadError('');
     try {
-      const result = await legion.daemon.webhooks();
+      const result = await app.daemon.webhooks();
       if (result.ok) {
         setWebhooks((result.data as Webhook[]) ?? []);
         setLoadState('loaded');
@@ -59,7 +59,7 @@ export const DaemonWebhooks: FC<SettingsProps> = () => {
     setSubmitError('');
     try {
       const eventTypes = formEvents.split(',').map((s) => s.trim()).filter(Boolean);
-      const result = await legion.daemon.webhookCreate({
+      const result = await app.daemon.webhookCreate({
         url: formUrl.trim(),
         secret: formSecret.trim() || undefined,
         event_types: eventTypes,
@@ -83,7 +83,7 @@ export const DaemonWebhooks: FC<SettingsProps> = () => {
 
   const handleDelete = useCallback(async (id: string) => {
     try {
-      const result = await legion.daemon.webhookDelete(id);
+      const result = await app.daemon.webhookDelete(id);
       if (result.ok) {
         setWebhooks((prev) => prev.filter((w) => w.id !== id));
       }

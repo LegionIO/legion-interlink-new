@@ -7,7 +7,7 @@ import { join } from 'path';
 import type { IpcMain } from 'electron';
 import { RealtimeSession } from '../realtime/realtime-session.js';
 import { buildRealtimeMemoryContext } from '../realtime/realtime-context.js';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import type { ToolDefinition } from '../tools/types.js';
 
 let activeSession: RealtimeSession | null = null;
@@ -18,11 +18,11 @@ export function updateActiveRealtimeSessionTools(tools: ToolDefinition[]): void 
 
 export function registerRealtimeHandlers(
   ipcMain: IpcMain,
-  getConfig: () => LegionConfig,
+  getConfig: () => AppConfig,
   getTools: () => ToolDefinition[],
-  legionHome: string,
+  appHome: string,
 ): void {
-  const dbPath = join(legionHome, 'data', 'memory.db');
+  const dbPath = join(appHome, 'data', 'memory.db');
 
   ipcMain.handle('realtime:start-session', async (_event, conversationId: string) => {
     try {

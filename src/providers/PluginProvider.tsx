@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import { registerPluginComponents, type PluginComponent } from '@/components/plugins/PluginComponentRegistry';
 
 type PluginBannerDescriptor = {
@@ -143,7 +143,7 @@ export function PluginProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Fetch initial UI state
-    legion.plugins.getUIState()
+    app.plugins.getUIState()
       .then((state) => {
         const typed = state as PluginUIState;
         setUIState(typed);
@@ -155,7 +155,7 @@ export function PluginProvider({ children }: { children: ReactNode }) {
       .catch((err) => console.error('[PluginProvider] Failed to get UI state:', err));
 
     // Subscribe to changes
-    const unsubUI = legion.plugins.onUIStateChanged((state) => {
+    const unsubUI = app.plugins.onUIStateChanged((state) => {
       const typed = state as PluginUIState;
       setUIState(typed);
       // Load any new renderer scripts
@@ -164,7 +164,7 @@ export function PluginProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    const unsubCallback = legion.plugins.onModalCallback((data) => {
+    const unsubCallback = app.plugins.onModalCallback((data) => {
       setModalCallbacks((prev) => [...prev, data as ModalCallbackData]);
     });
 
@@ -176,30 +176,30 @@ export function PluginProvider({ children }: { children: ReactNode }) {
 
   const sendModalAction = useCallback(
     (pluginName: string, modalId: string, action: string, data?: unknown) =>
-      legion.plugins.modalAction(pluginName, modalId, action, data),
+      app.plugins.modalAction(pluginName, modalId, action, data),
     [],
   );
 
   const sendBannerAction = useCallback(
     (pluginName: string, bannerId: string, action: string, data?: unknown) =>
-      legion.plugins.bannerAction(pluginName, bannerId, action, data),
+      app.plugins.bannerAction(pluginName, bannerId, action, data),
     [],
   );
 
   const sendAction = useCallback(
     (pluginName: string, targetId: string, action: string, data?: unknown) =>
-      legion.plugins.action(pluginName, targetId, action, data),
+      app.plugins.action(pluginName, targetId, action, data),
     [],
   );
 
   const getPluginConfig = useCallback(
-    (pluginName: string) => legion.plugins.getConfig(pluginName),
+    (pluginName: string) => app.plugins.getConfig(pluginName),
     [],
   );
 
   const setPluginConfig = useCallback(
     async (pluginName: string, path: string, value: unknown) => {
-      await legion.plugins.setConfig(pluginName, path, value);
+      await app.plugins.setConfig(pluginName, path, value);
     },
     [],
   );

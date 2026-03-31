@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, type FC } from 'react';
 import { EyeIcon, EyeOffIcon, WifiIcon, WifiOffIcon, LoaderIcon } from 'lucide-react';
 import type { SettingsProps } from './shared';
 import { Toggle, SliderField, NumberField, settingsSelectClass } from './shared';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 type RealtimeProvider = 'openai' | 'azure' | 'custom';
 
@@ -95,7 +95,7 @@ const TestConnectionButton: FC = () => {
     try {
       // Use a temporary conversation ID for the test
       const testConvId = `test-${Date.now()}`;
-      const result = await legion.realtime.startSession(testConvId);
+      const result = await app.realtime.startSession(testConvId);
 
       if (result.error) {
         setState('error');
@@ -103,7 +103,7 @@ const TestConnectionButton: FC = () => {
       } else {
         setState('success');
         // Immediately end the test session
-        await legion.realtime.endSession();
+        await app.realtime.endSession();
       }
     } catch (err) {
       setState('error');

@@ -1,14 +1,14 @@
 import type { IpcMain } from 'electron';
 import { join } from 'path';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import { getSharedMemory, getResourceId, testEmbeddingConnection } from '../agent/memory.js';
 
 export function registerMemoryHandlers(
   ipcMain: IpcMain,
-  legionHome: string,
-  getConfig: () => LegionConfig,
+  appHome: string,
+  getConfig: () => AppConfig,
 ): void {
-  const dbPath = join(legionHome, 'data', 'memory.db');
+  const dbPath = join(appHome, 'data', 'memory.db');
 
   ipcMain.handle('memory:clear', async (_event, options: {
     working?: boolean;

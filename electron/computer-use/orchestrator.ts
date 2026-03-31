@@ -5,7 +5,7 @@ import type {
   ComputerUseEvent,
 } from '../../shared/computer-use.js';
 import { makeComputerUseId, nowIso } from '../../shared/computer-use.js';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import { resolveModelCatalog, resolveModelForThread, type ModelCatalogEntry } from '../agent/model-catalog.js';
 import { anthropicPlanSession } from './provider-adapters/anthropic.js';
 import { geminiPlanSession } from './provider-adapters/gemini.js';
@@ -20,12 +20,12 @@ type SessionMutator = (sessionId: string, update: (session: ComputerSession) => 
 type SessionReader = (sessionId: string) => ComputerSession | null;
 type EventSink = (event: ComputerUseEvent) => void;
 
-function getHarness(config: LegionConfig, session: ComputerSession, getConfig: () => LegionConfig): ComputerHarness {
+function getHarness(config: AppConfig, session: ComputerSession, getConfig: () => AppConfig): ComputerHarness {
   if (session.target === 'local-macos') return new LocalMacosHarness(getConfig);
   return new IsolatedBrowserHarness();
 }
 
-function getEntryForRole(config: LegionConfig, session: ComputerSession, role: 'planner' | 'driver' | 'verifier' | 'recovery'): ModelCatalogEntry | null {
+function getEntryForRole(config: AppConfig, session: ComputerSession, role: 'planner' | 'driver' | 'verifier' | 'recovery'): ModelCatalogEntry | null {
   const catalog = resolveModelCatalog(config);
   const computerModels = config.computerUse.models;
   const overrideKey = role === 'planner'
@@ -41,7 +41,7 @@ function getEntryForRole(config: LegionConfig, session: ComputerSession, role: '
   return resolveModelForThread(config, session.selectedModelKey ?? null);
 }
 
-function getModelChainForRole(config: LegionConfig, session: ComputerSession, role: 'planner' | 'driver' | 'verifier' | 'recovery'): ModelChainEntry[] {
+function getModelChainForRole(config: AppConfig, session: ComputerSession, role: 'planner' | 'driver' | 'verifier' | 'recovery'): ModelChainEntry[] {
   const primaryEntry = getEntryForRole(config, session, role)
     ?? getEntryForRole(config, session, 'driver');
   if (!primaryEntry) return [];
@@ -76,7 +76,7 @@ function getModelChainForRole(config: LegionConfig, session: ComputerSession, ro
   return [primary, ...fallbacks];
 }
 
-function getMaxRetries(config: LegionConfig, session: ComputerSession): number {
+function getMaxRetries(config: AppConfig, session: ComputerSession): number {
   const profileKey = session.selectedProfileKey ?? config.defaultProfileKey ?? null;
   const profile = profileKey
     ? (config.profiles ?? []).find((p) => p.key === profileKey)
@@ -84,7 +84,7 @@ function getMaxRetries(config: LegionConfig, session: ComputerSession): number {
   return profile?.maxRetries ?? config.advanced.maxRetries;
 }
 
-function approvalRequired(mode: ComputerUseApprovalMode, action: ComputerActionProposal, config: LegionConfig): boolean {
+function approvalRequired(mode: ComputerUseApprovalMode, action: ComputerActionProposal, config: AppConfig): boolean {
   if (mode === 'autonomous') return false;
   if (mode === 'goal') return action.risk === 'high';
   if (config.computerUse.safety.pauseOnTerminal && action.appName?.toLowerCase().includes('terminal')) return true;
@@ -169,7 +169,7 @@ export class ComputerUseOrchestrator {
   }
 
   constructor(
-    private readonly getConfig: () => LegionConfig,
+    private readonly getConfig: () => AppConfig,
     private readonly readSession: SessionReader,
     private readonly mutateSession: SessionMutator,
     private readonly emitEvent: EventSink,

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { BookOpenIcon, BrainCircuitIcon, PenLineIcon } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import { useConfig } from '@/providers/ConfigProvider';
 
 type Scope = 'all' | 'global' | 'local';
@@ -42,7 +42,7 @@ export function KnowledgeComposerPopover() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const result = await legion.knowledge.status();
+      const result = await app.knowledge.status();
       if (result.ok && result.data) {
         const d = result.data as { available?: boolean; data_connected?: boolean };
         setDaemonOk(d.available === true);

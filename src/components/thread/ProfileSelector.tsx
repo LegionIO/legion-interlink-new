@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FC } from 'react';
 import { CheckIcon, ChevronDownIcon, UserCircleIcon } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 type ProfileInfo = {
   key: string;
@@ -24,7 +24,7 @@ export const ProfileSelector: FC<{
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    legion.profileCatalog()
+    app.profileCatalog()
       .then((data) => setCatalog(data as ProfileCatalog))
       .catch(() => {});
   }, []);

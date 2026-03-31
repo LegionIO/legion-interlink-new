@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { readdir, stat } from 'fs/promises';
 import { join } from 'path';
 import type { ToolDefinition } from './types.js';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import { runCommandWithStreaming, DEFAULT_PROCESS_STREAMING_CONFIG, resolveProcessStreamingConfig } from './process-runner.js';
 import { runToolExecution, throwIfAborted } from './execution.js';
 
@@ -28,7 +28,7 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-export function createGrepTool(getConfig?: () => LegionConfig): ToolDefinition {
+export function createGrepTool(getConfig?: () => AppConfig): ToolDefinition {
   return {
     name: 'grep',
     description: 'Search file contents using regex pattern. Returns matching lines with context.',
@@ -111,7 +111,7 @@ export function createGrepTool(getConfig?: () => LegionConfig): ToolDefinition {
   };
 }
 
-export function createGlobTool(getConfig?: () => LegionConfig): ToolDefinition {
+export function createGlobTool(getConfig?: () => AppConfig): ToolDefinition {
   return {
     name: 'glob',
     description: 'Find files matching a glob pattern in a directory.',

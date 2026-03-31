@@ -4,7 +4,7 @@ import {
   AssistantRuntimeProvider,
   useExternalStoreRuntime,
 } from '@assistant-ui/react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import { useAttachments } from './AttachmentContext';
 import { useConfig } from './ConfigProvider';
 import { createUnifiedSpeechAdapter, createUnifiedDictationAdapter, type AudioProvider } from '@/lib/audio/speech-adapters';
@@ -586,11 +586,11 @@ async function persistConversation(
   updates: Partial<ConversationRecord> = {},
 ): Promise<void> {
   try {
-    const conv = await legion.conversations.get(conversationId) as ConversationRecord | null;
+    const conv = await app.conversations.get(conversationId) as ConversationRecord | null;
     if (!conv) return;
     const branch = getActiveBranch(tree, headId);
     const now = nowIso();
-    await legion.conversations.put({
+    await app.conversations.put({
       ...conv,
       messages: branch, // linear view for backward compat
       messageTree: tree,
@@ -621,7 +621,7 @@ const titleGenInFlight = new Set<string>();
 
 async function getTitleSettings(): Promise<TitleSettings> {
   try {
-    const config = await legion.config.get() as { titleGeneration?: TitleSettings } | null;
+    const config = await app.config.get() as { titleGeneration?: TitleSettings } | null;
     return config?.titleGeneration ?? { enabled: true, retitleIntervalMessages: 5, retitleEagerUntilMessage: 5 };
   } catch {
     return { enabled: true, retitleIntervalMessages: 5, retitleEagerUntilMessage: 5 };
@@ -633,7 +633,7 @@ async function maybeGenerateTitle(conversationId: string, messages: ThreadMessag
     const settings = await getTitleSettings();
     if (!settings.enabled) return;
 
-    const conv = await legion.conversations.get(conversationId) as ConversationRecord | null;
+    const conv = await app.conversations.get(conversationId) as ConversationRecord | null;
     if (!conv) return;
 
     const userMessageCount = messages.filter((m) => m.role === 'user').length;
@@ -651,17 +651,17 @@ async function maybeGenerateTitle(conversationId: string, messages: ThreadMessag
 
     try {
       // Mark as generating
-      await legion.conversations.put({ ...conv, titleStatus: 'generating' });
+      await app.conversations.put({ ...conv, titleStatus: 'generating' });
 
       // Stagger the title request slightly so Bedrock is less likely to reject
       // it when the main response request starts at the exact same moment.
       await new Promise((resolve) => setTimeout(resolve, 350));
 
-      const result = await legion.agent.generateTitle(messages, conv.selectedModelKey ?? undefined);
+      const result = await app.agent.generateTitle(messages, conv.selectedModelKey ?? undefined);
       if (result.title) {
-        const latest = await legion.conversations.get(conversationId) as ConversationRecord | null;
+        const latest = await app.conversations.get(conversationId) as ConversationRecord | null;
         if (latest) {
-          await legion.conversations.put({
+          await app.conversations.put({
             ...latest,
             title: result.title,
             fallbackTitle: result.title,
@@ -671,20 +671,20 @@ async function maybeGenerateTitle(conversationId: string, messages: ThreadMessag
         }
       } else {
         // Title gen returned nothing — keep the UI moving with a simple fallback.
-        const latest = await legion.conversations.get(conversationId) as ConversationRecord | null;
+        const latest = await app.conversations.get(conversationId) as ConversationRecord | null;
         if (latest && latest.titleStatus === 'generating') {
           const fallbackTitle = latest.fallbackTitle ?? deriveFallbackTitle(messages);
-          await legion.conversations.put({ ...latest, fallbackTitle, titleStatus: 'idle' });
+          await app.conversations.put({ ...latest, fallbackTitle, titleStatus: 'idle' });
         }
       }
     } finally {
       titleGenInFlight.delete(conversationId);
     }
   } catch {
-    const latest = await legion.conversations.get(conversationId) as ConversationRecord | null;
+    const latest = await app.conversations.get(conversationId) as ConversationRecord | null;
     if (latest && latest.titleStatus === 'generating') {
       const fallbackTitle = latest.fallbackTitle ?? deriveFallbackTitle(messages);
-      await legion.conversations.put({ ...latest, fallbackTitle, titleStatus: 'idle' });
+      await app.conversations.put({ ...latest, fallbackTitle, titleStatus: 'idle' });
     }
     titleGenInFlight.delete(conversationId);
   }
@@ -875,7 +875,7 @@ export function RuntimeProvider({
   }, [tree, headId, isRunning]);
 
   const loadConversationState = useCallback(async (id: string) => {
-    const conv = await legion.conversations.get(id) as ConversationRecord | null;
+    const conv = await app.conversations.get(id) as ConversationRecord | null;
     if (!conv) return false;
 
     const { tree: t, headId: h } = ensureTree(conv);
@@ -904,13 +904,13 @@ export function RuntimeProvider({
   useEffect(() => {
     (async () => {
       try {
-        const id = conversationId ?? await legion.conversations.getActiveId();
+        const id = conversationId ?? await app.conversations.getActiveId();
         if (id && await loadConversationState(id)) {
           return;
         }
         const newId = crypto.randomUUID();
         const now = nowIso();
-        await legion.conversations.put({
+        await app.conversations.put({
           id: newId, title: null, fallbackTitle: null, messages: [], messageTree: [], headId: null,
           conversationCompaction: null, lastContextUsage: null,
           createdAt: now, updatedAt: now, lastMessageAt: null,
@@ -919,7 +919,7 @@ export function RuntimeProvider({
           runStatus: 'idle', hasUnread: false, lastAssistantUpdateAt: null,
           selectedModelKey: null,
         } as ConversationRecord);
-        await legion.conversations.setActiveId(newId);
+        await app.conversations.setActiveId(newId);
         setActiveConversationId(newId);
         setTree([]);
         setHeadId(null);
@@ -946,7 +946,7 @@ export function RuntimeProvider({
 
   // Stream event listener — subscribes ONCE, reads mutable values via refs/globals
   useEffect(() => {
-    const unsubscribe = legion.agent.onStreamEvent((event: unknown) => {
+    const unsubscribe = app.agent.onStreamEvent((event: unknown) => {
       const e = event as {
         conversationId: string; type: string; text?: string;
         toolCallId?: string; toolName?: string; args?: unknown;
@@ -1327,7 +1327,7 @@ export function RuntimeProvider({
     void maybeGenerateTitle(convId, branch);
     console.info(`[UI:stream] Firing agent:stream conv=${convId} model=${selectedModelKey ?? 'default'} reasoning=${reasoningEffort ?? 'medium'} messageCount=${branch.length} roles=${branch.map((m) => m.role).join(',')}`);
     console.info('[UI:stream] Last message preview:', branch.length > 0 ? JSON.stringify(branch[branch.length - 1]).slice(0, 500) : '(empty)');
-    legion.agent.stream(convId, branch, selectedModelKey ?? undefined, reasoningEffort ?? 'medium', selectedProfileKey ?? undefined, fallbackEnabled ?? false);
+    app.agent.stream(convId, branch, selectedModelKey ?? undefined, reasoningEffort ?? 'medium', selectedProfileKey ?? undefined, fallbackEnabled ?? false);
   }, [tree, headId, selectedModelKey, reasoningEffort, selectedProfileKey, fallbackEnabled, consumeAttachments]);
 
   const onReload = useCallback(async (parentId: string | null) => {
@@ -1354,7 +1354,7 @@ export function RuntimeProvider({
     const branch = getActiveBranch(newTree, actualParent);
     persistConversation(convId, newTree, actualParent, { runStatus: 'running' });
     console.info(`[UI:stream:reload] Firing agent:stream conv=${convId} model=${selectedModelKey ?? 'default'} reasoning=${reasoningEffort ?? 'medium'} messageCount=${branch.length} roles=${branch.map((m) => m.role).join(',')}`);
-    legion.agent.stream(convId, branch, selectedModelKey ?? undefined, reasoningEffort ?? 'medium', selectedProfileKey ?? undefined, fallbackEnabled ?? false);
+    app.agent.stream(convId, branch, selectedModelKey ?? undefined, reasoningEffort ?? 'medium', selectedProfileKey ?? undefined, fallbackEnabled ?? false);
   }, [tree, headId, selectedModelKey, reasoningEffort, selectedProfileKey, fallbackEnabled]);
 
   const onCancel = useCallback(async () => {
@@ -1387,7 +1387,7 @@ export function RuntimeProvider({
       setTree(newTree);
       setHeadId(newHead);
       setIsRunning(false);
-      try { await legion.agent.cancelStream(convId); } catch { /* ignore */ }
+      try { await app.agent.cancelStream(convId); } catch { /* ignore */ }
       persistConversation(convId, newTree, newHead, { runStatus: 'idle' });
       return;
     }
@@ -1397,7 +1397,7 @@ export function RuntimeProvider({
     setHeadId(latestHead);
     setIsRunning(false);
     try {
-      await legion.agent.cancelStream(convId);
+      await app.agent.cancelStream(convId);
     } catch (err) {
       console.error('[Runtime] Cancel failed:', err);
     }
@@ -1458,12 +1458,12 @@ export function RuntimeProvider({
       }
       bumpSubAgentVersion();
     }
-    try { await legion.agent.sendSubAgentMessage(subAgentConversationId, text); } catch (err) { console.error('[Runtime] Sub-agent message failed:', err); }
+    try { await app.agent.sendSubAgentMessage(subAgentConversationId, text); } catch (err) { console.error('[Runtime] Sub-agent message failed:', err); }
   }, [bumpSubAgentVersion]);
 
   const stopSubAgentAction = useCallback(async (subAgentConversationId: string) => {
     try {
-      await legion.agent.stopSubAgent(subAgentConversationId);
+      await app.agent.stopSubAgent(subAgentConversationId);
       const existing = globalSubAgentThreads.get(subAgentConversationId);
       if (existing) {
         globalSubAgentThreads.set(subAgentConversationId, { ...existing, status: 'stopped' });

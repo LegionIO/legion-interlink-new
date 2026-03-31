@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, type FC } from 'react';
 import { Trash2Icon, AlertTriangleIcon, LoaderIcon, CheckCircle2Icon, EyeIcon, EyeOffIcon, WifiIcon, WifiOffIcon } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import { Toggle, NumberField, TextField, settingsSelectClass, type SettingsProps } from './shared';
 
 type EmbeddingProviderType = 'openai' | 'azure' | 'custom';
@@ -66,7 +66,7 @@ const TestEmbeddingButton: FC = () => {
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
 
     try {
-      const result = await legion.memory.testEmbedding();
+      const result = await app.memory.testEmbedding();
 
       if (result.error) {
         setState('error');
@@ -337,7 +337,7 @@ const ClearMemorySection: FC = () => {
     setStatus('clearing');
     setResult(null);
     try {
-      const res = await legion.memory.clear(
+      const res = await app.memory.clear(
         clearAll
           ? { all: true }
           : { working, observational, semantic },

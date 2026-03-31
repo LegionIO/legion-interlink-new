@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, type FC } from 'react';
 import { BrainIcon, RefreshCwIcon, Loader2Icon, AlertCircleIcon, PauseIcon, MoonIcon, EyeIcon, ZapIcon, ActivityIcon } from 'lucide-react';
 import type { SettingsProps } from './shared';
 import { GaiaPhaseWheel } from './GaiaPhaseWheel';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 const POLL_INTERVAL = 3000;
 
@@ -59,7 +59,7 @@ export const DaemonGaia: FC<SettingsProps> = () => {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchStatus = useCallback(async () => {
-    const res = await legion.daemon.gaiaStatus();
+    const res = await app.daemon.gaiaStatus();
     if (res.ok && res.data) {
       setStatus(res.data as GaiaStatus);
       setLastFetched(new Date());
@@ -71,7 +71,7 @@ export const DaemonGaia: FC<SettingsProps> = () => {
   }, []);
 
   const fetchEvents = useCallback(async () => {
-    const res = await legion.daemon.gaiaEvents({ limit: '50' });
+    const res = await app.daemon.gaiaEvents({ limit: '50' });
     if (res.ok && res.data) {
       const newEvents = Array.isArray(res.data) ? res.data as TickEvent[] : (res.data as { events?: TickEvent[] }).events || [];
       setEvents((prev) => {

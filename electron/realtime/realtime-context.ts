@@ -9,7 +9,7 @@
  * model's 32k context window isn't exhausted by memory alone.
  */
 
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import { getSharedMemory, getResourceId } from '../agent/memory.js';
 
 /* ── Token estimation ── */
@@ -91,7 +91,7 @@ type SemanticRecallThreadConfig = {
 
 export async function buildRealtimeMemoryContext(
   conversationId: string,
-  config: LegionConfig,
+  config: AppConfig,
   dbPath: string,
 ): Promise<string> {
   const memoryConfig = config.realtime.memoryContext;

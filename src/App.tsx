@@ -30,7 +30,7 @@ import { OverlayShell } from '@/components/overlay/OverlayShell';
 import { BellIcon, BookOpenIcon, BotIcon, CpuIcon, DownloadIcon, GaugeIcon, GitBranchIcon, PuzzleIcon, SettingsIcon } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import type { ReasoningEffort } from '@/components/thread/ReasoningEffortSelector';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import type { ConversationRecord } from '@/providers/RuntimeProvider';
 import { shouldShowComputerSetup, type ComputerSession, type ComputerUseSurface } from '../shared/computer-use';
 
@@ -117,7 +117,7 @@ function useOperatorConversationId(preferredConversationId?: string | null): str
     }
 
     let cancelled = false;
-    legion.conversations.getActiveId()
+    app.conversations.getActiveId()
       .then((id) => {
         if (!cancelled) setConversationId(id);
       })
@@ -125,7 +125,7 @@ function useOperatorConversationId(preferredConversationId?: string | null): str
         if (!cancelled) setConversationId(null);
       });
 
-    const unsubscribe = legion.conversations.onChanged((store) => {
+    const unsubscribe = app.conversations.onChanged((store) => {
       if (cancelled) return;
       const payload = store as { activeConversationId?: string | null } | null;
       setConversationId(payload?.activeConversationId ?? null);
@@ -161,7 +161,7 @@ const ComputerSetupShell: FC<{ preferredConversationId?: string | null }> = ({ p
     }
 
     let cancelled = false;
-    legion.conversations.get(conversationId)
+    app.conversations.get(conversationId)
       .then((conversation) => {
         if (cancelled) return;
         const record = conversation as {
@@ -190,10 +190,10 @@ const ComputerSetupShell: FC<{ preferredConversationId?: string | null }> = ({ p
 
   useEffect(() => {
     if (!conversationId) return;
-    legion.conversations.get(conversationId).then((conv: unknown) => {
+    app.conversations.get(conversationId).then((conv: unknown) => {
       const record = conv as ConversationRecord | null;
       if (!record) return;
-      legion.conversations.put({
+      app.conversations.put({
         ...record,
         selectedModelKey,
         selectedProfileKey,
@@ -328,7 +328,7 @@ async function cleanupEmptyConversations(
   sessionsByConversation?: Map<string, ComputerSession[]>,
 ): Promise<string[]> {
   try {
-    const list = existingList ?? (await legion.conversations.list()) as ConversationRecord[];
+    const list = existingList ?? (await app.conversations.list()) as ConversationRecord[];
     const disposableIds = list
       .filter((conv) => conv.id !== activeId && isDisposableNewConversation(conv, Boolean(sessionsByConversation?.has(conv.id))))
       .map((conv) => conv.id);
@@ -336,7 +336,7 @@ async function cleanupEmptyConversations(
     if (disposableIds.length === 0) return [];
 
     console.info(`[Conversations] Cleaning up ${disposableIds.length} empty conversations`);
-    await Promise.all(disposableIds.map((id) => legion.conversations.delete(id)));
+    await Promise.all(disposableIds.map((id) => app.conversations.delete(id)));
     return disposableIds;
   } catch (err) {
     console.warn('[Conversations] Cleanup failed:', err);
@@ -394,8 +394,8 @@ function AppShell() {
     const loadActiveConversation = async () => {
       try {
         const [id, list] = await Promise.all([
-          legion.conversations.getActiveId(),
-          legion.conversations.list(),
+          app.conversations.getActiveId(),
+          app.conversations.list(),
         ]);
         if (cancelled) return;
 
@@ -415,7 +415,7 @@ function AppShell() {
     };
 
     void loadActiveConversation();
-    const unsubscribe = legion.conversations.onChanged((store) => {
+    const unsubscribe = app.conversations.onChanged((store) => {
       applyStore(store as ConversationsStore);
     });
 
@@ -473,11 +473,11 @@ function AppShell() {
     if (!activeConversationId || activeConversationId === nextConversationId) return;
 
     try {
-      const conversation = await legion.conversations.get(activeConversationId) as ConversationRecord | null;
+      const conversation = await app.conversations.get(activeConversationId) as ConversationRecord | null;
       const hasComputerSessions = cuSessionsByConversation.has(activeConversationId);
       if (!isDisposableNewConversation(conversation, hasComputerSessions)) return;
 
-      await legion.conversations.delete(activeConversationId);
+      await app.conversations.delete(activeConversationId);
       setActiveConversationId(null);
       setActiveConversationTitle('New Conversation');
     } catch {
@@ -486,9 +486,8 @@ function AppShell() {
   }, [activeConversationId, cuSessionsByConversation]);
 
   const handleSwitchConversation = useCallback(async (id: string) => {
-    const { legion } = await import('@/lib/ipc-client');
     await cleanupAbandonedConversation(id);
-    await legion.conversations.setActiveId(id);
+    await app.conversations.setActiveId(id);
     setActiveView('chat');
     setActiveConversationId(id);
     // Clean up any other empty conversations in the background
@@ -496,11 +495,10 @@ function AppShell() {
   }, [cleanupAbandonedConversation]);
 
   const handleNewConversation = useCallback(async () => {
-    const { legion } = await import('@/lib/ipc-client');
     await cleanupAbandonedConversation();
     const newId = crypto.randomUUID();
     const now = new Date().toISOString();
-    await legion.conversations.put({
+    await app.conversations.put({
       id: newId, title: null, fallbackTitle: null, messages: [],
       conversationCompaction: null, lastContextUsage: null,
       createdAt: now, updatedAt: now, lastMessageAt: null,
@@ -509,7 +507,7 @@ function AppShell() {
       runStatus: 'idle', hasUnread: false, lastAssistantUpdateAt: null,
       selectedModelKey: null,
     });
-    await legion.conversations.setActiveId(newId);
+    await app.conversations.setActiveId(newId);
     setActiveView('chat');
     setActiveConversationId(newId);
     // Reset per-conversation settings for the new conversation
@@ -551,7 +549,7 @@ function AppShell() {
 
   // Listen for Cmd+, / menu Settings
   useEffect(() => {
-    const cleanup = window.legion?.onMenuOpenSettings(() => {
+    const cleanup = window.app?.onMenuOpenSettings(() => {
       void handleOpenSettings();
     });
     return cleanup;
@@ -559,8 +557,8 @@ function AppShell() {
 
   // Listen for AI-initiated model switches
   useEffect(() => {
-    if (!window.legion?.onModelSwitched) return;
-    const cleanup = window.legion.onModelSwitched((modelKey) => setSelectedModelKey(modelKey));
+    if (!window.app?.onModelSwitched) return;
+    const cleanup = window.app.onModelSwitched((modelKey) => setSelectedModelKey(modelKey));
     return cleanup;
   }, []);
 
@@ -603,10 +601,10 @@ function AppShell() {
   // Persist per-conversation settings whenever they change
   useEffect(() => {
     if (!activeConversationId) return;
-    legion.conversations.get(activeConversationId).then((conv: unknown) => {
+    app.conversations.get(activeConversationId).then((conv: unknown) => {
       const record = conv as ConversationRecord | null;
       if (!record) return;
-      legion.conversations.put({
+      app.conversations.put({
         ...record,
         selectedModelKey,
         selectedProfileKey,
@@ -621,7 +619,7 @@ function AppShell() {
   // sends this event after switching the active conversation and focusing
   // the window. Switch to the computer-use tab so the user sees the session.
   useEffect(() => {
-    return legion.computerUse.onFocusThread(() => {
+    return app.computerUse.onFocusThread(() => {
       setActiveView('chat');
       setThreadMode('computer');
     });
@@ -655,13 +653,13 @@ function AppShell() {
         <div className="flex h-screen overflow-hidden bg-transparent text-foreground">
           {/* Sidebar */}
           <aside
-            className="legion-shell-panel flex h-full shrink-0 flex-col border-r border-sidebar-border/80 bg-sidebar text-sidebar-foreground"
+            className="app-shell-panel flex h-full shrink-0 flex-col border-r border-sidebar-border/80 bg-sidebar text-sidebar-foreground"
             style={{ width: `${sidebarWidth}px` }}
           >
             <div className="titlebar-drag relative flex h-14 items-center justify-center border-b border-sidebar-border/80 px-4">
               <div className="pointer-events-none absolute inset-y-0 left-0 w-20" />
               <span className="titlebar-no-drag inline-flex items-center gap-0.5 text-sm font-medium text-sidebar-foreground">
-                <span className="legion-gradient-text legion-wordmark">INTERLINK</span>
+                <span className="app-gradient-text app-wordmark">{__BRAND_WORDMARK}</span>
                 <CpuIcon className="h-4 w-4 text-primary/80" />
               </span>
             </div>

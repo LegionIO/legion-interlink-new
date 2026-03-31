@@ -4,9 +4,9 @@ import { join } from 'path';
 import { resolveModelForThread, resolveModelCatalog, resolveStreamConfig, type ModelCatalogEntry, type LLMModelConfig } from '../agent/model-catalog.js';
 import { streamAgentResponse, streamWithFallback } from '../agent/mastra-agent.js';
 import type { StreamEvent, ReasoningEffort } from '../agent/mastra-agent.js';
-import { getLegionStatus, resolveAgentBackend, streamLegionAgent } from '../agent/legion-runtime.js';
+import { getAppStatus, resolveAgentBackend, streamAppAgent } from '../agent/app-runtime.js';
 import { createLanguageModelFromConfig } from '../agent/language-model.js';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import { readEffectiveConfig } from './config.js';
 import { shouldCompact, compactConversationPrefix, compactToolResult, estimateToolTokens } from '../agent/compaction.js';
 import type { ToolCompactionConfig } from '../agent/compaction.js';
@@ -156,7 +156,7 @@ function normalizeGeneratedTitle(rawTitle: string | null): string | null {
 }
 
 function resolveTitleModel(
-  config: LegionConfig,
+  config: AppConfig,
   threadModelKey: string | null,
 ): ModelCatalogEntry | null {
   const catalog = resolveModelCatalog(config);
@@ -210,8 +210,8 @@ export function updatePluginTools(pluginTools: ToolDefinition[]): void {
   registeredTools = [...nonPlugin, ...ensureSafeToolDefinitions(pluginTools)];
 }
 
-export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): void {
-  const dbPath = join(legionHome, 'data', 'memory.db');
+export function registerAgentHandlers(ipcMain: IpcMain, appHome: string): void {
+  const dbPath = join(appHome, 'data', 'memory.db');
 
   ipcMain.handle(
     'agent:stream',
@@ -233,9 +233,9 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
     const observerSessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     activeObserverSessions.set(conversationId, observerSessionId);
 
-    let config: LegionConfig;
+    let config: AppConfig;
     try {
-      config = readEffectiveConfig(legionHome);
+      config = readEffectiveConfig(appHome);
     } catch (error) {
       broadcastStreamEvent({
         conversationId,
@@ -356,12 +356,12 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
             return;
           }
 
-          const stream = streamLegionAgent({
+          const stream = streamAppAgent({
             conversationId,
             messages: daemonMessages,
             modelConfig: modelEntry.modelConfig,
             config,
-            legionHome,
+            appHome,
             abortSignal: controller.signal,
             reasoningEffort,
           });
@@ -920,7 +920,7 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
           };
 
         // Apply profile system prompt override to config
-        const configForStream: LegionConfig = {
+        const configForStream: AppConfig = {
           ...config,
           systemPrompt: streamConfig.systemPrompt,
           advanced: {
@@ -1035,10 +1035,10 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
     return { ok: true };
   });
 
-  ipcMain.handle('agent:legion-status', async () => {
+  ipcMain.handle('agent:app-status', async () => {
     try {
-      const config = readEffectiveConfig(legionHome);
-      return await getLegionStatus(config, legionHome);
+      const config = readEffectiveConfig(appHome);
+      return await getAppStatus(config, appHome);
     } catch (error) {
       return {
         backend: 'mastra',
@@ -1053,9 +1053,9 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
   });
 
   ipcMain.handle('agent:generate-title', async (_event, messages: unknown[], modelKey?: string) => {
-    let config: LegionConfig;
+    let config: AppConfig;
     try {
-      config = readEffectiveConfig(legionHome);
+      config = readEffectiveConfig(appHome);
     } catch {
       return { title: null };
     }
@@ -1129,7 +1129,7 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
   // Model catalog endpoint
   ipcMain.handle('agent:model-catalog', () => {
     try {
-      const config = readEffectiveConfig(legionHome);
+      const config = readEffectiveConfig(appHome);
       const catalog = resolveModelCatalog(config);
       return {
         models: catalog.entries.map((e: { key: string; displayName: string; modelConfig: { maxInputTokens?: number }; computerUseSupport?: string; visionCapable?: boolean; preferredTarget?: string }) => ({
@@ -1150,7 +1150,7 @@ export function registerAgentHandlers(ipcMain: IpcMain, legionHome: string): voi
   // Profile catalog endpoint
   ipcMain.handle('agent:profiles', () => {
     try {
-      const config = readEffectiveConfig(legionHome);
+      const config = readEffectiveConfig(appHome);
       return {
         profiles: (config.profiles ?? []).map((p) => ({
           key: p.key,

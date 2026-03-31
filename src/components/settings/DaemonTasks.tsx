@@ -8,7 +8,7 @@ import {
   PlusIcon,
 } from 'lucide-react';
 import { settingsSelectClass, type SettingsProps } from './shared';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
@@ -46,7 +46,7 @@ const ExpandedTask: FC<{ task: TaskDetail }> = ({ task }) => {
 
   useEffect(() => {
     setLogsState('loading');
-    legion.daemon.taskLogs(task.id).then((res) => {
+    app.daemon.taskLogs(task.id).then((res) => {
       if (res.ok) {
         const raw = res.data;
         setLogs(Array.isArray(raw) ? (raw as string[]) : typeof raw === 'string' ? [raw] : []);
@@ -107,7 +107,7 @@ const TriggerForm: FC<{ onClose: () => void; onCreated: () => void }> = ({ onClo
     setSubmitting(true);
     setError('');
     try {
-      const res = await legion.daemon.taskCreate({ runner_class: runnerClass.trim(), function: fn.trim() });
+      const res = await app.daemon.taskCreate({ runner_class: runnerClass.trim(), function: fn.trim() });
       if (res.ok) {
         onCreated();
         onClose();
@@ -181,14 +181,14 @@ export const DaemonTasks: FC<SettingsProps> = ({ config }) => {
   const [showTrigger, setShowTrigger] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const daemonUrl = (config.runtime as { legion?: { daemonUrl?: string } })?.legion?.daemonUrl || 'http://127.0.0.1:4567';
+  const daemonUrl = (config.runtime as { daemon?: { daemonUrl?: string } })?.daemon?.daemonUrl || 'http://127.0.0.1:4567';
 
   const fetchTasks = useCallback(async () => {
     setLoadState((s) => s === 'idle' ? 'loading' : s === 'loaded' ? 'loaded' : 'loading');
     setLoadError('');
     try {
       const filters = statusFilter !== 'all' ? { status: statusFilter } : undefined;
-      const res = await legion.daemon.tasks(filters);
+      const res = await app.daemon.tasks(filters);
       if (res.ok) {
         setTasks(Array.isArray(res.data) ? (res.data as Task[]) : []);
         setLoadState('loaded');
@@ -218,7 +218,7 @@ export const DaemonTasks: FC<SettingsProps> = ({ config }) => {
     setExpandedId(task.id);
     if (!expandedData[task.id]) {
       try {
-        const res = await legion.daemon.task(task.id);
+        const res = await app.daemon.task(task.id);
         if (res.ok && res.data) {
           setExpandedData((prev) => ({ ...prev, [task.id]: res.data as TaskDetail }));
         } else {

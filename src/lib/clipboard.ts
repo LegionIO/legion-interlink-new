@@ -1,12 +1,12 @@
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 function getClipboardErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Failed to copy text to the clipboard.';
 }
 
 export async function copyTextToClipboard(text: string): Promise<void> {
-  if (window.legion?.clipboard?.writeText) {
-    const result = await legion.clipboard.writeText(text);
+  if (window.app?.clipboard?.writeText) {
+    const result = await app.clipboard.writeText(text);
     if (!result.ok) {
       throw new Error(result.error ?? 'Failed to copy text to the clipboard.');
     }

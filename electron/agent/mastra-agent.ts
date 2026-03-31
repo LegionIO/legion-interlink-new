@@ -2,7 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { toStandardSchema as toJsonStandardSchema } from '@mastra/schema-compat/adapters/json-schema';
 import zodToJsonSchema from 'zod-to-json-schema';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import type { LLMModelConfig, ResolvedStreamConfig, ModelCatalogEntry, ReasoningEffort } from './model-catalog.js';
 import { createLanguageModelFromConfig } from './language-model.js';
 import { getSharedMemory, getResourceId } from './memory.js';
@@ -307,7 +307,7 @@ export async function* streamAgentResponse(
   conversationId: string,
   messages: unknown[],
   modelConfig: LLMModelConfig,
-  config: LegionConfig,
+  config: AppConfig,
   tools: ToolDefinition[],
   dbPath: string,
   options?: {
@@ -334,8 +334,8 @@ export async function* streamAgentResponse(
   const buildAgent = async (activeModelConfig: LLMModelConfig): Promise<Agent> => {
     const model = await createLanguageModelFromConfig(activeModelConfig);
     return new Agent({
-      id: `legion-${conversationId}`,
-      name: 'legion',
+      id: `${__BRAND_APP_SLUG}-${conversationId}`,
+      name: __BRAND_APP_SLUG,
       instructions: buildAgentInstructions(config.systemPrompt),
       model: model as AgentConfig['model'],
       tools: mastraTools,
@@ -367,7 +367,7 @@ async function* generateWithSyntheticEvents(
   conversationId: string,
   messages: unknown[],
   modelConfig: LLMModelConfig,
-  config: LegionConfig,
+  config: AppConfig,
   memory: ReturnType<typeof getSharedMemory>,
   modelSettings: Record<string, unknown>,
   providerOptions: Record<string, unknown> | undefined,
@@ -498,7 +498,7 @@ async function* streamWithRealEvents(
   conversationId: string,
   messages: unknown[],
   modelConfig: LLMModelConfig,
-  config: LegionConfig,
+  config: AppConfig,
   memory: ReturnType<typeof getSharedMemory>,
   modelSettings: Record<string, unknown>,
   providerOptions: Record<string, unknown> | undefined,
@@ -723,7 +723,7 @@ export async function* streamWithFallback(
   conversationId: string,
   messages: unknown[],
   streamConfig: ResolvedStreamConfig,
-  config: LegionConfig,
+  config: AppConfig,
   tools: ToolDefinition[],
   dbPath: string,
   options?: {
@@ -747,7 +747,7 @@ export async function* streamWithFallback(
     }
 
     const entry = modelChain[attempt];
-    const configOverride: LegionConfig = {
+    const configOverride: AppConfig = {
       ...config,
       systemPrompt: streamConfig.systemPrompt,
       advanced: {

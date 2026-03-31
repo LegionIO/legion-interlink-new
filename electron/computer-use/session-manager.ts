@@ -15,7 +15,7 @@ import type {
   StartComputerSessionOptions,
 } from '../../shared/computer-use.js';
 import { isComputerSessionTerminal, makeComputerUseId, nowIso } from '../../shared/computer-use.js';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import { resolveModelCatalog, resolveModelForThread } from '../agent/model-catalog.js';
 import { ComputerUseOrchestrator } from './orchestrator.js';
 import { closeOperatorWindow, openComputerSetupWindow, openOperatorWindow } from './operator-window.js';
@@ -42,8 +42,8 @@ const SESSION_ALERT_SOUND_BY_KIND: Record<SessionAlertKind, string> = {
   takeover: 'Ping',
 };
 
-function readActiveConversationId(legionHome: string): string | null {
-  const storePath = join(legionHome, 'data', 'conversations.json');
+function readActiveConversationId(appHome: string): string | null {
+  const storePath = join(appHome, 'data', 'conversations.json');
   if (!existsSync(storePath)) return null;
   try {
     const store = JSON.parse(readFileSync(storePath, 'utf-8')) as {
@@ -183,11 +183,11 @@ export class ComputerUseSessionManager extends EventEmitter {
   private takeoverMonitorActive = false;
 
   constructor(
-    private readonly legionHome: string,
-    private readonly getConfig: () => LegionConfig,
+    private readonly appHome: string,
+    private readonly getConfig: () => AppConfig,
   ) {
     super();
-    this.sessionsDir = join(legionHome, 'data', 'computer-use');
+    this.sessionsDir = join(appHome, 'data', 'computer-use');
     mkdirSync(this.sessionsDir, { recursive: true });
     this.orchestrator = new ComputerUseOrchestrator(
       () => this.getConfig(),
@@ -365,16 +365,16 @@ export class ComputerUseSessionManager extends EventEmitter {
         missing.push(permissions.message ?? 'Local macOS helper could not start. Ensure Xcode command line tools are installed.');
       }
       if (!permissions.accessibilityTrusted) {
-        missing.push('Enable Accessibility for Interlink in System Settings > Privacy & Security > Accessibility.');
+        missing.push('Enable Accessibility for ' + __BRAND_PRODUCT_NAME + ' in System Settings > Privacy & Security > Accessibility.');
       }
       if (!permissions.screenRecordingGranted) {
-        missing.push('Enable Screen Recording for Interlink in System Settings > Privacy & Security > Screen Recording.');
+        missing.push('Enable Screen Recording for ' + __BRAND_PRODUCT_NAME + ' in System Settings > Privacy & Security > Screen Recording.');
       }
       if (!permissions.automationGranted) {
-        missing.push('Allow Automation for Interlink so it can drive System Events and read focused window metadata.');
+        missing.push('Allow Automation for ' + __BRAND_PRODUCT_NAME + ' so it can drive System Events and read focused window metadata.');
       }
       if (!permissions.inputMonitoringGranted) {
-        missing.push('Enable Input Monitoring for Interlink in System Settings > Privacy & Security > Input Monitoring so it can detect when you take over control.');
+        missing.push('Enable Input Monitoring for ' + __BRAND_PRODUCT_NAME + ' in System Settings > Privacy & Security > Input Monitoring so it can detect when you take over control.');
       }
       return missing.length > 0 ? missing.join(' ') : null;
     }
@@ -553,7 +553,7 @@ export class ComputerUseSessionManager extends EventEmitter {
     const config = this.getConfig();
     const sessionId = makeComputerUseId('cs');
     const conversationId = options.conversationId.trim().toLowerCase() === 'current'
-      ? readActiveConversationId(this.legionHome) ?? options.conversationId
+      ? readActiveConversationId(this.appHome) ?? options.conversationId
       : options.conversationId;
     const target = options.target ?? config.computerUse.defaultTarget;
     const surface = options.surface ?? config.computerUse.defaultSurface;

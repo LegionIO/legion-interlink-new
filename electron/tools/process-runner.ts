@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import type { ToolExecutionContext } from './types.js';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 
 export type ProcessStreamingConfig = {
   enabled: boolean;
@@ -145,7 +145,7 @@ function appendChunk(state: StreamState, chunk: string, cfg: ProcessStreamingCon
   state.output = state.head + TRUNCATION_MARKER + state.tail;
 }
 
-export function resolveProcessStreamingConfig(config: LegionConfig): ProcessStreamingConfig {
+export function resolveProcessStreamingConfig(config: AppConfig): ProcessStreamingConfig {
   const raw = config.tools.processStreaming;
   return {
     enabled: raw.enabled,

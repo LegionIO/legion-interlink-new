@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FC } from 'react';
 import { CheckIcon, ChevronDownIcon, CpuIcon } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import { formatModelDisplayName } from '@/lib/model-display';
 
 type ModelInfo = {
@@ -32,7 +32,7 @@ export const ModelSelector: FC<ModelSelectorProps> = ({ selectedModelKey, onSele
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    legion.modelCatalog()
+    app.modelCatalog()
       .then((data) => setCatalog(data as ModelCatalog))
       .catch(() => {});
   }, []);

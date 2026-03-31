@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import type { ToolDefinition } from './types.js';
 import { runCommandWithStreaming, resolveProcessStreamingConfig } from './process-runner.js';
 import { runToolExecution } from './execution.js';
@@ -13,7 +13,7 @@ function matchesPattern(command: string, pattern: string): boolean {
   return command.includes(pattern);
 }
 
-function isCommandAllowed(command: string, config: LegionConfig): { allowed: boolean; reason?: string } {
+function isCommandAllowed(command: string, config: AppConfig): { allowed: boolean; reason?: string } {
   const shellConfig = config.tools.shell;
   if (!shellConfig.enabled) return { allowed: false, reason: 'Shell tool is disabled' };
 
@@ -31,7 +31,7 @@ function isCommandAllowed(command: string, config: LegionConfig): { allowed: boo
   return { allowed: true };
 }
 
-export function createShellTool(getConfig: () => LegionConfig): ToolDefinition {
+export function createShellTool(getConfig: () => AppConfig): ToolDefinition {
   return {
     name: 'sh',
     description: 'Execute a shell command on the local machine. Returns stdout/stderr. Use for running programs, scripts, git commands, package managers, etc.',

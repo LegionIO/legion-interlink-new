@@ -5,7 +5,7 @@ export type SettingsProps = {
   updateConfig: (path: string, value: unknown) => Promise<void>;
 };
 
-export const settingsSelectClass = 'legion-settings-select w-full rounded-xl border border-border/70 bg-card/80 px-3 py-2 text-xs outline-none';
+export const settingsSelectClass = 'app-settings-select w-full rounded-xl border border-border/70 bg-card/80 px-3 py-2 text-xs outline-none';
 
 export const Toggle: FC<{ label: string; checked: boolean; onChange: (value: boolean) => void }> = ({ label, checked, onChange }) => (
   <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-border/60 bg-card/60 px-3 py-2">

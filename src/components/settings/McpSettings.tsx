@@ -11,7 +11,7 @@ import {
   GlobeIcon,
   TerminalIcon,
 } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import { EditableInput } from '@/components/EditableInput';
 import { Toggle, type SettingsProps } from './shared';
 
@@ -132,13 +132,13 @@ const ServerCard: FC<{
   const transport = server.url ? 'url' : 'command';
 
   const handleTest = async () => {
-    if (!legion.mcp?.testConnection) {
+    if (!app.mcp?.testConnection) {
       setTestResult({ status: 'error', error: 'MCP bridge not available — restart the app after rebuilding' });
       return;
     }
     setTestResult({ status: 'testing' });
     try {
-      const result = await legion.mcp.testConnection({
+      const result = await app.mcp.testConnection({
         name: server.name,
         url: server.url,
         command: server.command,
@@ -272,7 +272,7 @@ const ServerForm: FC<{
       if (env.length > 0) {
         serverConfig.env = Object.fromEntries(env.filter(([k]) => k.trim()));
       }
-      const result = await legion.mcp.testConnection(serverConfig);
+      const result = await app.mcp.testConnection(serverConfig);
       setTestResult({
         status: result.status === 'connected' ? 'connected' : 'error',
         toolCount: result.toolCount,

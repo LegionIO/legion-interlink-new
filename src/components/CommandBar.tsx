@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, type FC } from 'react';
 import { CommandIcon, Loader2Icon, ZapIcon, AlertCircleIcon, CheckCircle2Icon, ArrowRightIcon } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 interface Capability {
   name: string;
@@ -36,7 +36,7 @@ export const CommandBar: FC<Props> = ({ open, onClose }) => {
       setResult(null);
       setRunning(false);
       inputRef.current?.focus();
-      legion.daemon.capabilities().then((res) => {
+      app.daemon.capabilities().then((res) => {
         if (res.ok && res.data) {
           const data = Array.isArray(res.data) ? res.data : (res.data as { capabilities?: Capability[] }).capabilities || [];
           setCapabilities(data as Capability[]);
@@ -71,7 +71,7 @@ export const CommandBar: FC<Props> = ({ open, onClose }) => {
     if (!input.trim() || running) return;
     setRunning(true);
     setResult(null);
-    const res = await legion.daemon.doCommand(input.trim());
+    const res = await app.daemon.doCommand(input.trim());
     if (res.ok && res.data) {
       setResult(res.data as CommandResult);
     } else {

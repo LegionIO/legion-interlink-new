@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { GitBranchIcon, GitPullRequestIcon, CircleDotIcon, GitCommitHorizontalIcon, XIcon, RefreshCwIcon, AlertCircleIcon, Loader2Icon } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import { PullRequestsTab } from './PullRequestsTab';
 import { IssuesTab } from './IssuesTab';
 import { CommitsTab } from './CommitsTab';
@@ -25,7 +25,7 @@ export function GitHubPanel({ onClose }: Props) {
   const [repoFilter, setRepoFilter] = useState('');
 
   const checkDaemon = useCallback(async () => {
-    const result = await legion.daemon.githubStatus();
+    const result = await app.daemon.githubStatus();
     setDaemonOk(result.ok);
     if (result.ok && result.data) {
       const d = result.data as { user?: string; org?: string; repos?: number };
@@ -37,7 +37,7 @@ export function GitHubPanel({ onClose }: Props) {
       setStatusText(result.error || 'Unavailable');
     }
 
-    const repoRes = await legion.daemon.githubRepos();
+    const repoRes = await app.daemon.githubRepos();
     if (repoRes.ok && repoRes.data) {
       const data = Array.isArray(repoRes.data) ? repoRes.data : (repoRes.data as { repos?: string[] }).repos || [];
       setRepos((data as Array<string | { full_name?: string; name?: string }>).map((r) =>
@@ -108,7 +108,7 @@ export function GitHubPanel({ onClose }: Props) {
             <AlertCircleIcon className="h-10 w-10 text-muted-foreground/50" />
             <div>
               <p className="font-medium text-foreground">Daemon not connected</p>
-              <p className="mt-1 text-sm text-muted-foreground">GitHub features require the Legion daemon with lex-github running.</p>
+              <p className="mt-1 text-sm text-muted-foreground">GitHub features require the {__BRAND_PRODUCT_NAME} daemon with lex-github running.</p>
             </div>
             <button type="button" onClick={checkDaemon} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">
               Retry

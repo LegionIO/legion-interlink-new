@@ -2,7 +2,7 @@ import type { IpcMain } from 'electron';
 import { BrowserWindow } from 'electron';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import { getComputerUseManager } from '../computer-use/service.js';
 
 type ConversationRecord = {
@@ -34,12 +34,12 @@ type ConversationsStore = {
   settings: Record<string, unknown>;
 };
 
-function getStorePath(legionHome: string): string {
-  return join(legionHome, 'data', 'conversations.json');
+function getStorePath(appHome: string): string {
+  return join(appHome, 'data', 'conversations.json');
 }
 
-export function readConversationStore(legionHome: string): ConversationsStore {
-  const storePath = getStorePath(legionHome);
+export function readConversationStore(appHome: string): ConversationsStore {
+  const storePath = getStorePath(appHome);
   if (!existsSync(storePath)) {
     return { conversations: {}, activeConversationId: null, settings: {} };
   }
@@ -50,9 +50,9 @@ export function readConversationStore(legionHome: string): ConversationsStore {
   }
 }
 
-export function writeConversationStore(legionHome: string, store: ConversationsStore): void {
-  const storePath = getStorePath(legionHome);
-  const dir = join(legionHome, 'data');
+export function writeConversationStore(appHome: string, store: ConversationsStore): void {
+  const storePath = getStorePath(appHome);
+  const dir = join(appHome, 'data');
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
@@ -65,9 +65,9 @@ export function broadcastConversationChange(store: ConversationsStore): void {
   }
 }
 
-export function registerConversationHandlers(ipcMain: IpcMain, legionHome: string, getConfig?: () => LegionConfig): void {
+export function registerConversationHandlers(ipcMain: IpcMain, appHome: string, getConfig?: () => AppConfig): void {
   ipcMain.handle('conversations:list', () => {
-    const store = readConversationStore(legionHome);
+    const store = readConversationStore(appHome);
     const conversations = Object.values(store.conversations);
     // Sort by most recent activity
     conversations.sort((a, b) => {
@@ -79,31 +79,31 @@ export function registerConversationHandlers(ipcMain: IpcMain, legionHome: strin
   });
 
   ipcMain.handle('conversations:get', (_event, id: string) => {
-    const store = readConversationStore(legionHome);
+    const store = readConversationStore(appHome);
     return store.conversations[id] ?? null;
   });
 
   ipcMain.handle('conversations:put', (_event, conversation: ConversationRecord) => {
-    const store = readConversationStore(legionHome);
+    const store = readConversationStore(appHome);
     store.conversations[conversation.id] = conversation;
-    writeConversationStore(legionHome, store);
+    writeConversationStore(appHome, store);
     broadcastConversationChange(store);
     return { ok: true };
   });
 
   ipcMain.handle('conversations:delete', (_event, id: string) => {
-    const store = readConversationStore(legionHome);
+    const store = readConversationStore(appHome);
     delete store.conversations[id];
     if (store.activeConversationId === id) {
       store.activeConversationId = null;
     }
-    writeConversationStore(legionHome, store);
+    writeConversationStore(appHome, store);
     broadcastConversationChange(store);
 
     // Clean up associated computer-use sessions
     if (getConfig) {
       try {
-        const manager = getComputerUseManager(legionHome, getConfig);
+        const manager = getComputerUseManager(appHome, getConfig);
         manager.removeSessionsByConversation(id);
       } catch {
         // Computer-use module may not be initialized yet — safe to ignore
@@ -114,12 +114,12 @@ export function registerConversationHandlers(ipcMain: IpcMain, legionHome: strin
   });
 
   ipcMain.handle('conversations:clear', () => {
-    const store = readConversationStore(legionHome);
+    const store = readConversationStore(appHome);
 
     // Clean up all computer-use sessions
     if (getConfig) {
       try {
-        const manager = getComputerUseManager(legionHome, getConfig);
+        const manager = getComputerUseManager(appHome, getConfig);
         for (const conversationId of Object.keys(store.conversations)) {
           manager.removeSessionsByConversation(conversationId);
         }
@@ -130,20 +130,20 @@ export function registerConversationHandlers(ipcMain: IpcMain, legionHome: strin
 
     store.conversations = {};
     store.activeConversationId = null;
-    writeConversationStore(legionHome, store);
+    writeConversationStore(appHome, store);
     broadcastConversationChange(store);
     return { ok: true };
   });
 
   ipcMain.handle('conversations:get-active-id', () => {
-    const store = readConversationStore(legionHome);
+    const store = readConversationStore(appHome);
     return store.activeConversationId;
   });
 
   ipcMain.handle('conversations:set-active-id', (_event, id: string) => {
-    const store = readConversationStore(legionHome);
+    const store = readConversationStore(appHome);
     store.activeConversationId = id;
-    writeConversationStore(legionHome, store);
+    writeConversationStore(appHome, store);
     broadcastConversationChange(store);
     return { ok: true };
   });

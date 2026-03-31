@@ -7,7 +7,7 @@ import {
   XIcon,
 } from 'lucide-react';
 import { type SettingsProps } from './shared';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 type ApprovalStatus = 'pending' | 'approved' | 'rejected' | string;
@@ -111,7 +111,7 @@ export const DaemonGovernance: FC<SettingsProps> = () => {
     setLoadState('loading');
     setLoadError('');
     try {
-      const result = await legion.daemon.governanceApprovals();
+      const result = await app.daemon.governanceApprovals();
       if (result.ok) {
         setApprovals((result.data as Approval[]) ?? []);
         setLoadState('loaded');
@@ -133,7 +133,7 @@ export const DaemonGovernance: FC<SettingsProps> = () => {
     setPendingAction(id);
     setActionError('');
     try {
-      const result = await legion.daemon.governanceApprove(id, { reviewer_id: 'desktop' });
+      const result = await app.daemon.governanceApprove(id, { reviewer_id: 'desktop' });
       if (result.ok) {
         setApprovals((prev) =>
           prev.map((a) => (a.id === id ? { ...a, status: 'approved' } : a)),
@@ -152,7 +152,7 @@ export const DaemonGovernance: FC<SettingsProps> = () => {
     setPendingAction(id);
     setActionError('');
     try {
-      const result = await legion.daemon.governanceReject(id, { reviewer_id: 'desktop' });
+      const result = await app.daemon.governanceReject(id, { reviewer_id: 'desktop' });
       if (result.ok) {
         setApprovals((prev) =>
           prev.map((a) => (a.id === id ? { ...a, status: 'rejected' } : a)),

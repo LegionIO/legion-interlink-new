@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, type FC } from 'react';
 import { BrainCircuitIcon, RefreshCwIcon, Loader2Icon, AlertCircleIcon, TrashIcon, SearchIcon, PencilIcon, CheckIcon, XIcon } from 'lucide-react';
 import type { SettingsProps } from './shared';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 interface MemoryEntry {
   id: string;
@@ -52,8 +52,8 @@ export const DaemonMemoryInspector: FC<SettingsProps> = () => {
     if (debouncedSearch) filters.query = debouncedSearch;
 
     const [entriesRes, statsRes] = await Promise.all([
-      legion.daemon.memoryEntries(filters),
-      legion.daemon.memoryStats(),
+      app.daemon.memoryEntries(filters),
+      app.daemon.memoryStats(),
     ]);
 
     if (entriesRes.ok && entriesRes.data) {
@@ -74,13 +74,13 @@ export const DaemonMemoryInspector: FC<SettingsProps> = () => {
   useEffect(() => { fetchEntries(); }, [fetchEntries]);
 
   const handleDelete = async (id: string) => {
-    await legion.daemon.memoryEntryDelete(id);
+    await app.daemon.memoryEntryDelete(id);
     setEntries((prev) => prev.filter((e) => e.id !== id));
     if (expanded === id) setExpanded(null);
   };
 
   const handleSaveEdit = async (id: string) => {
-    await legion.daemon.memoryEntryUpdate(id, { content: editContent });
+    await app.daemon.memoryEntryUpdate(id, { content: editContent });
     setEntries((prev) => prev.map((e) => e.id === id ? { ...e, content: editContent } : e));
     setEditing(null);
   };

@@ -165,7 +165,7 @@ const titleGenerationSchema = z.object({
   retitleEagerUntilMessage: z.number().nonnegative(),
 });
 
-const legionRuntimeSchema = z.object({
+const appRuntimeSchema = z.object({
   rootPath: z.string(),
   configDir: z.string(),
   daemonUrl: z.string(),
@@ -175,7 +175,7 @@ const legionRuntimeSchema = z.object({
 
 const runtimeConfigSchema = z.object({
   agentBackend: z.enum(['mastra', 'legion-daemon']),
-  legion: legionRuntimeSchema,
+  daemon: appRuntimeSchema,
 });
 
 const profileConfigSchema = z.object({
@@ -361,7 +361,7 @@ const pluginApprovalSchema = z.object({
   approvedAt: z.string(),
 });
 
-export const legionConfigSchema = z.object({
+export const appConfigSchema = z.object({
   models: modelsConfigSchema,
   runtime: runtimeConfigSchema,
   memory: memoryConfigSchema,
@@ -411,4 +411,4 @@ export const legionConfigSchema = z.object({
   videoGeneration: videoGenerationConfigSchema.optional(),
 });
 
-export type LegionConfig = z.infer<typeof legionConfigSchema>;
+export type AppConfig = z.infer<typeof appConfigSchema>;

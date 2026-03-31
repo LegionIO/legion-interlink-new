@@ -1,7 +1,7 @@
 import { useEffect, useState, type FC } from 'react';
 import { Monitor, Target, CheckCircle, Circle, Pause, AlertTriangle, Camera, MousePointerClick, Zap, Clock, ExternalLink } from 'lucide-react';
 import type { ComputerOverlayState } from '../../../shared/computer-use';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 function useNow(intervalMs: number): number {
   const [now, setNow] = useState(Date.now());
@@ -113,7 +113,7 @@ export const OverlayContent: FC<{ state: ComputerOverlayState }> = ({ state }) =
 
   const handleBannerClick = () => {
     if (isPaused) {
-      legion.computerUse.focusSession(state.sessionId);
+      app.computerUse.focusSession(state.sessionId);
     }
   };
 
@@ -122,14 +122,14 @@ export const OverlayContent: FC<{ state: ComputerOverlayState }> = ({ state }) =
     setIsHovered(true);
     // Tell the main process to make this overlay window accept clicks
     // so the user can click the banner. Only the banner area triggers this.
-    legion.computerUse.overlayMouseEnter();
+    app.computerUse.overlayMouseEnter();
   };
 
   const handleBannerMouseLeave = () => {
     if (!isPaused) return;
     setIsHovered(false);
     // Restore click-through so clicks pass to the desktop beneath
-    legion.computerUse.overlayMouseLeave();
+    app.computerUse.overlayMouseLeave();
   };
 
   return (
@@ -189,7 +189,7 @@ export const OverlayContent: FC<{ state: ComputerOverlayState }> = ({ state }) =
                 <div className="flex items-center gap-1.5 rounded-lg bg-amber-400/20 px-2.5 py-1.5">
                   <ExternalLink className="h-3 w-3 text-amber-300" />
                   <span className="text-[11px] font-medium text-amber-200">
-                    Click to return to Interlink
+                    Click to return to {__BRAND_PRODUCT_NAME}
                   </span>
                 </div>
               )}

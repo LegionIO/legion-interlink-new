@@ -1,18 +1,18 @@
 import type { IpcMain } from 'electron';
 import { readFileSync, existsSync, readdirSync, rmSync } from 'fs';
 import { join } from 'path';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import { loadSkillsFromDisk } from '../tools/skill-loader.js';
 import { readEffectiveConfig, writeDesktopConfig } from './config.js';
 
-function readConfig(legionHome: string): LegionConfig {
-  return readEffectiveConfig(legionHome);
+function readConfig(appHome: string): AppConfig {
+  return readEffectiveConfig(appHome);
 }
 
-export function registerSkillsHandlers(ipcMain: IpcMain, legionHome: string): void {
+export function registerSkillsHandlers(ipcMain: IpcMain, appHome: string): void {
   ipcMain.handle('skills:list', async () => {
-    const config = readConfig(legionHome);
-    const skillsDir = config.skills?.directory || join(legionHome, 'skills');
+    const config = readConfig(appHome);
+    const skillsDir = config.skills?.directory || join(appHome, 'skills');
     const skills = loadSkillsFromDisk(skillsDir);
     const enabled = config.skills?.enabled ?? [];
 
@@ -27,8 +27,8 @@ export function registerSkillsHandlers(ipcMain: IpcMain, legionHome: string): vo
   });
 
   ipcMain.handle('skills:get', async (_event, name: string) => {
-    const config = readConfig(legionHome);
-    const skillsDir = config.skills?.directory || join(legionHome, 'skills');
+    const config = readConfig(appHome);
+    const skillsDir = config.skills?.directory || join(appHome, 'skills');
     const skillDir = join(skillsDir, name);
     const manifestPath = join(skillDir, 'skill.json');
 
@@ -51,8 +51,8 @@ export function registerSkillsHandlers(ipcMain: IpcMain, legionHome: string): vo
   });
 
   ipcMain.handle('skills:delete', async (_event, name: string) => {
-    const config = readConfig(legionHome);
-    const skillsDir = config.skills?.directory || join(legionHome, 'skills');
+    const config = readConfig(appHome);
+    const skillsDir = config.skills?.directory || join(appHome, 'skills');
     const skillDir = join(skillsDir, name);
 
     if (!existsSync(skillDir)) return { error: `Skill "${name}" not found.` };
@@ -61,14 +61,14 @@ export function registerSkillsHandlers(ipcMain: IpcMain, legionHome: string): vo
 
     // Remove from enabled list
     const enabled = (config.skills?.enabled ?? []).filter((s: string) => s !== name);
-    config.skills = { ...config.skills, enabled, directory: config.skills?.directory ?? join(legionHome, 'skills') };
-    writeDesktopConfig(legionHome, config);
+    config.skills = { ...config.skills, enabled, directory: config.skills?.directory ?? join(appHome, 'skills') };
+    writeDesktopConfig(appHome, config);
 
     return { success: true };
   });
 
   ipcMain.handle('skills:toggle', async (_event, name: string, enable: boolean) => {
-    const config = readConfig(legionHome);
+    const config = readConfig(appHome);
     let enabled = [...(config.skills?.enabled ?? [])];
 
     if (enable && !enabled.includes(name)) {
@@ -77,8 +77,8 @@ export function registerSkillsHandlers(ipcMain: IpcMain, legionHome: string): vo
       enabled = enabled.filter((s: string) => s !== name);
     }
 
-    config.skills = { ...config.skills, enabled, directory: config.skills?.directory ?? join(legionHome, 'skills') };
-    writeDesktopConfig(legionHome, config);
+    config.skills = { ...config.skills, enabled, directory: config.skills?.directory ?? join(appHome, 'skills') };
+    writeDesktopConfig(appHome, config);
 
     return { success: true, enabled: enable };
   });

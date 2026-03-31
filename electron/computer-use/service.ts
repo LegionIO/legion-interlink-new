@@ -1,10 +1,10 @@
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import { ComputerUseSessionManager } from './session-manager.js';
 
 let manager: ComputerUseSessionManager | null = null;
 
-export function getComputerUseManager(legionHome: string, getConfig: () => LegionConfig): ComputerUseSessionManager {
-  manager ??= new ComputerUseSessionManager(legionHome, getConfig);
+export function getComputerUseManager(appHome: string, getConfig: () => AppConfig): ComputerUseSessionManager {
+  manager ??= new ComputerUseSessionManager(appHome, getConfig);
   return manager;
 }
 

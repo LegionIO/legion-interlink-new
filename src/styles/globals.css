@@ -62,21 +62,21 @@
   --sidebar-accent: oklch(0.92 0.018 292);
   --sidebar-accent-foreground: oklch(0.31 0.026 292);
   --sidebar-border: oklch(0.83 0.018 292 / 70%);
-  --legion-shell-glow: rgba(127, 119, 221, 0.16);
-  --legion-edge: rgba(127, 119, 221, 0.10);
-  --legion-panel: rgba(255, 255, 255, 0.82);
-  --legion-overlay: rgba(255, 255, 255, 0.58);
-  --legion-panel-shadow: 0 18px 50px rgba(88, 78, 156, 0.12);
-  --legion-chip-shadow: 0 8px 24px rgba(88, 78, 156, 0.10);
-  --legion-user-bubble: rgba(255, 255, 255, 0.82);
-  --legion-user-bubble-border: rgba(127, 119, 221, 0.14);
-  --legion-user-bubble-shadow: 0 12px 28px rgba(88, 78, 156, 0.10);
-  --legion-file-chip: rgba(255, 255, 255, 0.78);
-  --legion-file-chip-hover: rgba(255, 255, 255, 0.94);
-  --legion-active-item: rgba(127, 119, 221, 0.12);
-  --legion-active-item-ring: rgba(127, 119, 221, 0.18);
-  --legion-matrix-fade: rgba(252, 251, 255, 0.22);
-  --legion-matrix-glyph: rgba(127, 119, 221, 0.45);
+  --app-shell-glow: rgba(127, 119, 221, 0.16);
+  --app-edge: rgba(127, 119, 221, 0.10);
+  --app-panel: rgba(255, 255, 255, 0.82);
+  --app-overlay: rgba(255, 255, 255, 0.58);
+  --app-panel-shadow: 0 18px 50px rgba(88, 78, 156, 0.12);
+  --app-chip-shadow: 0 8px 24px rgba(88, 78, 156, 0.10);
+  --app-user-bubble: rgba(255, 255, 255, 0.82);
+  --app-user-bubble-border: rgba(127, 119, 221, 0.14);
+  --app-user-bubble-shadow: 0 12px 28px rgba(88, 78, 156, 0.10);
+  --app-file-chip: rgba(255, 255, 255, 0.78);
+  --app-file-chip-hover: rgba(255, 255, 255, 0.94);
+  --app-active-item: rgba(127, 119, 221, 0.12);
+  --app-active-item-ring: rgba(127, 119, 221, 0.18);
+  --app-matrix-fade: rgba(252, 251, 255, 0.22);
+  --app-matrix-glyph: rgba(127, 119, 221, 0.45);
 }
 
 .dark {
@@ -105,21 +105,21 @@
   --sidebar-accent: oklch(0.20 0.018 292);
   --sidebar-accent-foreground: oklch(0.97 0.01 290);
   --sidebar-border: oklch(0.31 0.025 292 / 34%);
-  --legion-shell-glow: rgba(127, 119, 221, 0.14);
-  --legion-edge: rgba(197, 194, 245, 0.08);
-  --legion-panel: rgba(255, 255, 255, 0.02);
-  --legion-overlay: rgba(14, 12, 26, 0.48);
-  --legion-panel-shadow: 0 18px 50px rgba(5, 4, 15, 0.22);
-  --legion-chip-shadow: 0 8px 24px rgba(5, 4, 15, 0.18);
-  --legion-user-bubble: rgba(255, 255, 255, 0.085);
-  --legion-user-bubble-border: rgba(255, 255, 255, 0.10);
-  --legion-user-bubble-shadow: 0 12px 28px rgba(5, 4, 15, 0.18);
-  --legion-file-chip: rgba(255, 255, 255, 0.10);
-  --legion-file-chip-hover: rgba(255, 255, 255, 0.15);
-  --legion-active-item: rgba(255, 255, 255, 0.08);
-  --legion-active-item-ring: rgba(197, 194, 245, 0.14);
-  --legion-matrix-fade: rgba(10, 8, 18, 0.08);
-  --legion-matrix-glyph: rgba(197, 194, 245, 0.70);
+  --app-shell-glow: rgba(127, 119, 221, 0.14);
+  --app-edge: rgba(197, 194, 245, 0.08);
+  --app-panel: rgba(255, 255, 255, 0.02);
+  --app-overlay: rgba(14, 12, 26, 0.48);
+  --app-panel-shadow: 0 18px 50px rgba(5, 4, 15, 0.22);
+  --app-chip-shadow: 0 8px 24px rgba(5, 4, 15, 0.18);
+  --app-user-bubble: rgba(255, 255, 255, 0.085);
+  --app-user-bubble-border: rgba(255, 255, 255, 0.10);
+  --app-user-bubble-shadow: 0 12px 28px rgba(5, 4, 15, 0.18);
+  --app-file-chip: rgba(255, 255, 255, 0.10);
+  --app-file-chip-hover: rgba(255, 255, 255, 0.15);
+  --app-active-item: rgba(255, 255, 255, 0.08);
+  --app-active-item-ring: rgba(197, 194, 245, 0.14);
+  --app-matrix-fade: rgba(10, 8, 18, 0.08);
+  --app-matrix-glyph: rgba(197, 194, 245, 0.70);
 }
 
 @layer base {
@@ -150,8 +150,8 @@
     @apply text-foreground;
     background-color: var(--background);
     background-image:
-      radial-gradient(circle at top, var(--legion-shell-glow), transparent 34%),
-      linear-gradient(180deg, var(--legion-overlay), transparent 24%);
+      radial-gradient(circle at top, var(--app-shell-glow), transparent 34%),
+      linear-gradient(180deg, var(--app-overlay), transparent 24%);
     background-attachment: fixed;
     font-feature-settings: "ss01" 1, "cv02" 1, "cv03" 1;
   }
@@ -193,22 +193,22 @@
   display: none;
 }
 
-/* (Legion system prompt uses contentEditable — no overlay CSS needed) */
+/* (System prompt uses contentEditable — no overlay CSS needed) */
 
 /* contentEditable placeholder — data-placeholder attr is only set when isEmpty.
    ::before renders inline at cursor position, no offset issues. */
-.legion-ce-placeholder[data-placeholder]::before {
+.app-ce-placeholder[data-placeholder]::before {
   content: attr(data-placeholder);
   color: var(--muted-foreground);
   pointer-events: none;
 }
 
-.legion-ce-placeholder[data-placeholder]:focus::before {
+.app-ce-placeholder[data-placeholder]:focus::before {
   content: '';
 }
 
-/* Animated gradient text for "Legion" branding */
-.legion-gradient-text {
+/* Animated gradient text for branding */
+.app-gradient-text {
   background:
     linear-gradient(115deg, rgba(233,229,255,0.95) 0%, rgba(197,194,245,0.96) 35%, rgba(244,242,255,0.98) 50%, rgba(160,154,232,0.94) 75%, rgba(127,119,221,0.9) 100%);
   -webkit-background-clip: text;
@@ -217,7 +217,7 @@
   text-shadow: 0 0 16px rgba(160, 154, 232, 0.12);
 }
 
-html:not(.dark) .legion-gradient-text {
+html:not(.dark) .app-gradient-text {
   background:
     linear-gradient(115deg, rgba(147, 138, 229, 0.92) 0%, rgba(121, 110, 214, 0.95) 32%, rgba(184, 176, 244, 0.88) 50%, rgba(113, 103, 210, 0.95) 72%, rgba(102, 91, 199, 0.94) 100%);
   -webkit-background-clip: text;
@@ -228,22 +228,22 @@ html:not(.dark) .legion-gradient-text {
     0 1px 0 rgba(255, 255, 255, 0.38);
 }
 
-.legion-wordmark {
+.app-wordmark {
   letter-spacing: 0.18em;
   text-transform: uppercase;
 }
 
-.legion-shell-panel {
+.app-shell-panel {
   background:
     linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.08)),
-    linear-gradient(180deg, var(--legion-panel), color-mix(in oklab, var(--background) 92%, transparent));
+    linear-gradient(180deg, var(--app-panel), color-mix(in oklab, var(--background) 92%, transparent));
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.05),
-    var(--legion-panel-shadow);
+    var(--app-panel-shadow);
   backdrop-filter: blur(22px) saturate(120%);
 }
 
-.dark .legion-shell-panel {
+.dark .app-shell-panel {
   background:
     linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.012)),
     linear-gradient(180deg, rgba(22, 18, 39, 0.38), rgba(18, 15, 32, 0.26));
@@ -252,16 +252,16 @@ html:not(.dark) .legion-gradient-text {
     0 8px 24px rgba(5, 4, 15, 0.2);
 }
 
-.legion-edge {
-  box-shadow: inset 0 0 0 1px var(--legion-edge);
+.app-edge {
+  box-shadow: inset 0 0 0 1px var(--app-edge);
 }
 
-.legion-chip {
+.app-chip {
   border-radius: 1rem;
   background: linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.08));
   box-shadow:
     inset 0 0 0 1px rgba(197, 194, 245, 0.12),
-    var(--legion-chip-shadow);
+    var(--app-chip-shadow);
 }
 
 /* Shiki dark mode support */
@@ -293,7 +293,7 @@ html:not(.dark) .legion-gradient-text {
   background-color: oklch(0.6 0.2 30);
 }
 
-.legion-settings-select {
+.app-settings-select {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
@@ -304,7 +304,7 @@ html:not(.dark) .legion-gradient-text {
   padding-right: 2.9rem;
 }
 
-.legion-settings-select::-ms-expand {
+.app-settings-select::-ms-expand {
   display: none;
 }
 

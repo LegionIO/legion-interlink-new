@@ -1,5 +1,5 @@
 import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import type {
   ComputerSession,
   ComputerFrame,
@@ -208,11 +208,11 @@ export function ComputerUseProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    legion.computerUse.listSessions()
+    app.computerUse.listSessions()
       .then((result) => setSessions(sortSessions((result as ComputerSession[]) ?? [])))
       .catch(() => {});
 
-    const unsubscribe = legion.computerUse.onEvent((event) => {
+    const unsubscribe = app.computerUse.onEvent((event) => {
       const payload = event as ComputerUseEvent;
 
       // Capture frame events into history for step log traceability
@@ -271,7 +271,7 @@ export function ComputerUseProvider({ children }: { children: ReactNode }) {
         // Also refetch the session to pick up the updated selectedModelKey
       }
       if ('sessionId' in payload) {
-        void legion.computerUse.getSession(payload.sessionId)
+        void app.computerUse.getSession(payload.sessionId)
           .then((session) => {
             if (!session) return;
             setSessions((current) => sortSessions([
@@ -304,13 +304,13 @@ export function ComputerUseProvider({ children }: { children: ReactNode }) {
       let contextSummary: string | undefined;
 
       try {
-        const conversation = await legion.conversations.get(options.conversationId) as ConversationRecordLike | null;
+        const conversation = await app.conversations.get(options.conversationId) as ConversationRecordLike | null;
         contextSummary = buildConversationContextSummary(conversation);
       } catch {
         contextSummary = undefined;
       }
 
-      const session = await legion.computerUse.startSession(goal, {
+      const session = await app.computerUse.startSession(goal, {
         ...options,
         contextSummary,
       }) as ComputerSession;
@@ -318,54 +318,54 @@ export function ComputerUseProvider({ children }: { children: ReactNode }) {
       return session;
     },
     pauseSession: async (sessionId) => {
-      const session = await legion.computerUse.pauseSession(sessionId) as ComputerSession | null;
+      const session = await app.computerUse.pauseSession(sessionId) as ComputerSession | null;
       if (session) setSessions((current) => sortSessions([...current.filter((existing) => existing.id !== session.id), session]));
     },
     resumeSession: async (sessionId) => {
-      const session = await legion.computerUse.resumeSession(sessionId) as ComputerSession | null;
+      const session = await app.computerUse.resumeSession(sessionId) as ComputerSession | null;
       if (session) setSessions((current) => sortSessions([...current.filter((existing) => existing.id !== session.id), session]));
     },
     stopSession: async (sessionId) => {
-      const session = await legion.computerUse.stopSession(sessionId) as ComputerSession | null;
+      const session = await app.computerUse.stopSession(sessionId) as ComputerSession | null;
       if (session) setSessions((current) => sortSessions([...current.filter((existing) => existing.id !== session.id), session]));
     },
     approveAction: async (sessionId, actionId) => {
-      const session = await legion.computerUse.approveAction(sessionId, actionId) as ComputerSession | null;
+      const session = await app.computerUse.approveAction(sessionId, actionId) as ComputerSession | null;
       if (session) setSessions((current) => sortSessions([...current.filter((existing) => existing.id !== session.id), session]));
     },
     rejectAction: async (sessionId, actionId, reason) => {
-      const session = await legion.computerUse.rejectAction(sessionId, actionId, reason) as ComputerSession | null;
+      const session = await app.computerUse.rejectAction(sessionId, actionId, reason) as ComputerSession | null;
       if (session) setSessions((current) => sortSessions([...current.filter((existing) => existing.id !== session.id), session]));
     },
     setSurface: async (sessionId, surface) => {
-      const session = await legion.computerUse.setSurface(sessionId, surface) as ComputerSession | null;
+      const session = await app.computerUse.setSurface(sessionId, surface) as ComputerSession | null;
       if (session) setSessions((current) => sortSessions([...current.filter((existing) => existing.id !== session.id), session]));
     },
     sendGuidance: async (sessionId, text) => {
-      const session = await legion.computerUse.sendGuidance(sessionId, text) as ComputerSession | null;
+      const session = await app.computerUse.sendGuidance(sessionId, text) as ComputerSession | null;
       if (session) setSessions((current) => sortSessions([...current.filter((existing) => existing.id !== session.id), session]));
     },
     continueSession: async (sessionId, newGoal) => {
-      const session = await legion.computerUse.continueSession(sessionId, newGoal) as ComputerSession | null;
+      const session = await app.computerUse.continueSession(sessionId, newGoal) as ComputerSession | null;
       if (session) setSessions((current) => sortSessions([...current.filter((existing) => existing.id !== session.id), session]));
       return session;
     },
     updateSessionSettings: async (sessionId, settings) => {
-      const session = await legion.computerUse.updateSessionSettings(sessionId, settings) as ComputerSession | null;
+      const session = await app.computerUse.updateSessionSettings(sessionId, settings) as ComputerSession | null;
       if (session) setSessions((current) => sortSessions([...current.filter((existing) => existing.id !== session.id), session]));
     },
     fallbackBanner,
     dismissFallbackBanner,
-    checkLocalMacosPermissions: async () => legion.computerUse.getLocalMacosPermissions() as Promise<ComputerUsePermissions>,
-    requestLocalMacosPermissions: async () => legion.computerUse.requestLocalMacosPermissions() as Promise<ComputerUsePermissionRequestResult>,
+    checkLocalMacosPermissions: async () => app.computerUse.getLocalMacosPermissions() as Promise<ComputerUsePermissions>,
+    requestLocalMacosPermissions: async () => app.computerUse.requestLocalMacosPermissions() as Promise<ComputerUsePermissionRequestResult>,
     openLocalMacosPrivacySettings: async (section) => {
-      return legion.computerUse.openLocalMacosPrivacySettings(section) as Promise<OpenPrivacySettingsResult>;
+      return app.computerUse.openLocalMacosPrivacySettings(section) as Promise<OpenPrivacySettingsResult>;
     },
     requestSingleLocalMacosPermission: async (section) => {
-      return legion.computerUse.requestSingleLocalMacosPermission(section) as Promise<ComputerUsePermissions>;
+      return app.computerUse.requestSingleLocalMacosPermission(section) as Promise<ComputerUsePermissions>;
     },
     probeInputMonitoring: async (timeoutMs) => {
-      const result = await legion.computerUse.probeInputMonitoring(timeoutMs);
+      const result = await app.computerUse.probeInputMonitoring(timeoutMs);
       return result.inputMonitoringGranted;
     },
   }), [sessions, frameHistory, fallbackBanner, dismissFallbackBanner]);

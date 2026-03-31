@@ -1,16 +1,16 @@
 import { z } from 'zod';
 import { BrowserWindow } from 'electron';
 import type { ToolDefinition } from './types.js';
-import type { LegionConfig } from '../config/schema.js';
-import { persistLegionModelsToLegion, readEffectiveConfig } from '../ipc/config.js';
+import type { AppConfig } from '../config/schema.js';
+import { persistAppModels, readEffectiveConfig } from '../ipc/config.js';
 
-function readConfig(legionHome: string): LegionConfig {
-  return readEffectiveConfig(legionHome);
+function readConfig(appHome: string): AppConfig {
+  return readEffectiveConfig(appHome);
 }
 
-export function createModelSwitchTool(legionHome: string): ToolDefinition {
+export function createModelSwitchTool(appHome: string): ToolDefinition {
   // Read catalog at creation time to build a strict enum
-  const config = readConfig(legionHome);
+  const config = readConfig(appHome);
   const catalog = config.models.catalog;
   const modelKeys = catalog.map((m) => m.key) as [string, ...string[]];
   const modelDescriptions = catalog.map((m) => `"${m.key}" (${m.displayName})`).join(', ');
@@ -28,7 +28,7 @@ export function createModelSwitchTool(legionHome: string): ToolDefinition {
     execute: async (input) => {
       const { model_key } = input as { model_key: string };
 
-      const currentConfig = readConfig(legionHome);
+      const currentConfig = readConfig(appHome);
       const entry = currentConfig.models.catalog.find((m) => m.key === model_key);
       if (!entry) {
         const available = currentConfig.models.catalog.map((m) => m.key).join(', ');
@@ -38,7 +38,7 @@ export function createModelSwitchTool(legionHome: string): ToolDefinition {
       const previousKey = currentConfig.models.defaultModelKey;
       const previousEntry = currentConfig.models.catalog.find((m) => m.key === previousKey);
 
-      persistLegionModelsToLegion('models.defaultModelKey', model_key, currentConfig);
+      persistAppModels('models.defaultModelKey', model_key, currentConfig);
 
       // Notify renderer to update the active model selector
       for (const win of BrowserWindow.getAllWindows()) {

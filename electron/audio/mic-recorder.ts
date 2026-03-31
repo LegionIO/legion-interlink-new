@@ -18,7 +18,7 @@ let isRecording = false;
 
 function getRecorderHtmlPath(): string {
   // Always rewrite the HTML to ensure it's up-to-date with the current code
-  const dir = join(tmpdir(), 'legion-interlink-mic');
+  const dir = join(tmpdir(), __BRAND_APP_SLUG + '-mic');
   mkdirSync(dir, { recursive: true });
   const htmlPath = join(dir, 'recorder.html');
   writeFileSync(htmlPath, RECORDER_HTML, 'utf-8');

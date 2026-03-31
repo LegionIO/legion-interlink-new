@@ -6,7 +6,7 @@ import {
   CheckCircle2Icon,
   WifiOffIcon,
 } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import { Toggle, settingsSelectClass, type SettingsProps } from './shared';
 
 type DaemonSettingsData = Record<string, unknown>;
@@ -20,13 +20,13 @@ export const DaemonSettings: FC<SettingsProps> = ({ config, updateConfig }) => {
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveError, setSaveError] = useState('');
 
-  const daemonUrl = (config.runtime as { legion?: { daemonUrl?: string } })?.legion?.daemonUrl || 'http://127.0.0.1:4567';
+  const daemonUrl = (config.runtime as { daemon?: { daemonUrl?: string } })?.daemon?.daemonUrl || 'http://127.0.0.1:4567';
 
   const fetchSettings = useCallback(async () => {
     setLoadState('loading');
     setLoadError('');
     try {
-      const result = await legion.daemon.settings() as { ok: boolean; settings?: DaemonSettingsData; error?: string };
+      const result = await app.daemon.settings() as { ok: boolean; settings?: DaemonSettingsData; error?: string };
       if (result.ok && result.settings) {
         setSettings(result.settings);
         setLoadState('loaded');
@@ -48,7 +48,7 @@ export const DaemonSettings: FC<SettingsProps> = ({ config, updateConfig }) => {
     setSaveState('saving');
     setSaveError('');
     try {
-      const result = await legion.daemon.settingsUpdate(key, value) as { ok: boolean; error?: string };
+      const result = await app.daemon.settingsUpdate(key, value) as { ok: boolean; error?: string };
       if (result.ok) {
         setSaveState('saved');
         setSettings((prev) => prev ? { ...prev, [key]: value } : prev);
@@ -77,7 +77,7 @@ export const DaemonSettings: FC<SettingsProps> = ({ config, updateConfig }) => {
   if (loadState === 'error') {
     return (
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold">Legion Daemon</h3>
+        <h3 className="text-sm font-semibold">Daemon</h3>
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 space-y-3">
           <div className="flex items-start gap-2">
             <WifiOffIcon className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
@@ -105,7 +105,7 @@ export const DaemonSettings: FC<SettingsProps> = ({ config, updateConfig }) => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Legion Daemon</h3>
+        <h3 className="text-sm font-semibold">Daemon</h3>
         <div className="flex items-center gap-3">
           <SaveIndicator state={saveState} error={saveError} />
           <button
@@ -126,8 +126,8 @@ export const DaemonSettings: FC<SettingsProps> = ({ config, updateConfig }) => {
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
-            checked={(config.runtime as { legion?: { daemonStreaming?: boolean } })?.legion?.daemonStreaming !== false}
-            onChange={(e) => updateConfig('runtime.legion.daemonStreaming', e.target.checked)}
+            checked={(config.runtime as { daemon?: { daemonStreaming?: boolean } })?.daemon?.daemonStreaming !== false}
+            onChange={(e) => updateConfig('runtime.daemon.daemonStreaming', e.target.checked)}
             className="rounded"
           />
           <span className="text-xs">Enable SSE streaming</span>
@@ -292,7 +292,7 @@ const CacheSection: FC<{ settings: DaemonSettingsData }> = ({ settings }) => {
   const connected = asBool(cache.connected);
   const poolSize = asNumber(cache.pool_size, 10);
   const timeout = asNumber(cache.timeout, 5);
-  const namespace = asString(cache.namespace, 'legion');
+  const namespace = asString(cache.namespace, __BRAND_APP_SLUG);
   const compress = asBool(cache.compress);
   const failover = asBool(cache.failover);
 
@@ -356,7 +356,7 @@ const TransportSection: FC<{ settings: DaemonSettingsData }> = ({ settings }) =>
       </div>
 
       <p className="text-[10px] text-muted-foreground italic">
-        Transport settings are read-only. Edit ~/.legionio/settings/transport.json directly.
+        Transport settings are read-only. Edit ~/.{__BRAND_APP_SLUG}/settings/transport.json directly.
       </p>
     </fieldset>
   );
@@ -424,7 +424,7 @@ const CryptSection: FC<{ settings: DaemonSettingsData }> = ({ settings }) => {
       </fieldset>
 
       <p className="text-[10px] text-muted-foreground italic">
-        Crypt settings are read-only. Edit ~/.legionio/settings/crypt.json directly.
+        Crypt settings are read-only. Edit ~/.{__BRAND_APP_SLUG}/settings/crypt.json directly.
       </p>
     </fieldset>
   );

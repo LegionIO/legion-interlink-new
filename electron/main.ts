@@ -18,21 +18,21 @@ import { registerPluginHandlers } from './ipc/plugins.js';
 import { registerMicRecorderHandlers, cleanupMicRecorder } from './audio/mic-recorder.js';
 import { registerLiveSttHandlers } from './audio/live-stt.js';
 import { registerRealtimeHandlers, updateActiveRealtimeSessionTools } from './ipc/realtime.js';
-import type { LegionConfig } from './config/schema.js';
+import type { AppConfig } from './config/schema.js';
 import { registerComputerUseHandlers } from './ipc/computer-use.js';
 import { registerKnowledgeHandlers } from './ipc/knowledge.js';
 import { registerClipboardHandlers } from './ipc/clipboard.js';
 import { closeAllOverlayWindows } from './computer-use/overlay-window.js';
 
-const LEGION_HOME = join(homedir(), '.legionio');
+const APP_HOME = join(homedir(), '.' + __BRAND_APP_SLUG);
 
-// Set app name early so macOS menu bar and dock show "Legion Interlink" instead of "Electron"
-app.setName('Legion Interlink');
+// Set app name early so macOS menu bar and dock show the product name instead of "Electron"
+app.setName(__BRAND_PRODUCT_NAME);
 
-// Register legion-media:// as a privileged scheme (must happen before app.whenReady)
+// Register the media protocol as a privileged scheme (must happen before app.whenReady)
 protocol.registerSchemesAsPrivileged([
   {
-    scheme: 'legion-media',
+    scheme: __BRAND_MEDIA_PROTOCOL,
     privileges: {
       standard: true,
       secure: true,
@@ -50,14 +50,14 @@ if (!gotSingleInstanceLock) {
 // Module-level ref for cleanup in before-quit handler
 let pluginManagerRef: PluginManager | null = null;
 
-function ensureLegionHome(): void {
+function ensureAppHome(): void {
   const dirs = [
-    LEGION_HOME,
-    join(LEGION_HOME, 'data'),
-    join(LEGION_HOME, 'settings'),
-    join(LEGION_HOME, 'skills'),
-    join(LEGION_HOME, 'plugins'),
-    join(LEGION_HOME, 'certs'),
+    APP_HOME,
+    join(APP_HOME, 'data'),
+    join(APP_HOME, 'settings'),
+    join(APP_HOME, 'skills'),
+    join(APP_HOME, 'plugins'),
+    join(APP_HOME, 'certs'),
   ];
   for (const dir of dirs) {
     if (!existsSync(dir)) {
@@ -68,7 +68,7 @@ function ensureLegionHome(): void {
 
 function applyTheme(): void {
   try {
-    const config = readEffectiveConfig(LEGION_HOME);
+    const config = readEffectiveConfig(APP_HOME);
     const theme = config?.ui?.theme;
     if (theme === 'dark') nativeTheme.themeSource = 'dark';
     else if (theme === 'light') nativeTheme.themeSource = 'light';
@@ -164,7 +164,7 @@ function createWindow(): BrowserWindow {
     minWidth: 800,
     minHeight: 600,
     show: false,
-    title: 'Legion Interlink',
+    title: __BRAND_PRODUCT_NAME,
     icon: APP_ICON,
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 15, y: 10 },
@@ -323,16 +323,16 @@ if (gotSingleInstanceLock) {
   });
 
   app.whenReady().then(() => {
-    ensureLegionHome();
+    ensureAppHome();
     applyTheme();
     buildMenu();
 
     // Request microphone permission on macOS (needed for speech-to-text dictation)
     if (process.platform === 'darwin') {
       systemPreferences.askForMediaAccess('microphone').then((granted) => {
-        console.info(`[Legion] Microphone permission: ${granted ? 'granted' : 'denied'}`);
+        console.info(`[${__BRAND_PRODUCT_NAME}] Microphone permission: ${granted ? 'granted' : 'denied'}`);
       }).catch((err) => {
-        console.warn('[Legion] Failed to request microphone permission:', err);
+        console.warn(`[${__BRAND_PRODUCT_NAME}] Failed to request microphone permission:`, err);
       });
     }
 
@@ -342,7 +342,7 @@ if (gotSingleInstanceLock) {
     }
 
     // Config reader (used by tools and OAuth)
-    const getConfig = () => readEffectiveConfig(LEGION_HOME);
+    const getConfig = () => readEffectiveConfig(APP_HOME);
 
     // Track last mcpServers fingerprint to detect changes
     let lastMcpFingerprint = JSON.stringify(getConfig().mcpServers ?? []);
@@ -352,18 +352,18 @@ if (gotSingleInstanceLock) {
       updateActiveRealtimeSessionTools(getRegisteredTools());
     };
 
-    const handleConfigChanged = (config: LegionConfig) => {
+    const handleConfigChanged = (config: AppConfig) => {
       // MCP hot-reload
       const newMcpFp = JSON.stringify(config.mcpServers ?? []);
       if (newMcpFp !== lastMcpFingerprint) {
         lastMcpFingerprint = newMcpFp;
-        console.info('[Legion] MCP servers changed, rebuilding...');
+        console.info(`[${__BRAND_PRODUCT_NAME}] MCP servers changed, rebuilding...`);
         rebuildMcpTools(config.mcpServers ?? []).then((mcpTools) => {
           updateMcpTools(mcpTools);
           syncRealtimeTools();
-          console.info(`[Legion] MCP hot-reload complete: ${mcpTools.length} MCP tools`);
+          console.info(`[${__BRAND_PRODUCT_NAME}] MCP hot-reload complete: ${mcpTools.length} MCP tools`);
         }).catch((err) => {
-          console.error('[Legion] MCP hot-reload failed:', err);
+          console.error(`[${__BRAND_PRODUCT_NAME}] MCP hot-reload failed:`, err);
         });
       }
 
@@ -371,11 +371,11 @@ if (gotSingleInstanceLock) {
       const newSkillsFp = JSON.stringify(config.skills?.enabled ?? []);
       if (newSkillsFp !== lastSkillsFingerprint) {
         lastSkillsFingerprint = newSkillsFp;
-        const skillsDir = config.skills?.directory || join(LEGION_HOME, 'skills');
+        const skillsDir = config.skills?.directory || join(APP_HOME, 'skills');
         const skillTools = loadSkillsAsTools(skillsDir, config.skills?.enabled ?? [], getConfig);
         updateSkillTools(skillTools);
         syncRealtimeTools();
-        console.info(`[Legion] Skills hot-reload complete: ${skillTools.length} skill tools`);
+        console.info(`[${__BRAND_PRODUCT_NAME}] Skills hot-reload complete: ${skillTools.length} skill tools`);
       }
 
       // Display list change detection — auto-update maxDimension when allowed displays change
@@ -399,7 +399,7 @@ if (gotSingleInstanceLock) {
               );
               if (maxDim > 0 && maxDim !== config.computerUse?.capture?.maxDimension) {
                 setConfig('computerUse.capture.maxDimension', maxDim);
-                console.info(`[Legion] Auto-updated maxDimension to ${maxDim} for ${enabled.length} enabled displays`);
+                console.info(`[${__BRAND_PRODUCT_NAME}] Auto-updated maxDimension to ${maxDim} for ${enabled.length} enabled displays`);
               }
             } catch {
               // Non-fatal
@@ -413,18 +413,18 @@ if (gotSingleInstanceLock) {
     };
 
     // Register IPC handlers
-    const { setConfig } = registerConfigHandlers(ipcMain, LEGION_HOME, handleConfigChanged);
-    registerAgentHandlers(ipcMain, LEGION_HOME);
-    registerConversationHandlers(ipcMain, LEGION_HOME, getConfig);
+    const { setConfig } = registerConfigHandlers(ipcMain, APP_HOME, handleConfigChanged);
+    registerAgentHandlers(ipcMain, APP_HOME);
+    registerConversationHandlers(ipcMain, APP_HOME, getConfig);
     registerMcpHandlers(ipcMain);
-    registerMemoryHandlers(ipcMain, LEGION_HOME, getConfig);
-    registerSkillsHandlers(ipcMain, LEGION_HOME);
-    registerDaemonSettingsHandlers(ipcMain, LEGION_HOME, getConfig);
-    registerDaemonApiHandlers(ipcMain, LEGION_HOME, getConfig, () => BrowserWindow.getAllWindows());
+    registerMemoryHandlers(ipcMain, APP_HOME, getConfig);
+    registerSkillsHandlers(ipcMain, APP_HOME);
+    registerDaemonSettingsHandlers(ipcMain, APP_HOME, getConfig);
+    registerDaemonApiHandlers(ipcMain, APP_HOME, getConfig, () => BrowserWindow.getAllWindows());
     registerMicRecorderHandlers(ipcMain);
     registerLiveSttHandlers(ipcMain);
-    registerComputerUseHandlers(ipcMain, LEGION_HOME, getConfig);
-    registerKnowledgeHandlers(ipcMain, LEGION_HOME, getConfig);
+    registerComputerUseHandlers(ipcMain, APP_HOME, getConfig);
+    registerKnowledgeHandlers(ipcMain, APP_HOME, getConfig);
     registerClipboardHandlers(ipcMain);
 
     // Auto-seed computer use display settings on startup.
@@ -450,16 +450,16 @@ if (gotSingleInstanceLock) {
         if (maxDim > 0) {
           setConfig('computerUse.capture.maxDimension', maxDim);
         }
-        console.info(`[Legion] Auto-seeded ${allNames.length} displays, maxDimension=${maxDim}`);
+        console.info(`[${__BRAND_PRODUCT_NAME}] Auto-seeded ${allNames.length} displays, maxDimension=${maxDim}`);
       } catch (err) {
-        console.warn('[Legion] Display auto-seed failed (non-fatal):', err);
+        console.warn(`[${__BRAND_PRODUCT_NAME}] Display auto-seed failed (non-fatal):`, err);
       }
     })();
 
     // Plugin system
     const pluginManager = new PluginManager(
-      join(LEGION_HOME, 'plugins'),
-      LEGION_HOME,
+      join(APP_HOME, 'plugins'),
+      APP_HOME,
       getConfig,
       setConfig, // Unified setConfig that handles models.* persistence correctly
     );
@@ -474,9 +474,9 @@ if (gotSingleInstanceLock) {
 
     // Load plugins (async — required plugins will show blocking modals when renderer loads)
     pluginManager.loadAll().then(() => {
-      console.info(`[Legion] ${pluginManager.getPluginCount()} plugins loaded`);
+      console.info(`[${__BRAND_PRODUCT_NAME}] ${pluginManager.getPluginCount()} plugins loaded`);
     }).catch((err) => {
-      console.error('[Legion] Plugin loading failed:', err);
+      console.error(`[${__BRAND_PRODUCT_NAME}] Plugin loading failed:`, err);
     });
 
     // File dialog handler
@@ -609,13 +609,13 @@ if (gotSingleInstanceLock) {
       }
     });
 
-    // Register legion-media:// protocol to serve generated media files from disk
+    // Register media protocol to serve generated media files from disk
     // This avoids CSP/file:// restrictions in the renderer
-    const mediaDir = join(LEGION_HOME, 'media');
-    protocol.handle('legion-media', (request) => {
-      // URL format: legion-media://images/filename.png or legion-media://videos/filename.mp4
+    const mediaDir = join(APP_HOME, 'media');
+    protocol.handle(__BRAND_MEDIA_PROTOCOL, (request) => {
+      // URL format: <protocol>://images/filename.png or <protocol>://videos/filename.mp4
       // Strip query string (e.g. cache-busters like ?_r=1) before resolving the file path
-      const rawPath = request.url.replace('legion-media://', '').split('?')[0];
+      const rawPath = request.url.replace(__BRAND_MEDIA_PROTOCOL + '://', '').split('?')[0];
       const urlPath = decodeURIComponent(rawPath);
       const filePath = join(mediaDir, urlPath);
 
@@ -645,16 +645,16 @@ if (gotSingleInstanceLock) {
     createWindow();
 
     // Initialize tools asynchronously
-    buildToolRegistry(getConfig, LEGION_HOME).then((tools) => {
+    buildToolRegistry(getConfig, APP_HOME).then((tools) => {
       const pluginTools = pluginManager.getAllPluginTools();
       const allTools = [...tools, ...pluginTools];
       registerTools(allTools);
-      console.info(`[Legion] ${tools.length} tools + ${pluginTools.length} plugin tools registered`);
+      console.info(`[${__BRAND_PRODUCT_NAME}] ${tools.length} tools + ${pluginTools.length} plugin tools registered`);
 
       // Register realtime handlers (needs tool registry)
-      registerRealtimeHandlers(ipcMain, getConfig, getRegisteredTools, LEGION_HOME);
+      registerRealtimeHandlers(ipcMain, getConfig, getRegisteredTools, APP_HOME);
     }).catch((err) => {
-      console.error('[Legion] Failed to build tool registry:', err);
+      console.error(`[${__BRAND_PRODUCT_NAME}] Failed to build tool registry:`, err);
     });
 
     app.on('activate', () => {
@@ -674,7 +674,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   // Best-effort plugin cleanup (don't block quit on failures)
   pluginManagerRef?.unloadAll().catch((err) => {
-    console.error('[Legion] Plugin cleanup error:', err);
+    console.error(`[${__BRAND_PRODUCT_NAME}] Plugin cleanup error:`, err);
   });
   cleanupMicRecorder();
   closeAllOverlayWindows();

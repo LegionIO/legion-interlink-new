@@ -1,4 +1,4 @@
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import type { ComputerUseSupport, ComputerUseTarget } from '../../shared/computer-use.js';
 
 export type LLMProviderType = 'openai-compatible' | 'anthropic' | 'amazon-bedrock' | 'google';
@@ -33,7 +33,7 @@ export type ModelCatalogEntry = {
   preferredTarget?: ComputerUseTarget;
 };
 
-export function resolveModelCatalog(config: LegionConfig): {
+export function resolveModelCatalog(config: AppConfig): {
   entries: ModelCatalogEntry[];
   defaultEntry: ModelCatalogEntry | null;
   byKey: Map<string, ModelCatalogEntry>;
@@ -85,7 +85,7 @@ export function resolveModelCatalog(config: LegionConfig): {
 }
 
 export function resolveModelForThread(
-  config: LegionConfig,
+  config: AppConfig,
   threadModelKey: string | null,
 ): ModelCatalogEntry | null {
   const catalog = resolveModelCatalog(config);
@@ -111,7 +111,7 @@ export type ResolvedStreamConfig = {
 };
 
 export function resolveStreamConfig(
-  config: LegionConfig,
+  config: AppConfig,
   opts: {
     threadModelKey: string | null;
     threadProfileKey: string | null;

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, type FC } from 'react';
 import { ChevronDownIcon, ChevronRightIcon, XIcon } from 'lucide-react';
 import { NumberField, Toggle, settingsSelectClass, type SettingsProps } from './shared';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 type ComputerUseConfig = {
   enabled: boolean;
@@ -69,7 +69,7 @@ const AppListPicker: FC<{
 
   const refreshApps = useCallback(() => {
     setIsLoading(true);
-    void legion.computerUse.listRunningApps().then(({ apps }) => {
+    void app.computerUse.listRunningApps().then(({ apps }) => {
       setRunningApps(apps);
     }).catch(() => {}).finally(() => setIsLoading(false));
   }, []);
@@ -251,7 +251,7 @@ const DisplayListPicker: FC<{
 
   const refreshDisplays = useCallback(() => {
     setIsLoading(true);
-    void legion.computerUse.listDisplays().then(({ displays: found }) => {
+    void app.computerUse.listDisplays().then(({ displays: found }) => {
       setDisplays(found);
 
       const currentValue = valueRef.current;
@@ -508,7 +508,7 @@ export const ComputerUseSettings: FC<SettingsProps> = ({ config, updateConfig })
       <fieldset className="rounded-lg border p-3 space-y-3">
         <legend className="text-xs font-semibold px-1">Local Mac</legend>
         <div className="rounded-md border border-border/60 bg-card/50 px-3 py-2 text-xs text-muted-foreground">
-          Requires macOS Accessibility, Screen Recording, and Automation permissions. Interlink can request these automatically when a session starts.
+          Requires macOS Accessibility, Screen Recording, and Automation permissions. {__BRAND_PRODUCT_NAME} can request these automatically when a session starts.
         </div>
         <div className="grid grid-cols-2 gap-2">
           <Toggle label="Auto-request permissions" checked={computerUse.localMacos.autoRequestPermissions} onChange={(value) => updateConfig('computerUse.localMacos.autoRequestPermissions', value)} />

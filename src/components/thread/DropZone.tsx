@@ -92,7 +92,7 @@ export const DropZone: FC<{ children: ReactNode }> = ({ children }) => {
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-primary/50 bg-primary/5 px-12 py-10">
             <UploadIcon className="h-10 w-10 text-primary/60" />
-            <span className="text-lg font-medium text-primary/80">Drop files for <span className="legion-gradient-text font-bold">Legion Interlink</span></span>
+            <span className="text-lg font-medium text-primary/80">{__BRAND_DROP_ZONE_TEXT}</span>
             <span className="text-xs text-muted-foreground">Images, documents, code files</span>
           </div>
         </div>

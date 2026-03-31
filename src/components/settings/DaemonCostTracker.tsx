@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, type FC } from 'react';
 import { DollarSignIcon, TrendingUpIcon, AlertTriangleIcon, BarChart3Icon, RefreshCwIcon, Loader2Icon } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 import type { SettingsProps } from './shared';
 
 interface ModelCost {
@@ -115,9 +115,9 @@ export const DaemonCostTracker: FC<SettingsProps> = () => {
     setError(null);
     try {
       const [mRes, modelRes, rollupRes] = await Promise.all([
-        legion.daemon.metering(),
-        legion.daemon.meteringByModel(),
-        legion.daemon.meteringRollup({ period }),
+        app.daemon.metering(),
+        app.daemon.meteringByModel(),
+        app.daemon.meteringRollup({ period }),
       ]);
 
       if (mRes.ok && mRes.data) {
@@ -158,7 +158,7 @@ export const DaemonCostTracker: FC<SettingsProps> = () => {
             <AlertTriangleIcon className="h-4 w-4" />
             <span>{error}</span>
           </div>
-          <p className="mt-2 text-muted-foreground">Make sure the Legion daemon is running and the metering endpoint is available.</p>
+          <p className="mt-2 text-muted-foreground">Make sure the {__BRAND_PRODUCT_NAME} daemon is running and the metering endpoint is available.</p>
         </div>
       </div>
     );

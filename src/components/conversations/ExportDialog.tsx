@@ -1,7 +1,7 @@
 import { useState, useEffect, type FC } from 'react';
 import { DownloadIcon, FileTextIcon, FileJsonIcon, CopyIcon, CheckIcon, XIcon } from 'lucide-react';
 import { copyTextToClipboard, logClipboardError } from '@/lib/clipboard';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 interface Message {
   role: string;
@@ -83,7 +83,7 @@ export const ExportDialog: FC<Props> = ({ open, onClose, conversationId }) => {
 
   useEffect(() => {
     if (!open || !conversationId) return;
-    void legion.conversations.get(conversationId).then((c) => {
+    void app.conversations.get(conversationId).then((c) => {
       setConv(c as Conversation);
     });
   }, [open, conversationId]);

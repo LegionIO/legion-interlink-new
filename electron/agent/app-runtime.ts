@@ -1,6 +1,6 @@
 import { existsSync, realpathSync } from 'fs';
 import { join, resolve } from 'path';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import { resolveDaemonUrl, resolveAuthToken } from '../lib/daemon-client.js';
 import type { LLMModelConfig } from './model-catalog.js';
 import type { StreamEvent } from './mastra-agent.js';
@@ -12,7 +12,7 @@ type RuntimeMessage = {
   content: unknown;
 };
 
-export type LegionStatus = {
+export type AppStatus = {
   backend: AgentBackend;
   daemon: {
     ok: boolean;
@@ -23,59 +23,59 @@ export type LegionStatus = {
   };
 };
 
-export type LegionRuntimeDetection = {
+export type AppRuntimeDetection = {
   configDir: string;
   daemonUrl: string;
   rubyPath: string;
 };
 
-type StreamLegionOptions = {
+type StreamAppOptions = {
   conversationId: string;
   messages: unknown[];
   modelConfig: LLMModelConfig;
-  config: LegionConfig;
-  legionHome: string;
+  config: AppConfig;
+  appHome: string;
   abortSignal?: AbortSignal;
   reasoningEffort?: string;
 };
 
-type RuntimeConfig = NonNullable<LegionConfig['runtime']>;
+type RuntimeConfig = NonNullable<AppConfig['runtime']>;
 
-function runtimeConfig(config: LegionConfig): RuntimeConfig {
+function runtimeConfig(config: AppConfig): RuntimeConfig {
   const runtime = config.runtime ?? {
     agentBackend: 'mastra',
-    legion: { rootPath: '', configDir: '', daemonUrl: 'http://127.0.0.1:4567', rubyPath: '' },
+    daemon: { rootPath: '', configDir: '', daemonUrl: 'http://127.0.0.1:4567', rubyPath: '' },
   };
   return {
     agentBackend: runtime.agentBackend ?? 'mastra',
-    legion: {
-      rootPath: runtime.legion?.rootPath ?? '',
-      configDir: runtime.legion?.configDir ?? '',
-      daemonUrl: runtime.legion?.daemonUrl ?? 'http://127.0.0.1:4567',
-      rubyPath: runtime.legion?.rubyPath ?? '',
+    daemon: {
+      rootPath: runtime.daemon?.rootPath ?? '',
+      configDir: runtime.daemon?.configDir ?? '',
+      daemonUrl: runtime.daemon?.daemonUrl ?? 'http://127.0.0.1:4567',
+      rubyPath: runtime.daemon?.rubyPath ?? '',
     },
   };
 }
 
-type InstalledLegionEnvironment = {
-  legionBin: string;
+type InstalledAppEnvironment = {
+  appBin: string;
   rubyPath: string;
   env: NodeJS.ProcessEnv;
 };
 
-function installedLegionCandidates(): string[] {
+function installedAppCandidates(): string[] {
   return [
     '/opt/homebrew/bin/legion',
     '/usr/local/bin/legion',
   ];
 }
 
-function detectInstalledLegionEnvironment(): InstalledLegionEnvironment | null {
-  const legionBin = installedLegionCandidates().find((candidate) => existsSync(candidate));
-  if (!legionBin) return null;
+function detectInstalledAppEnvironment(): InstalledAppEnvironment | null {
+  const appBin = installedAppCandidates().find((candidate) => existsSync(candidate));
+  if (!appBin) return null;
 
   try {
-    const realBin = realpathSync(legionBin);
+    const realBin = realpathSync(appBin);
     const cellarRoot = resolve(realBin, '..', '..');
     const libexecRoot = join(cellarRoot, 'libexec');
     const rubyPath = join(libexecRoot, 'bin', 'ruby');
@@ -89,7 +89,7 @@ function detectInstalledLegionEnvironment(): InstalledLegionEnvironment | null {
     const dyldFallback = join(libexecRoot, 'libexec');
 
     return {
-      legionBin,
+      appBin,
       rubyPath,
       env: {
         ...process.env,
@@ -105,18 +105,18 @@ function detectInstalledLegionEnvironment(): InstalledLegionEnvironment | null {
   }
 }
 
-function resolveLegionConfigDir(config: LegionConfig, legionHome: string): string {
-  const configured = runtimeConfig(config).legion.configDir.trim();
+function resolveAppConfigDir(config: AppConfig, appHome: string): string {
+  const configured = runtimeConfig(config).daemon.configDir.trim();
   if (configured) return resolve(configured);
-  return join(legionHome, 'settings');
+  return join(appHome, 'settings');
 }
 
 
-function resolveRubyPath(config: LegionConfig): string {
-  const configured = runtimeConfig(config).legion.rubyPath.trim();
+function resolveRubyPath(config: AppConfig): string {
+  const configured = runtimeConfig(config).daemon.rubyPath.trim();
   if (configured) return configured;
 
-  const installed = detectInstalledLegionEnvironment();
+  const installed = detectInstalledAppEnvironment();
   if (installed?.rubyPath) return installed.rubyPath;
 
   const preferred = rubyPathCandidates().find((candidate) => candidate !== 'ruby' && existsSync(candidate));
@@ -212,11 +212,11 @@ function normalizeDaemonEventName(eventName: string | undefined, payload: Record
   return typeof payloadType === 'string' ? payloadType.trim() : '';
 }
 
-async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator<StreamEvent> {
+async function* streamDaemonApp(options: StreamAppOptions): AsyncGenerator<StreamEvent> {
   const daemonUrl = resolveDaemonUrl(options.config);
   const readyUrl = new URL('/api/ready', daemonUrl).toString();
   const inferenceUrl = new URL('/api/llm/inference', daemonUrl).toString();
-  const authToken = resolveAuthToken(options.config, options.legionHome);
+  const authToken = resolveAuthToken(options.config, options.appHome);
 
   let readyResponse: Response;
   try {
@@ -227,7 +227,7 @@ async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator
     yield {
       conversationId: options.conversationId,
       type: 'error',
-      error: `Legion daemon not running at ${daemonUrl}: ${error instanceof Error ? error.message : String(error)}`,
+      error: `${__BRAND_PRODUCT_NAME} daemon not running at ${daemonUrl}: ${error instanceof Error ? error.message : String(error)}`,
     };
     yield { conversationId: options.conversationId, type: 'done' };
     return;
@@ -237,7 +237,7 @@ async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator
     yield {
       conversationId: options.conversationId,
       type: 'error',
-      error: `Legion daemon is not ready at ${daemonUrl}.`,
+      error: `${__BRAND_PRODUCT_NAME} daemon is not ready at ${daemonUrl}.`,
     };
     yield { conversationId: options.conversationId, type: 'done' };
     return;
@@ -248,7 +248,7 @@ async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator
     yield {
       conversationId: options.conversationId,
       type: 'error',
-      error: 'No user message was provided to Legion.',
+      error: 'No user message was provided to ' + __BRAND_PRODUCT_NAME + '.',
     };
     yield { conversationId: options.conversationId, type: 'done' };
     return;
@@ -256,9 +256,9 @@ async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator
 
   // Let the daemon use its own model/provider defaults.
   // Only forward model/provider if explicitly configured for daemon override.
-  const legionRuntime = options.config.runtime?.legion as Record<string, unknown> | undefined;
-  const daemonModelOverride = legionRuntime?.model as string | undefined;
-  const daemonProviderOverride = legionRuntime?.provider as string | undefined;
+  const daemonRuntime = options.config.runtime?.daemon as Record<string, unknown> | undefined;
+  const daemonModelOverride = daemonRuntime?.model as string | undefined;
+  const daemonProviderOverride = daemonRuntime?.provider as string | undefined;
   const requestBody: Record<string, unknown> = {
     messages: normalizedMessages,
     ...(daemonModelOverride ? { model: daemonModelOverride } : {}),
@@ -278,7 +278,7 @@ async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator
     requestBody.knowledge_scope = knowledgeConfig.scope;
   }
 
-  const useStreaming = options.config.runtime?.legion?.daemonStreaming !== false;
+  const useStreaming = options.config.runtime?.daemon?.daemonStreaming !== false;
   if (useStreaming) {
     let streamResponse: Response;
     try {
@@ -316,7 +316,7 @@ async function* streamDaemonLegion(options: StreamLegionOptions): AsyncGenerator
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      'x-legion-sync': 'true',
+      ['x-' + __BRAND_APP_SLUG + '-sync']: 'true',
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     },
     body: JSON.stringify(requestBody),
@@ -556,7 +556,7 @@ async function* handleDaemonSyncResponse(
     yield {
       conversationId,
       type: 'error',
-      error: 'Legion daemon accepted the request asynchronously but returned no task_id for polling.',
+      error: __BRAND_PRODUCT_NAME + ' daemon accepted the request asynchronously but returned no task_id for polling.',
     };
     yield { conversationId, type: 'done' };
     return;
@@ -566,9 +566,9 @@ async function* handleDaemonSyncResponse(
     const errorMessage = (
       data.error?.message
       || (response.status === 401 || response.status === 403
-        ? 'Legion daemon rejected the desktop request. Make sure daemon auth is configured or that the local cluster secret is readable from your Legion config dir.'
+        ? __BRAND_PRODUCT_NAME + ' daemon rejected the desktop request. Make sure daemon auth is configured or that the local cluster secret is readable from your config dir.'
         : undefined)
-      || `Legion daemon request failed with HTTP ${response.status}.`
+      || `${__BRAND_PRODUCT_NAME} daemon request failed with HTTP ${response.status}.`
     );
     yield { conversationId, type: 'error', error: errorMessage };
     yield { conversationId, type: 'done' };
@@ -586,7 +586,7 @@ async function* handleDaemonSyncResponse(
     yield {
       conversationId,
       type: 'error',
-      error: `Legion daemon returned an unexpected payload from ${chatUrl}.`,
+      error: `${__BRAND_PRODUCT_NAME} daemon returned an unexpected payload from ${chatUrl}.`,
     };
   }
   yield { conversationId, type: 'done' };
@@ -669,29 +669,29 @@ async function* pollDaemonTask(
   yield { conversationId, type: 'done' };
 }
 
-export async function resolveAgentBackend(config: LegionConfig): Promise<AgentBackend> {
+export async function resolveAgentBackend(config: AppConfig): Promise<AgentBackend> {
   const daemon = await runDaemonHealthCheck(config);
   return daemon.ok ? 'legion-daemon' : 'mastra';
 }
 
-export function detectLegionRuntime(config: LegionConfig, legionHome: string): LegionRuntimeDetection {
+export function detectAppRuntime(config: AppConfig, appHome: string): AppRuntimeDetection {
   void config;
   return {
-    configDir: resolveLegionConfigDir(config, legionHome),
+    configDir: resolveAppConfigDir(config, appHome),
     daemonUrl: resolveDaemonUrl(config),
     rubyPath: resolveRubyPath(config),
   };
 }
 
-export async function* streamLegionAgent(options: StreamLegionOptions): AsyncGenerator<StreamEvent> {
+export async function* streamAppAgent(options: StreamAppOptions): AsyncGenerator<StreamEvent> {
   if (await resolveAgentBackend(options.config) === 'legion-daemon') {
-    yield* streamDaemonLegion(options);
+    yield* streamDaemonApp(options);
     return;
   }
-  throw new Error('Legion runtime should not be used when the daemon is unavailable.');
+  throw new Error(__BRAND_PRODUCT_NAME + ' runtime should not be used when the daemon is unavailable.');
 }
 
-async function runDaemonHealthCheck(config: LegionConfig): Promise<LegionStatus['daemon']> {
+async function runDaemonHealthCheck(config: AppConfig): Promise<AppStatus['daemon']> {
   const daemonUrl = resolveDaemonUrl(config);
   const readyUrl = new URL('/api/ready', daemonUrl).toString();
 
@@ -713,7 +713,7 @@ async function runDaemonHealthCheck(config: LegionConfig): Promise<LegionStatus[
       status: 'not_ready',
       url: daemonUrl,
       details,
-      error: `Legion daemon responded with HTTP ${response.status}.`,
+      error: `${__BRAND_PRODUCT_NAME} daemon responded with HTTP ${response.status}.`,
     };
   } catch (error) {
     return {
@@ -725,8 +725,8 @@ async function runDaemonHealthCheck(config: LegionConfig): Promise<LegionStatus[
   }
 }
 
-export async function getLegionStatus(config: LegionConfig, legionHome: string): Promise<LegionStatus> {
-  void legionHome;
+export async function getAppStatus(config: AppConfig, appHome: string): Promise<AppStatus> {
+  void appHome;
   const daemon = await runDaemonHealthCheck(config);
 
   return {

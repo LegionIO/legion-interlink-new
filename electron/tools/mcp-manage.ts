@@ -1,15 +1,15 @@
 import { z } from 'zod';
 import type { ToolDefinition } from './types.js';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import { readEffectiveConfig, writeDesktopConfig } from '../ipc/config.js';
 
-type McpServer = LegionConfig['mcpServers'][number];
+type McpServer = AppConfig['mcpServers'][number];
 
-function readConfig(legionHome: string): LegionConfig {
-  return readEffectiveConfig(legionHome);
+function readConfig(appHome: string): AppConfig {
+  return readEffectiveConfig(appHome);
 }
 
-export function createMcpManageTool(legionHome: string): ToolDefinition {
+export function createMcpManageTool(appHome: string): ToolDefinition {
   return {
     name: 'mcp_servers',
     description: [
@@ -37,7 +37,7 @@ export function createMcpManageTool(legionHome: string): ToolDefinition {
         enabled?: boolean;
       };
 
-      const config = readConfig(legionHome);
+      const config = readConfig(appHome);
       const servers: McpServer[] = config.mcpServers ?? [];
 
       switch (action) {
@@ -67,7 +67,7 @@ export function createMcpManageTool(legionHome: string): ToolDefinition {
           if (env && Object.keys(env).length > 0) newServer.env = env;
 
           config.mcpServers = [...servers, newServer];
-          writeDesktopConfig(legionHome, config);
+          writeDesktopConfig(appHome, config);
           return { success: true, added: newServer, note: 'Tools from this server will be available on your next turn.' };
         }
 
@@ -86,7 +86,7 @@ export function createMcpManageTool(legionHome: string): ToolDefinition {
 
           config.mcpServers = [...servers];
           config.mcpServers[idx] = updated;
-          writeDesktopConfig(legionHome, config);
+          writeDesktopConfig(appHome, config);
           return { success: true, changed: { previous, new: updated }, note: 'Changes take effect on your next turn.' };
         }
 
@@ -97,7 +97,7 @@ export function createMcpManageTool(legionHome: string): ToolDefinition {
 
           const deleted = servers.find((s) => s.name === name);
           config.mcpServers = servers.filter((s) => s.name !== name);
-          writeDesktopConfig(legionHome, config);
+          writeDesktopConfig(appHome, config);
           return { success: true, deleted, note: 'Server tools removed. Changes take effect on your next turn.' };
         }
 
@@ -111,7 +111,7 @@ export function createMcpManageTool(legionHome: string): ToolDefinition {
           const nowEnabled = action === 'enable';
           config.mcpServers = [...servers];
           config.mcpServers[i] = { ...servers[i], enabled: nowEnabled };
-          writeDesktopConfig(legionHome, config);
+          writeDesktopConfig(appHome, config);
           return { success: true, changed: { server: name, previous: { enabled: wasEnabled }, new: { enabled: nowEnabled } }, note: 'Changes take effect on your next turn.' };
         }
 

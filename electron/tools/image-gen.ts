@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import type { ToolDefinition } from './types.js';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import { resolveMediaGenEndpoint, saveMediaToFile, filePathToUrl } from './media-gen-utils.js';
 
-export function createImageGenTool(getConfig: () => LegionConfig, legionHome: string): ToolDefinition {
+export function createImageGenTool(getConfig: () => AppConfig, appHome: string): ToolDefinition {
   return {
     name: 'generate_image',
     description:
@@ -71,7 +71,7 @@ export function createImageGenTool(getConfig: () => LegionConfig, legionHome: st
         for (const item of result.data) {
           if (item.b64_json) {
             const buffer = Buffer.from(item.b64_json, 'base64');
-            const filePath = saveMediaToFile(buffer, 'images', ext, legionHome);
+            const filePath = saveMediaToFile(buffer, 'images', ext, appHome);
             images.push({
               filePath,
               url: filePathToUrl(filePath),
@@ -83,7 +83,7 @@ export function createImageGenTool(getConfig: () => LegionConfig, legionHome: st
               const imgResponse = await fetch(item.url, { signal: AbortSignal.timeout(30000) });
               if (imgResponse.ok) {
                 const buffer = Buffer.from(await imgResponse.arrayBuffer());
-                const filePath = saveMediaToFile(buffer, 'images', ext, legionHome);
+                const filePath = saveMediaToFile(buffer, 'images', ext, appHome);
                 images.push({
                   filePath,
                   url: filePathToUrl(filePath),

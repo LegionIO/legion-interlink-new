@@ -22,16 +22,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div style={{ padding: 40, fontFamily: 'system-ui, monospace', backgroundColor: '#120f29', color: '#f4efff', height: '100vh', overflow: 'auto' }}>
           <h2 style={{ marginBottom: 16 }}>
-            <span style={{
-              background: 'linear-gradient(135deg, rgba(255,255,255,0.96), rgba(197,194,245,0.96) 30%, rgba(160,154,232,0.96) 65%, rgba(127,119,221,0.9))',
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              fontWeight: 'bold',
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              textShadow: '0 0 18px rgba(160, 154, 232, 0.18)',
-            }}>Legion Interlink</span> encountered an error
+            {__BRAND_ERROR_BOUNDARY_TEXT}
           </h2>
           <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12, lineHeight: 1.5, color: '#d9d0ff' }}>
             {this.state.error.message}

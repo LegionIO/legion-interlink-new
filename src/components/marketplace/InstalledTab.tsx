@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, type FC } from 'react';
 import { Loader2Icon, PuzzleIcon, RefreshCwIcon, TrashIcon, PlayIcon, PauseIcon, SettingsIcon, ChevronDownIcon } from 'lucide-react';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 interface Extension {
   name: string;
@@ -20,7 +20,7 @@ export const InstalledTab: FC = () => {
 
   const fetchInstalled = useCallback(async () => {
     setLoading(true);
-    const res = await legion.daemon.catalog();
+    const res = await app.daemon.catalog();
     if (res.ok && res.data) {
       const data = Array.isArray(res.data) ? res.data : [];
       setExtensions(data as Extension[]);
@@ -40,12 +40,12 @@ export const InstalledTab: FC = () => {
   const handleToggle = (ext: Extension) => {
     const isActive = ext.state === 'active' || ext.state === 'running';
     withAction(ext.name, () =>
-      isActive ? legion.daemon.extensionDisable(ext.name) : legion.daemon.extensionEnable(ext.name)
+      isActive ? app.daemon.extensionDisable(ext.name) : app.daemon.extensionEnable(ext.name)
     );
   };
 
   const handleUninstall = (ext: Extension) => {
-    withAction(ext.name, () => legion.daemon.extensionUninstall(ext.name));
+    withAction(ext.name, () => app.daemon.extensionUninstall(ext.name));
   };
 
   const handleExpand = async (ext: Extension) => {
@@ -55,7 +55,7 @@ export const InstalledTab: FC = () => {
       return;
     }
     setExpanded(ext.name);
-    const res = await legion.daemon.extensionConfig(ext.name);
+    const res = await app.daemon.extensionConfig(ext.name);
     if (res.ok && res.data) {
       setConfigData(res.data as Record<string, unknown>);
     } else {

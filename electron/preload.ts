@@ -5,9 +5,9 @@ import type {
   ComputerUseSurface,
 } from '../shared/computer-use.js';
 
-export type LegionAPI = typeof legionAPI;
+export type AppAPI = typeof appAPI;
 
-const legionAPI = {
+const appAPI = {
   // Config
   config: {
     get: () => ipcRenderer.invoke('config:get'),
@@ -34,8 +34,8 @@ const legionAPI = {
       ipcRenderer.invoke('agent:cancel-stream', conversationId),
     generateTitle: (messages: unknown[], modelKey?: string) =>
       ipcRenderer.invoke('agent:generate-title', messages, modelKey),
-    legionStatus: () =>
-      ipcRenderer.invoke('agent:legion-status'),
+    appStatus: () =>
+      ipcRenderer.invoke('agent:app-status'),
     onStreamEvent: (callback: (event: unknown) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
       ipcRenderer.on('agent:stream-event', handler);
@@ -400,4 +400,4 @@ const legionAPI = {
   },
 };
 
-contextBridge.exposeInMainWorld('legion', legionAPI);
+contextBridge.exposeInMainWorld('app', appAPI);

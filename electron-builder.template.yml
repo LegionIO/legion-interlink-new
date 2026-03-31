@@ -1,0 +1,37 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# electron-builder template — DO NOT edit electron-builder.yml by hand.
+#
+# This file is used by `scripts/generate-builder-config.ts` to produce the
+# final electron-builder.yml with values from `branding.config.ts`.
+# Placeholders use {{key}} where key matches a branding config property.
+# ──────────────────────────────────────────────────────────────────────────────
+appId: "{{appId}}"
+productName: "{{productName}}"
+executableName: "{{executableName}}"
+directories:
+  buildResources: build
+  output: dist
+files:
+  - out/**/*
+  - "!**/*.map"
+extraResources:
+  - from: build/bin/LocalMacosHelper
+    to: bin/LocalMacosHelper
+icon: build/icon.icns
+mac:
+  category: "{{macCategory}}"
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.inherit.plist
+  notarize: true
+  extendInfo:
+    CFBundleDisplayName: "{{productName}}"
+    CFBundleName: "{{productName}}"
+    NSMicrophoneUsageDescription: "{{microphoneUsage}}"
+    NSAppleEventsUsageDescription: "{{appleEventsUsage}}"
+    NSScreenCaptureUsageDescription: "{{screenCaptureUsage}}"
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  artifactName: "{{artifactPrefix}}-${version}-arm64.${ext}"

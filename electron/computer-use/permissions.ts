@@ -110,7 +110,7 @@ function resolveHelperRuntimeDir(): string {
   if (app.isReady()) {
     return app.getPath('userData');
   }
-  return join(homedir(), '.legionio');
+  return join(homedir(), '.' + __BRAND_APP_SLUG);
 }
 
 export function resolveMaterializedHelperPath(): string {
@@ -261,7 +261,7 @@ function buildPermissionGuidance(
 ): string | undefined {
   const fragments: string[] = [];
   if (requested.length > 0) {
-    fragments.push('Interlink requested the missing Local Mac permissions automatically.');
+    fragments.push(__BRAND_PRODUCT_NAME + ' requested the missing Local Mac permissions automatically.');
   }
   if (openedSettings.length > 0) {
     fragments.push('System Settings was opened so you can finish the approval flow.');

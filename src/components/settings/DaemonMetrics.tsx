@@ -7,7 +7,7 @@ import {
   ActivityIcon,
 } from 'lucide-react';
 import { type SettingsProps } from './shared';
-import { legion } from '@/lib/ipc-client';
+import { app } from '@/lib/ipc-client';
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
@@ -90,7 +90,7 @@ export const DaemonMetrics: FC<SettingsProps> = () => {
     setLoadState('loading');
     setLoadError('');
     try {
-      const result = await legion.daemon.health();
+      const result = await app.daemon.health();
       if (result.ok) {
         setHealth((result.data as HealthData) ?? {});
         setLoadState('loaded');

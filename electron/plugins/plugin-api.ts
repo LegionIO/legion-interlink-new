@@ -15,13 +15,13 @@ import type {
   PluginHttpRequest,
   PluginHttpResponse,
 } from './types.js';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import type { ToolDefinition } from '../tools/types.js';
 import { buildScopedToolName, getScopedToolPrefix } from '../tools/naming.js';
 import { convertJsonSchemaToZod } from '../tools/skill-loader.js';
 
 type PluginAPICallbacks = {
-  getConfig: () => LegionConfig;
+  getConfig: () => AppConfig;
   setConfig: (path: string, value: unknown) => void;
   onUIStateChanged: () => void;
   onToolsChanged: () => void;
@@ -98,7 +98,7 @@ export function createPluginAPI(
         callbacks.setConfig(`plugins.${manifest.name}.${path}`, value);
       },
 
-      onChanged: (callback: (config: LegionConfig) => void) => {
+      onChanged: (callback: (config: AppConfig) => void) => {
         instance.configChangeListeners.push(callback);
         return () => {
           const idx = instance.configChangeListeners.indexOf(callback);

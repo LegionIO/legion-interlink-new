@@ -14,7 +14,7 @@ import type { SubAgentEvent } from '../agent/sub-agent-runner.js';
 import { streamAgentResponse } from '../agent/mastra-agent.js';
 import type { LLMModelConfig } from '../agent/model-catalog.js';
 import { resolveModelForThread } from '../agent/model-catalog.js';
-import type { LegionConfig } from '../config/schema.js';
+import type { AppConfig } from '../config/schema.js';
 import type { ToolDefinition, ToolExecutionContext } from './types.js';
 
 /** Follow-up message queues keyed by subAgentConversationId */
@@ -26,7 +26,7 @@ const toolCallToSubAgent = new Map<string, string>();
 /** Persisted sub-agent conversation state for resumption */
 const subAgentState = new Map<string, {
   messages: Array<{ role: string; content: unknown }>;
-  config: LegionConfig;
+  config: AppConfig;
   modelConfig: LLMModelConfig;
   tools: ToolDefinition[];
   dbPath: string;
@@ -169,8 +169,8 @@ export function getActiveSubAgentIds(): string[] {
 }
 
 export function createSubAgentTool(
-  getConfig: () => LegionConfig,
-  legionHome: string,
+  getConfig: () => AppConfig,
+  appHome: string,
   currentDepth: number,
   parentTools?: ToolDefinition[],
 ): ToolDefinition {
@@ -210,7 +210,7 @@ export function createSubAgentTool(
       }
 
       const subAgentConversationId = `sub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const dbPath = join(legionHome, 'data', 'memory.db');
+      const dbPath = join(appHome, 'data', 'memory.db');
 
       followUpQueues.set(subAgentConversationId, []);
       const localController = new AbortController();
@@ -230,7 +230,7 @@ export function createSubAgentTool(
         .filter((t) => t.name !== 'sub_agent')
         .concat(
           currentDepth + 1 < maxDepth
-            ? [createSubAgentTool(getConfig, legionHome, currentDepth + 1, baseTools)]
+            ? [createSubAgentTool(getConfig, appHome, currentDepth + 1, baseTools)]
             : [],
         );
 

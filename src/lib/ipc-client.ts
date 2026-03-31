@@ -1,5 +1,5 @@
 // Type-safe wrapper for the Electron IPC bridge exposed via preload
-// window.legion is set by electron/preload.ts via contextBridge
+// window.app is set by electron/preload.ts via contextBridge
 
 import type {
   ComputerUseEvent,
@@ -11,7 +11,7 @@ import type {
 
 type DaemonResult<T = unknown> = { ok: boolean; data?: T; error?: string };
 
-type LegionAPI = {
+type AppAPI = {
   config: {
     get: () => Promise<unknown>;
     set: (path: string, value: unknown) => Promise<unknown>;
@@ -22,7 +22,7 @@ type LegionAPI = {
     stream: (conversationId: string, messages: unknown[], modelKey?: string, reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh', profileKey?: string, fallbackEnabled?: boolean) => Promise<unknown>;
     cancelStream: (conversationId: string) => Promise<unknown>;
     generateTitle: (messages: unknown[], modelKey?: string) => Promise<{ title: string | null }>;
-    legionStatus: () => Promise<unknown>;
+    appStatus: () => Promise<unknown>;
     onStreamEvent: (callback: (event: unknown) => void) => () => void;
     sendSubAgentMessage: (subAgentConversationId: string, message: string) => Promise<{ ok: boolean }>;
     stopSubAgent: (subAgentConversationId: string) => Promise<{ ok: boolean }>;
@@ -276,21 +276,21 @@ type LegionAPI = {
 
 declare global {
   interface Window {
-    legion?: LegionAPI;
+    app?: AppAPI;
   }
 }
 
-function getLegion(): LegionAPI {
-  if (!window.legion) {
-    throw new Error('Legion Interlink IPC bridge not available. Ensure the app is running in Electron.');
+function getApp(): AppAPI {
+  if (!window.app) {
+    throw new Error(__BRAND_PRODUCT_NAME + ' IPC bridge not available. Ensure the app is running in Electron.');
   }
-  return window.legion;
+  return window.app;
 }
 
-// Lazy proxy — only accesses window.legion when actually called
-export const legion: LegionAPI = new Proxy({} as LegionAPI, {
+// Lazy proxy — only accesses window.app when actually called
+export const app: AppAPI = new Proxy({} as AppAPI, {
   get(_target, prop: string) {
-    const api = getLegion();
+    const api = getApp();
     return (api as Record<string, unknown>)[prop];
   },
 });
