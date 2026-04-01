@@ -113,7 +113,9 @@ export const DaemonGovernance: FC<SettingsProps> = () => {
     try {
       const result = await app.daemon.governanceApprovals();
       if (result.ok) {
-        setApprovals((result.data as Approval[]) ?? []);
+        const raw = result.data;
+        const list = Array.isArray(raw) ? raw : Array.isArray((raw as Record<string, unknown>)?.approvals) ? (raw as { approvals: unknown[] }).approvals : [];
+        setApprovals(list as Approval[]);
         setLoadState('loaded');
       } else {
         setLoadError(result.error || 'Failed to fetch approvals');
