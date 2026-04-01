@@ -378,6 +378,18 @@ const appAPI = {
     status: () => ipcRenderer.invoke('knowledge:status'),
   },
 
+  // GAIA thread
+  gaiaThread: {
+    ensure: () => ipcRenderer.invoke('gaia-thread:ensure'),
+    append: (msg: unknown) => ipcRenderer.invoke('gaia-thread:append', msg),
+    id: () => ipcRenderer.invoke('gaia-thread:id'),
+    onNewMessage: (callback: (msg: unknown) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
+      ipcRenderer.on('gaia-thread:new-message', handler);
+      return () => ipcRenderer.removeListener('gaia-thread:new-message', handler);
+    },
+  },
+
   // Trigger dispatch
   triggerDispatch: {
     activeWorkflows: () =>
