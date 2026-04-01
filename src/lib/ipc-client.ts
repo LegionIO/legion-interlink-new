@@ -38,6 +38,12 @@ type AppAPI = {
     setActiveId: (id: string) => Promise<unknown>;
     onChanged: (callback: (store: unknown) => void) => () => void;
   };
+  gaiaThread: {
+    ensure: () => Promise<{ ok: boolean; id: string }>;
+    append: (msg: unknown) => Promise<{ ok: boolean }>;
+    id: () => Promise<string>;
+    onNewMessage: (callback: (msg: unknown) => void) => () => void;
+  };
   daemon: {
     settings: () => Promise<{ ok: boolean; settings?: Record<string, unknown>; error?: string }>;
     settingsUpdate: (key: string, value: unknown) => Promise<{ ok: boolean; error?: string }>;

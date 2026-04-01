@@ -29,6 +29,12 @@ export type AppRuntimeDetection = {
   rubyPath: string;
 };
 
+type ToolSchema = {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+};
+
 type StreamAppOptions = {
   conversationId: string;
   messages: unknown[];
@@ -37,6 +43,7 @@ type StreamAppOptions = {
   appHome: string;
   abortSignal?: AbortSignal;
   reasoningEffort?: string;
+  tools?: ToolSchema[];
 };
 
 type RuntimeConfig = NonNullable<AppConfig['runtime']>;
@@ -263,6 +270,7 @@ async function* streamDaemonApp(options: StreamAppOptions): AsyncGenerator<Strea
     messages: normalizedMessages,
     ...(daemonModelOverride ? { model: daemonModelOverride } : {}),
     ...(daemonProviderOverride ? { provider: daemonProviderOverride } : {}),
+    ...(options.tools?.length ? { tools: options.tools } : {}),
   };
   if (options.reasoningEffort) {
     requestBody.reasoning_effort = options.reasoningEffort;
@@ -436,8 +444,19 @@ async function* consumeDaemonSSE(
         }];
       }
 
+      if (eventName === 'enrichment' || eventName === 'enrichments') {
+        return [{ conversationId, type: 'enrichment', data: payload }];
+      }
+
       if (eventName === 'done') {
-        return [{ conversationId, type: 'done', data: payload }];
+        const events: StreamEvent[] = [];
+        // Extract pipeline enrichments embedded in the done payload (e.g. debate:result, curation:stats)
+        const enrichments = payload.enrichments ?? payload.pipeline_enrichments;
+        if (enrichments && typeof enrichments === 'object' && !Array.isArray(enrichments)) {
+          events.push({ conversationId, type: 'enrichment', data: enrichments });
+        }
+        events.push({ conversationId, type: 'done', data: payload });
+        return events;
       }
 
       if (eventName === 'context_usage' || eventName === 'context-usage') {

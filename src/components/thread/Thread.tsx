@@ -33,13 +33,18 @@ import {
 import { app } from '@/lib/ipc-client';
 import { copyTextToClipboard, logClipboardError } from '@/lib/clipboard';
 import { useAttachments } from '@/providers/AttachmentContext';
-import { useBranchNav } from '@/providers/RuntimeProvider';
+import { useBranchNav, type TokenUsageData } from '@/providers/RuntimeProvider';
 import { useConfig } from '@/providers/ConfigProvider';
 import { useRealtime } from '@/providers/RealtimeProvider';
 import { isDictationSupportedForProvider, createUnifiedDictationAdapter, type DictationSession, type AudioProvider } from '@/lib/audio/speech-adapters';
 import { MarkdownText } from './MarkdownText';
 import { ToolCallDisplay } from './ToolGroup';
 import { SubAgentInline } from './SubAgentInline';
+import { SidechainGroup } from './SidechainGroup';
+import { PipelineInsights } from './PipelineInsights';
+import type { PipelineEnrichments } from './PipelineInsights';
+import { TokenUsage } from './TokenUsage';
+import { ProactiveMessage } from './ProactiveMessage';
 import { ComposerInput } from './ComposerInput';
 import { DeviceRow } from './DeviceRow';
 import { SearchBar } from './SearchBar';
@@ -674,10 +679,56 @@ const AssistantMessage: FC = () => {
   );
   const isEmpty = !isRunning && !hasContent;
 
+  // Detect proactive GAIA messages (injected with source: 'unspoken' and proactiveMeta)
+  const proactiveMeta = (message as { proactiveMeta?: { intent?: string; timestamp?: string } }).proactiveMeta;
+  const isProactive = proactiveMeta && content.length > 0
+    && content.every((p: { type: string; source?: string }) => p.type === 'text' && p.source === 'unspoken');
+  if (isProactive) {
+    const textContent = content
+      .filter((p: { type: string }) => p.type === 'text')
+      .map((p) => (p as { text?: string }).text ?? '')
+      .join('');
+    return (
+      <ProactiveMessage
+        intent={proactiveMeta.intent ?? 'insight'}
+        content={textContent}
+        timestamp={proactiveMeta.timestamp ?? message.createdAt?.toISOString() ?? new Date().toISOString()}
+      />
+    );
+  }
+
+  // Check for daemon sidechain metadata
+  const isSidechain = (message as { sidechain?: boolean }).sidechain === true;
+  const agentId = (message as { agentId?: string }).agentId;
+
+  // Render sidechain messages as a compact grouped view
+  if (isSidechain && agentId) {
+    const sidechainMessages = [{
+      id: (message as { id?: string }).id ?? `sc-${Date.now()}`,
+      content: content as Array<{ type: string; text?: string }>,
+      createdAt: message.createdAt,
+    }];
+    return (
+      <MessagePrimitive.Root className="group mb-2 flex justify-start">
+        <div className="w-full max-w-4xl">
+          <SidechainGroup agentId={agentId} messages={sidechainMessages} />
+        </div>
+      </MessagePrimitive.Root>
+    );
+  }
+
   // Check if this message has an interrupt (source: 'interrupt' or 'unspoken')
   const hasInterrupt = content.some((p: { type: string; source?: string }) =>
     p.type === 'text' && (p.source === 'interrupt' || p.source === 'unspoken'),
   );
+
+  // Extract pipeline enrichments stored as a content part
+  const enrichmentsPart = content.find((p: { type: string }) => p.type === 'enrichments') as
+    | { type: 'enrichments'; enrichments: PipelineEnrichments }
+    | undefined;
+  const pipelineEnrichments = enrichmentsPart?.enrichments ?? null;
+
+  const tokenUsage = (message as { tokenUsage?: TokenUsageData }).tokenUsage ?? null;
 
   return (
     <MessagePrimitive.Root className="group mb-8 flex justify-start">
@@ -711,6 +762,8 @@ const AssistantMessage: FC = () => {
               </div>
             </>
           )}
+          {pipelineEnrichments && <PipelineInsights enrichments={pipelineEnrichments} />}
+          {tokenUsage && !isRunning && <TokenUsage usage={tokenUsage} />}
         </div>
         <div className="flex items-center gap-1">
           <MessageTimestamp date={message.createdAt} align="left" />
