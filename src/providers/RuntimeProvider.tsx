@@ -9,10 +9,44 @@ import { useAttachments } from './AttachmentContext';
 import { useConfig } from './ConfigProvider';
 import { createUnifiedSpeechAdapter, createUnifiedDictationAdapter, type AudioProvider } from '@/lib/audio/speech-adapters';
 
+export type DebateEnrichment = {
+  enabled: boolean;
+  rounds?: number;
+  advocate_model?: string;
+  challenger_model?: string;
+  judge_model?: string;
+  advocate_summary?: string;
+  challenger_summary?: string;
+  judge_confidence?: number;
+};
+
+export type CurationEnrichment = {
+  thinking_blocks_stripped?: number;
+  tool_results_distilled?: number;
+  exchanges_folded?: number;
+  superseded_reads_evicted?: number;
+  duplicates_removed?: number;
+  token_savings_estimate?: number;
+};
+
+export type PipelineEnrichments = {
+  debate?: DebateEnrichment;
+  curation?: CurationEnrichment;
+};
+
+export type TokenUsageData = {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
+};
+
 type ContentPart =
   | { type: 'text'; text: string; source?: 'assistant' | 'observer' | 'interrupt' | 'unspoken' }
   | { type: 'image'; image: string }
   | { type: 'file'; data: string; mimeType: string; filename: string }
+  | { type: 'enrichments'; enrichments: PipelineEnrichments }
   | {
     type: 'tool-call';
     toolCallId: string;
@@ -45,6 +79,11 @@ type ContentPart =
 type StoredMessage = ThreadMessageLike & {
   id: string;
   parentId: string | null;
+  tokenUsage?: TokenUsageData;
+  // Daemon chain fields (populated only in daemon backend mode)
+  sidechain?: boolean;
+  messageGroupId?: string;
+  agentId?: string;
 };
 
 export type ConversationRecord = {
@@ -77,6 +116,8 @@ export type ConversationRecord = {
   parentToolCallId?: string | null;
   subAgentDepth?: number;
   isSubAgent?: boolean;
+  // Backend mode — set once at conversation creation
+  backendMode?: 'mastra' | 'legion-daemon';
 };
 
 export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
@@ -562,10 +603,69 @@ function applyToolResult(
   acc.messages[idx] = { ...msg, content: toStoredContent(content) };
 }
 
+function applyTokenUsage(acc: { messages: StoredMessage[]; headId: string | null }, usage: TokenUsageData): void {
+  const branch = getActiveBranch(acc.messages, acc.headId);
+  const last = branch[branch.length - 1];
+  if (!last || last.role !== 'assistant') return;
+  const idx = acc.messages.findIndex((m) => m.id === last.id);
+  if (idx < 0) return;
+  acc.messages[idx] = { ...acc.messages[idx], tokenUsage: usage };
+}
+
 function applyError(acc: { messages: StoredMessage[]; headId: string | null }, error: string): void {
   const { msg, idx } = getOrCreateAssistantInAcc(acc);
   const content = (Array.isArray(msg.content) ? [...msg.content] : []) as ContentPart[];
   content.push({ type: 'text', text: `\n\n**Error:** ${error}` });
+  acc.messages[idx] = { ...msg, content: toStoredContent(content) };
+}
+
+function applyEnrichments(
+  acc: { messages: StoredMessage[]; headId: string | null },
+  data: Record<string, unknown>,
+): void {
+  // Normalize daemon enrichment payload — supports both flat keys and nested
+  const debate = (data['debate:result'] ?? data['debate'] ?? data['debate_result']) as Record<string, unknown> | undefined;
+  const curation = (data['curation:stats'] ?? data['curation'] ?? data['curation_stats']) as Record<string, unknown> | undefined;
+
+  if (!debate && !curation) return;
+
+  const enrichments: PipelineEnrichments = {};
+
+  if (debate && typeof debate === 'object') {
+    enrichments.debate = {
+      enabled: Boolean(debate.enabled ?? true),
+      rounds: typeof debate.rounds === 'number' ? debate.rounds : undefined,
+      advocate_model: typeof debate.advocate_model === 'string' ? debate.advocate_model : undefined,
+      challenger_model: typeof debate.challenger_model === 'string' ? debate.challenger_model : undefined,
+      judge_model: typeof debate.judge_model === 'string' ? debate.judge_model : undefined,
+      advocate_summary: typeof debate.advocate_summary === 'string' ? debate.advocate_summary : undefined,
+      challenger_summary: typeof debate.challenger_summary === 'string' ? debate.challenger_summary : undefined,
+      judge_confidence: typeof debate.judge_confidence === 'number' ? debate.judge_confidence : undefined,
+    };
+  }
+
+  if (curation && typeof curation === 'object') {
+    enrichments.curation = {
+      thinking_blocks_stripped: typeof curation.thinking_blocks_stripped === 'number' ? curation.thinking_blocks_stripped : undefined,
+      tool_results_distilled: typeof curation.tool_results_distilled === 'number' ? curation.tool_results_distilled : undefined,
+      exchanges_folded: typeof curation.exchanges_folded === 'number' ? curation.exchanges_folded : undefined,
+      superseded_reads_evicted: typeof curation.superseded_reads_evicted === 'number' ? curation.superseded_reads_evicted : undefined,
+      duplicates_removed: typeof curation.duplicates_removed === 'number' ? curation.duplicates_removed : undefined,
+      token_savings_estimate: typeof curation.token_savings_estimate === 'number' ? curation.token_savings_estimate : undefined,
+    };
+  }
+
+  const { msg, idx } = getOrCreateAssistantInAcc(acc);
+  const content = (Array.isArray(msg.content) ? [...msg.content] : []) as ContentPart[];
+
+  // Replace existing enrichments part if present, otherwise append
+  const existingIdx = content.findIndex((p) => p.type === 'enrichments');
+  if (existingIdx >= 0) {
+    content[existingIdx] = { type: 'enrichments', enrichments };
+  } else {
+    content.push({ type: 'enrichments', enrichments });
+  }
+
   acc.messages[idx] = { ...msg, content: toStoredContent(content) };
 }
 
@@ -766,6 +866,7 @@ export function RuntimeProvider({
   const treeRef = useRef<StoredMessage[]>([]);
   const headIdRef = useRef<string | null>(null);
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const backendModeRef = useRef<'mastra' | 'legion-daemon'>('mastra');
   const onModelFallbackRef = useRef(onModelFallback);
   onModelFallbackRef.current = onModelFallback;
   const onConversationSettingsLoadedRef = useRef(onConversationSettingsLoaded);
@@ -865,6 +966,21 @@ export function RuntimeProvider({
   const branchInfo = useMemo(() => {
     if (isRunning) return null; // don't show branches while generating
     const branch = getActiveBranch(tree, headId);
+    const isDaemon = backendModeRef.current === 'legion-daemon';
+
+    if (isDaemon) {
+      // Daemon mode: find the last non-sidechain assistant message and its siblings
+      const lastAssistant = [...branch].reverse().find((m) => m.role === 'assistant' && !m.sidechain);
+      if (!lastAssistant) return null;
+      const parentId = lastAssistant.parentId;
+      // Exclude sidechain messages from branch siblings — they are parallel work, not alternatives
+      const siblings = tree.filter((m) => m.parentId === parentId && m.role === 'assistant' && !m.sidechain);
+      if (siblings.length <= 1) return null;
+      const currentIdx = siblings.findIndex((m) => m.id === lastAssistant.id);
+      return { siblings, currentIdx, total: siblings.length, parentId };
+    }
+
+    // Mastra mode: existing tree-based logic
     const lastAssistant = [...branch].reverse().find((m) => m.role === 'assistant');
     if (!lastAssistant) return null;
     const parentId = lastAssistant.parentId;
@@ -889,6 +1005,9 @@ export function RuntimeProvider({
       void persistConversation(id, t, h, { runStatus: 'idle' });
     }
 
+    // Restore backend mode from persisted conversation
+    backendModeRef.current = conv.backendMode ?? 'mastra';
+
     // Restore per-conversation settings (model, profile, fallback)
     onConversationSettingsLoadedRef.current?.({
       selectedModelKey: conv.selectedModelKey ?? null,
@@ -910,6 +1029,13 @@ export function RuntimeProvider({
         }
         const newId = crypto.randomUUID();
         const now = nowIso();
+        // Detect backend mode for new conversation
+        let detectedBackend: 'mastra' | 'legion-daemon' = 'mastra';
+        try {
+          const status = await app.agent.appStatus() as { backend?: string } | null;
+          if (status?.backend === 'legion-daemon') detectedBackend = 'legion-daemon';
+        } catch { /* default to mastra */ }
+        backendModeRef.current = detectedBackend;
         await app.conversations.put({
           id: newId, title: null, fallbackTitle: null, messages: [], messageTree: [], headId: null,
           conversationCompaction: null, lastContextUsage: null,
@@ -918,6 +1044,7 @@ export function RuntimeProvider({
           messageCount: 0, userMessageCount: 0,
           runStatus: 'idle', hasUnread: false, lastAssistantUpdateAt: null,
           selectedModelKey: null,
+          backendMode: detectedBackend,
         } as ConversationRecord);
         await app.conversations.setActiveId(newId);
         setActiveConversationId(newId);
@@ -964,6 +1091,11 @@ export function RuntimeProvider({
         parentToolCallId?: string;
         status?: string;
         summary?: string;
+        // Daemon chain fields (present when backend is legion-daemon)
+        parent_id?: string;
+        sidechain?: boolean;
+        message_group_id?: string;
+        agent_id?: string;
       };
 
       // Route sub-agent events to global sub-agent state
@@ -1230,6 +1362,26 @@ export function RuntimeProvider({
             extractionDurationMs?: number;
           } | undefined,
         });
+      } else if (e.type === 'enrichment') {
+        const enrichData = e.data as Record<string, unknown> | undefined;
+        if (enrichData) applyEnrichments(acc, enrichData);
+      } else if (e.type === 'context-usage') {
+        const usageData = e.data as {
+          inputTokens?: number;
+          outputTokens?: number;
+          cacheReadTokens?: number;
+          cacheWriteTokens?: number;
+          totalTokens?: number;
+        } | undefined;
+        if (usageData?.inputTokens !== undefined || usageData?.outputTokens !== undefined) {
+          applyTokenUsage(acc, {
+            inputTokens: usageData.inputTokens ?? 0,
+            outputTokens: usageData.outputTokens ?? 0,
+            cacheReadTokens: usageData.cacheReadTokens ?? 0,
+            cacheWriteTokens: usageData.cacheWriteTokens ?? 0,
+            totalTokens: usageData.totalTokens ?? (usageData.inputTokens ?? 0) + (usageData.outputTokens ?? 0),
+          });
+        }
       } else if (e.type === 'model-fallback') {
         const fbData = e.data as {
           fromModel: string;
@@ -1282,6 +1434,24 @@ export function RuntimeProvider({
         return;
       }
 
+      // Apply daemon chain fields to the current assistant message when in daemon mode
+      if (backendModeRef.current === 'legion-daemon' && (e.sidechain != null || e.message_group_id || e.agent_id)) {
+        const branch = getActiveBranch(acc.messages, acc.headId);
+        const last = branch[branch.length - 1];
+        if (last?.role === 'assistant') {
+          const idx = acc.messages.findIndex((m) => m.id === last.id);
+          if (idx >= 0) {
+            acc.messages[idx] = {
+              ...acc.messages[idx],
+              ...(e.sidechain != null ? { sidechain: e.sidechain } : {}),
+              ...(e.message_group_id ? { messageGroupId: e.message_group_id } : {}),
+              ...(e.agent_id ? { agentId: e.agent_id } : {}),
+              ...(e.parent_id ? { parentId: e.parent_id } : {}),
+            };
+          }
+        }
+      }
+
       if (isActiveConv) {
         setTree([...acc.messages]);
         setHeadId(acc.headId);
@@ -1290,6 +1460,45 @@ export function RuntimeProvider({
     });
     return unsubscribe;
   }, [bumpSubAgentVersion]);
+
+  // Listen for proactive GAIA messages and inject into the active conversation
+  useEffect(() => {
+    const unsub = app.gaiaThread.onNewMessage((raw: unknown) => {
+      const msg = raw as { id: string; intent: string; content: string; source: string; timestamp: string; metadata?: Record<string, unknown> };
+      const convId = activeIdRef.current;
+      if (!convId || !msg.content) return;
+
+      const proactiveMsg: StoredMessage = {
+        id: `proactive-${msg.id}`,
+        parentId: headIdRef.current,
+        role: 'assistant',
+        content: toStoredContent([{
+          type: 'text',
+          text: msg.content,
+          source: 'unspoken' as const,
+        }]),
+        createdAt: new Date(msg.timestamp),
+      };
+
+      // Attach proactive metadata for rendering
+      (proactiveMsg as StoredMessage & { proactiveMeta?: unknown }).proactiveMeta = {
+        intent: msg.intent,
+        source: msg.source,
+        timestamp: msg.timestamp,
+        ...msg.metadata,
+      };
+
+      const currentTree = treeRef.current;
+      const newTree = [...currentTree, proactiveMsg];
+      const newHead = proactiveMsg.id;
+      treeRef.current = newTree;
+      headIdRef.current = newHead;
+      setTree(newTree);
+      setHeadId(newHead);
+      schedulePersist(convId, newTree, newHead);
+    });
+    return unsub;
+  }, [schedulePersist]);
 
   const onNew = useCallback(async (message: AppendMessage) => {
     const convId = activeIdRef.current;
@@ -1408,8 +1617,13 @@ export function RuntimeProvider({
   const goToBranch = useCallback((siblingId: string) => {
     // Walk from this sibling down to the deepest descendant on the "latest" path
     let newHead = siblingId;
+    const isDaemon = backendModeRef.current === 'legion-daemon';
     // Find the deepest child chain from this sibling
-    const childrenOf = (parentId: string) => tree.filter((m) => m.parentId === parentId);
+    const childrenOf = (parentId: string) => {
+      const all = tree.filter((m) => m.parentId === parentId);
+      // In daemon mode, prefer non-sidechain children for the main branch path
+      return isDaemon ? all.filter((m) => !m.sidechain) : all;
+    };
     let children = childrenOf(newHead);
     while (children.length > 0) {
       newHead = children[children.length - 1].id; // take last child (most recent)

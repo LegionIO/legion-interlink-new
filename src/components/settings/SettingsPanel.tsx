@@ -35,6 +35,7 @@ import { DaemonGaia } from './DaemonGaia';
 import { DaemonCostTracker } from './DaemonCostTracker';
 import { DaemonMesh } from './DaemonMesh';
 import { DaemonScheduleBuilder } from './DaemonScheduleBuilder';
+import { TriggerSettings } from './TriggerSettings';
 import type { SettingsProps } from './shared';
 import { usePluginSettingsSections } from '@/components/plugins/PluginSettingsSections';
 import { getPluginComponent } from '@/components/plugins/PluginComponentRegistry';
@@ -45,7 +46,7 @@ type SettingsSection =
   | 'audio' | 'realtime' | 'media-generation' | 'computer-use' | 'advanced' | 'mcp'
   | 'daemon' | 'extensions' | 'tasks' | 'workers' | 'events' | 'audit'
   | 'prompts' | 'webhooks' | 'tenants' | 'capacity' | 'governance' | 'metrics' | 'doctor' | 'topology'
-  | 'gaia' | 'task-graph' | 'memory-inspector' | 'cost-tracker' | 'mesh' | 'schedule-builder';
+  | 'gaia' | 'task-graph' | 'memory-inspector' | 'cost-tracker' | 'mesh' | 'schedule-builder' | 'triggers';
 
 const sections: Array<{ key: SettingsSection; label: string; group?: string }> = [
   { key: 'models', label: 'Models' },
@@ -82,6 +83,7 @@ const sections: Array<{ key: SettingsSection; label: string; group?: string }> =
   { key: 'cost-tracker', label: 'Costs', group: 'Daemon' },
   { key: 'mesh', label: 'Mesh', group: 'Daemon' },
   { key: 'schedule-builder', label: 'Schedule Builder', group: 'Daemon' },
+  { key: 'triggers', label: 'Triggers', group: 'Daemon' },
 ];
 
 export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
@@ -225,6 +227,7 @@ export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
         {activeSection === 'cost-tracker' && <DaemonCostTracker config={config} updateConfig={updateConfig} />}
         {activeSection === 'mesh' && <DaemonMesh config={config} updateConfig={updateConfig} />}
         {activeSection === 'schedule-builder' && <DaemonScheduleBuilder config={config} updateConfig={updateConfig} />}
+        {activeSection === 'triggers' && <TriggerSettings config={config} updateConfig={updateConfig} />}
         {/* Plugin settings sections */}
         {pluginSections.map((ps) => {
           if (activeSection !== ps.key) return null;

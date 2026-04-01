@@ -490,9 +490,15 @@ function AppShell() {
     await app.conversations.setActiveId(id);
     setActiveView('chat');
     setActiveConversationId(id);
+    // Load the title for the switched-to conversation
+    const conv = await app.conversations.get(id) as ConversationRecord | null;
+    setActiveConversationTitle(getConversationDisplayTitle(
+      conv,
+      cuSessionsByConversation.get(id),
+    ));
     // Clean up any other empty conversations in the background
     void cleanupEmptyConversations(id, undefined, cuSessionsByConversation);
-  }, [cleanupAbandonedConversation]);
+  }, [cleanupAbandonedConversation, cuSessionsByConversation]);
 
   const handleNewConversation = useCallback(async () => {
     await cleanupAbandonedConversation();
