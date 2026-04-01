@@ -29,6 +29,12 @@ export type AppRuntimeDetection = {
   rubyPath: string;
 };
 
+type ToolSchema = {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+};
+
 type StreamAppOptions = {
   conversationId: string;
   messages: unknown[];
@@ -37,6 +43,7 @@ type StreamAppOptions = {
   appHome: string;
   abortSignal?: AbortSignal;
   reasoningEffort?: string;
+  tools?: ToolSchema[];
 };
 
 type RuntimeConfig = NonNullable<AppConfig['runtime']>;
@@ -263,6 +270,7 @@ async function* streamDaemonApp(options: StreamAppOptions): AsyncGenerator<Strea
     messages: normalizedMessages,
     ...(daemonModelOverride ? { model: daemonModelOverride } : {}),
     ...(daemonProviderOverride ? { provider: daemonProviderOverride } : {}),
+    ...(options.tools?.length ? { tools: options.tools } : {}),
   };
   if (options.reasoningEffort) {
     requestBody.reasoning_effort = options.reasoningEffort;
