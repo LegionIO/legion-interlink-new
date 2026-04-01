@@ -24,6 +24,7 @@ import { registerKnowledgeHandlers } from './ipc/knowledge.js';
 import { registerClipboardHandlers } from './ipc/clipboard.js';
 import { closeAllOverlayWindows } from './computer-use/overlay-window.js';
 import { registerTriggerDispatchHandlers, handleSseEvent } from './ipc/trigger-dispatch.js';
+import { registerGaiaThreadHandlers } from './ipc/gaia-thread.js';
 
 const APP_HOME = join(homedir(), '.' + __BRAND_APP_SLUG);
 
@@ -429,6 +430,7 @@ if (gotSingleInstanceLock) {
       (event) => handleSseEvent(event, APP_HOME, getConfig, () => BrowserWindow.getAllWindows()),
     );
     registerTriggerDispatchHandlers(ipcMain);
+    registerGaiaThreadHandlers(ipcMain, APP_HOME);
     registerMicRecorderHandlers(ipcMain);
     registerLiveSttHandlers(ipcMain);
     registerComputerUseHandlers(ipcMain, APP_HOME, getConfig);
