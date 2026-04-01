@@ -651,8 +651,12 @@ export function desktopConfigPayload(config: AppConfig): Record<string, unknown>
     profiles: config.profiles,
     defaultProfileKey: config.defaultProfileKey,
     fallback: config.fallback,
+    knowledge: config.knowledge,
     imageGeneration: config.imageGeneration,
     videoGeneration: config.videoGeneration,
+    daemonLlm: config.daemonLlm,
+    proactiveMessaging: config.proactiveMessaging,
+    messageChains: config.messageChains,
   };
 }
 
