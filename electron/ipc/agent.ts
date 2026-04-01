@@ -356,6 +356,36 @@ export function registerAgentHandlers(ipcMain: IpcMain, appHome: string): void {
             return;
           }
 
+          // Serialize registered tools to JSON Schema for daemon inference
+          const toolSchemas = registeredTools
+            .filter((t) => typeof t.inputSchema?.safeParse === 'function')
+            .map((t) => {
+              try {
+                // Use Zod's built-in JSON Schema output if available, otherwise
+                // build a minimal schema from the Zod shape
+                const shape = (t.inputSchema as { shape?: Record<string, unknown> }).shape;
+                const properties: Record<string, unknown> = {};
+                const required: string[] = [];
+                if (shape && typeof shape === 'object') {
+                  for (const [key, val] of Object.entries(shape)) {
+                    const zodField = val as { _def?: { typeName?: string; description?: string }; isOptional?: () => boolean; description?: string };
+                    properties[key] = { type: 'string', description: zodField.description ?? zodField._def?.description ?? '' };
+                    if (typeof zodField.isOptional !== 'function' || !zodField.isOptional()) {
+                      required.push(key);
+                    }
+                  }
+                }
+                return {
+                  name: t.name,
+                  description: t.description,
+                  input_schema: { type: 'object' as const, properties, ...(required.length ? { required } : {}) },
+                };
+              } catch {
+                return null;
+              }
+            })
+            .filter(Boolean) as Array<{ name: string; description: string; input_schema: Record<string, unknown> }>;
+
           const stream = streamAppAgent({
             conversationId,
             messages: daemonMessages,
@@ -364,6 +394,7 @@ export function registerAgentHandlers(ipcMain: IpcMain, appHome: string): void {
             appHome,
             abortSignal: controller.signal,
             reasoningEffort,
+            tools: toolSchemas,
           });
 
           for await (const event of stream) {
