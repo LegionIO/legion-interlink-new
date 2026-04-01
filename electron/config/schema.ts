@@ -426,6 +426,12 @@ const proactiveMessagingConfigSchema = z.object({
   deferWhileComposing: z.boolean().default(true),
 });
 
+const messageChainsConfigSchema = z.object({
+  mode: z.enum(['auto', 'interlink', 'daemon']).default('auto'),
+  showSidechains: z.boolean().default(true),
+  collapseSidechainsByDefault: z.boolean().default(true),
+});
+
 const daemonLlmConfigSchema = z.object({
   contextCuration: contextCurationConfigSchema,
   debate: debateConfigSchema,
@@ -486,6 +492,7 @@ export const appConfigSchema = z.object({
   videoGeneration: videoGenerationConfigSchema.optional(),
   daemonLlm: daemonLlmConfigSchema.optional(),
   proactiveMessaging: proactiveMessagingConfigSchema.optional(),
+  messageChains: messageChainsConfigSchema.optional(),
 });
 
 export type AppConfig = z.infer<typeof appConfigSchema>;
@@ -498,3 +505,4 @@ export type ProviderLayerConfig = z.infer<typeof providerLayerConfigSchema>;
 export type TierRoutingConfig = z.infer<typeof tierRoutingConfigSchema>;
 export type EscalationConfig = z.infer<typeof escalationConfigSchema>;
 export type ProactiveMessagingConfig = z.infer<typeof proactiveMessagingConfigSchema>;
+export type MessageChainsConfig = z.infer<typeof messageChainsConfigSchema>;
