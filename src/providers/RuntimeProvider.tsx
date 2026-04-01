@@ -9,10 +9,44 @@ import { useAttachments } from './AttachmentContext';
 import { useConfig } from './ConfigProvider';
 import { createUnifiedSpeechAdapter, createUnifiedDictationAdapter, type AudioProvider } from '@/lib/audio/speech-adapters';
 
+export type DebateEnrichment = {
+  enabled: boolean;
+  rounds?: number;
+  advocate_model?: string;
+  challenger_model?: string;
+  judge_model?: string;
+  advocate_summary?: string;
+  challenger_summary?: string;
+  judge_confidence?: number;
+};
+
+export type CurationEnrichment = {
+  thinking_blocks_stripped?: number;
+  tool_results_distilled?: number;
+  exchanges_folded?: number;
+  superseded_reads_evicted?: number;
+  duplicates_removed?: number;
+  token_savings_estimate?: number;
+};
+
+export type PipelineEnrichments = {
+  debate?: DebateEnrichment;
+  curation?: CurationEnrichment;
+};
+
+export type TokenUsageData = {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
+};
+
 type ContentPart =
   | { type: 'text'; text: string; source?: 'assistant' | 'observer' | 'interrupt' | 'unspoken' }
   | { type: 'image'; image: string }
   | { type: 'file'; data: string; mimeType: string; filename: string }
+  | { type: 'enrichments'; enrichments: PipelineEnrichments }
   | {
     type: 'tool-call';
     toolCallId: string;
@@ -45,6 +79,7 @@ type ContentPart =
 type StoredMessage = ThreadMessageLike & {
   id: string;
   parentId: string | null;
+  tokenUsage?: TokenUsageData;
 };
 
 export type ConversationRecord = {
@@ -562,10 +597,69 @@ function applyToolResult(
   acc.messages[idx] = { ...msg, content: toStoredContent(content) };
 }
 
+function applyTokenUsage(acc: { messages: StoredMessage[]; headId: string | null }, usage: TokenUsageData): void {
+  const branch = getActiveBranch(acc.messages, acc.headId);
+  const last = branch[branch.length - 1];
+  if (!last || last.role !== 'assistant') return;
+  const idx = acc.messages.findIndex((m) => m.id === last.id);
+  if (idx < 0) return;
+  acc.messages[idx] = { ...acc.messages[idx], tokenUsage: usage };
+}
+
 function applyError(acc: { messages: StoredMessage[]; headId: string | null }, error: string): void {
   const { msg, idx } = getOrCreateAssistantInAcc(acc);
   const content = (Array.isArray(msg.content) ? [...msg.content] : []) as ContentPart[];
   content.push({ type: 'text', text: `\n\n**Error:** ${error}` });
+  acc.messages[idx] = { ...msg, content: toStoredContent(content) };
+}
+
+function applyEnrichments(
+  acc: { messages: StoredMessage[]; headId: string | null },
+  data: Record<string, unknown>,
+): void {
+  // Normalize daemon enrichment payload — supports both flat keys and nested
+  const debate = (data['debate:result'] ?? data['debate'] ?? data['debate_result']) as Record<string, unknown> | undefined;
+  const curation = (data['curation:stats'] ?? data['curation'] ?? data['curation_stats']) as Record<string, unknown> | undefined;
+
+  if (!debate && !curation) return;
+
+  const enrichments: PipelineEnrichments = {};
+
+  if (debate && typeof debate === 'object') {
+    enrichments.debate = {
+      enabled: Boolean(debate.enabled ?? true),
+      rounds: typeof debate.rounds === 'number' ? debate.rounds : undefined,
+      advocate_model: typeof debate.advocate_model === 'string' ? debate.advocate_model : undefined,
+      challenger_model: typeof debate.challenger_model === 'string' ? debate.challenger_model : undefined,
+      judge_model: typeof debate.judge_model === 'string' ? debate.judge_model : undefined,
+      advocate_summary: typeof debate.advocate_summary === 'string' ? debate.advocate_summary : undefined,
+      challenger_summary: typeof debate.challenger_summary === 'string' ? debate.challenger_summary : undefined,
+      judge_confidence: typeof debate.judge_confidence === 'number' ? debate.judge_confidence : undefined,
+    };
+  }
+
+  if (curation && typeof curation === 'object') {
+    enrichments.curation = {
+      thinking_blocks_stripped: typeof curation.thinking_blocks_stripped === 'number' ? curation.thinking_blocks_stripped : undefined,
+      tool_results_distilled: typeof curation.tool_results_distilled === 'number' ? curation.tool_results_distilled : undefined,
+      exchanges_folded: typeof curation.exchanges_folded === 'number' ? curation.exchanges_folded : undefined,
+      superseded_reads_evicted: typeof curation.superseded_reads_evicted === 'number' ? curation.superseded_reads_evicted : undefined,
+      duplicates_removed: typeof curation.duplicates_removed === 'number' ? curation.duplicates_removed : undefined,
+      token_savings_estimate: typeof curation.token_savings_estimate === 'number' ? curation.token_savings_estimate : undefined,
+    };
+  }
+
+  const { msg, idx } = getOrCreateAssistantInAcc(acc);
+  const content = (Array.isArray(msg.content) ? [...msg.content] : []) as ContentPart[];
+
+  // Replace existing enrichments part if present, otherwise append
+  const existingIdx = content.findIndex((p) => p.type === 'enrichments');
+  if (existingIdx >= 0) {
+    content[existingIdx] = { type: 'enrichments', enrichments };
+  } else {
+    content.push({ type: 'enrichments', enrichments });
+  }
+
   acc.messages[idx] = { ...msg, content: toStoredContent(content) };
 }
 
@@ -1230,6 +1324,26 @@ export function RuntimeProvider({
             extractionDurationMs?: number;
           } | undefined,
         });
+      } else if (e.type === 'enrichment') {
+        const enrichData = e.data as Record<string, unknown> | undefined;
+        if (enrichData) applyEnrichments(acc, enrichData);
+      } else if (e.type === 'context-usage') {
+        const usageData = e.data as {
+          inputTokens?: number;
+          outputTokens?: number;
+          cacheReadTokens?: number;
+          cacheWriteTokens?: number;
+          totalTokens?: number;
+        } | undefined;
+        if (usageData?.inputTokens !== undefined || usageData?.outputTokens !== undefined) {
+          applyTokenUsage(acc, {
+            inputTokens: usageData.inputTokens ?? 0,
+            outputTokens: usageData.outputTokens ?? 0,
+            cacheReadTokens: usageData.cacheReadTokens ?? 0,
+            cacheWriteTokens: usageData.cacheWriteTokens ?? 0,
+            totalTokens: usageData.totalTokens ?? (usageData.inputTokens ?? 0) + (usageData.outputTokens ?? 0),
+          });
+        }
       } else if (e.type === 'model-fallback') {
         const fbData = e.data as {
           fromModel: string;

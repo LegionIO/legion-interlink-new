@@ -358,6 +358,62 @@ export function registerDaemonApiHandlers(
   ipcMain.handle('daemon:absorber-job', async (_e, jobId: string) =>
     daemonGet(cfg(), appHome, `/api/absorbers/jobs/${jobId}`));
 
+  // ── Structural Index (legion-mcp v0.7.0) ──
+  ipcMain.handle('daemon:structural-index', async () =>
+    daemonGet(cfg(), appHome, '/api/structural_index'));
+
+  ipcMain.handle('daemon:structural-index-refresh', async () =>
+    daemonPost(cfg(), appHome, '/api/structural_index/refresh', {}));
+
+  // ── Tool Audit (legion-mcp v0.7.0) ──
+  ipcMain.handle('daemon:tool-audit', async (_e, mode?: 'summary' | 'matrix' | 'issues') =>
+    daemonGet(cfg(), appHome, '/api/tool_audit', mode ? { mode } : undefined));
+
+  // ── State Diff (legion-mcp v0.7.0) ──
+  ipcMain.handle('daemon:state-diff-snapshot', async () =>
+    daemonPost(cfg(), appHome, '/api/state_diff/snapshot', {}));
+
+  ipcMain.handle('daemon:state-diff', async (_e, snapshotId: string) =>
+    daemonGet(cfg(), appHome, '/api/state_diff', { since: snapshotId }));
+
+  // ── Session Search (legion-mcp v0.7.0) ──
+  ipcMain.handle('daemon:sessions-search', async (_e, query: string) =>
+    daemonGet(cfg(), appHome, '/api/sessions/search', { q: query }));
+
+  // ── Triggers (LegionIO v1.7.0) ──
+  ipcMain.handle('daemon:triggers', async () =>
+    daemonGet(cfg(), appHome, '/api/triggers'));
+
+  ipcMain.handle('daemon:trigger', async (_e, id: string) =>
+    daemonGet(cfg(), appHome, `/api/triggers/${id}`));
+
+  ipcMain.handle('daemon:trigger-create', async (_e, body: unknown) =>
+    daemonPost(cfg(), appHome, '/api/triggers', body));
+
+  ipcMain.handle('daemon:trigger-update', async (_e, id: string, body: unknown) =>
+    daemonPut(cfg(), appHome, `/api/triggers/${id}`, body));
+
+  ipcMain.handle('daemon:trigger-delete', async (_e, id: string) =>
+    daemonDelete(cfg(), appHome, `/api/triggers/${id}`));
+
+  // ── Token Budget (legion-llm v0.6.0) ──
+  ipcMain.handle('daemon:llm-token-budget', async () =>
+    daemonGet(cfg(), appHome, '/api/llm/token_budget'));
+
+  ipcMain.handle('daemon:llm-token-budget-reset', async () =>
+    daemonPost(cfg(), appHome, '/api/llm/token_budget/reset', {}));
+
+  // ── Native Dispatch (legion-llm v0.6.0) ──
+  ipcMain.handle('daemon:llm-providers', async () =>
+    daemonGet(cfg(), appHome, '/api/llm/providers'));
+
+  ipcMain.handle('daemon:llm-provider-layer', async () =>
+    daemonGet(cfg(), appHome, '/api/llm/provider_layer'));
+
+  // ── Context Curation (legion-llm v0.6.0) ──
+  ipcMain.handle('daemon:llm-context-curation-status', async () =>
+    daemonGet(cfg(), appHome, '/api/llm/context_curation/status'));
+
   // ── Health / Doctor / Metrics ──
   ipcMain.handle('daemon:health', async () =>
     daemonGet(cfg(), appHome, '/api/health'));

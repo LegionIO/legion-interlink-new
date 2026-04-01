@@ -5,6 +5,7 @@ import { EditableInput } from '@/components/EditableInput';
 import { useComputerUse } from '@/providers/ComputerUseProvider';
 import type { ConversationRecord } from '@/providers/RuntimeProvider';
 import type { ComputerSession } from '../../../shared/computer-use';
+import { GaiaPresenceIndicator } from './GaiaPresenceIndicator';
 
 type ConversationSummary = Pick<
   ConversationRecord,
@@ -392,6 +393,8 @@ export const ConversationList: FC<ConversationListProps> = ({
           </p>
         )}
       </div>
+
+      <GaiaPresenceIndicator />
 
       {/* Delete all / delete searched — bottom of sidebar */}
       {filteredConversations.length > 0 && (

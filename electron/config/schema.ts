@@ -361,6 +361,73 @@ const pluginApprovalSchema = z.object({
   approvedAt: z.string(),
 });
 
+const contextCurationConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  mode: z.enum(['heuristic', 'llm_assisted']).default('heuristic'),
+  llmAssisted: z.boolean().default(false),
+  llmModel: z.string().nullable().default(null),
+  toolResultMaxChars: z.number().positive().default(2000),
+  thinkingEviction: z.boolean().default(true),
+  exchangeFolding: z.boolean().default(true),
+  supersededEviction: z.boolean().default(true),
+  dedupEnabled: z.boolean().default(true),
+  dedupThreshold: z.number().min(0).max(1).default(0.85),
+  targetContextTokens: z.number().positive().default(40000),
+});
+
+const debateConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  gaiaAutoTrigger: z.boolean().default(false),
+  defaultRounds: z.number().positive().default(1),
+  maxRounds: z.number().positive().default(3),
+  advocateModel: z.string().default(''),
+  challengerModel: z.string().default(''),
+  judgeModel: z.string().default(''),
+  modelSelectionStrategy: z.enum(['rotate', 'fixed']).default('rotate'),
+});
+
+const promptCachingConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  cacheSystemPrompt: z.boolean().default(true),
+  cacheTools: z.boolean().default(true),
+  cacheConversation: z.boolean().default(true),
+  sortTools: z.boolean().default(true),
+  scope: z.literal('ephemeral').default('ephemeral'),
+  minTokens: z.number().positive().default(1000),
+});
+
+const tokenBudgetConfigSchema = z.object({
+  sessionMaxTokens: z.number().positive().nullable().default(null),
+  sessionWarnTokens: z.number().positive().nullable().default(null),
+  dailyMaxTokens: z.number().positive().nullable().default(null),
+});
+
+const providerLayerConfigSchema = z.object({
+  mode: z.enum(['ruby_llm', 'native', 'auto']).default('ruby_llm'),
+  nativeProviders: z.array(z.string()).default(['claude', 'bedrock']),
+  fallbackToRubyLlm: z.boolean().default(true),
+});
+
+const tierRoutingConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  customMappings: z.record(z.string()).default({}),
+});
+
+const escalationConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  pipelineEnabled: z.boolean().default(true),
+});
+
+const daemonLlmConfigSchema = z.object({
+  contextCuration: contextCurationConfigSchema,
+  debate: debateConfigSchema,
+  promptCaching: promptCachingConfigSchema,
+  tokenBudget: tokenBudgetConfigSchema,
+  providerLayer: providerLayerConfigSchema,
+  tierRouting: tierRoutingConfigSchema,
+  escalation: escalationConfigSchema,
+});
+
 export const appConfigSchema = z.object({
   models: modelsConfigSchema,
   runtime: runtimeConfigSchema,
@@ -409,6 +476,15 @@ export const appConfigSchema = z.object({
   knowledge: knowledgeConfigSchema.optional(),
   imageGeneration: imageGenerationConfigSchema.optional(),
   videoGeneration: videoGenerationConfigSchema.optional(),
+  daemonLlm: daemonLlmConfigSchema.optional(),
 });
 
 export type AppConfig = z.infer<typeof appConfigSchema>;
+export type DaemonLlmConfig = z.infer<typeof daemonLlmConfigSchema>;
+export type ContextCurationConfig = z.infer<typeof contextCurationConfigSchema>;
+export type DebateConfig = z.infer<typeof debateConfigSchema>;
+export type PromptCachingConfig = z.infer<typeof promptCachingConfigSchema>;
+export type TokenBudgetConfig = z.infer<typeof tokenBudgetConfigSchema>;
+export type ProviderLayerConfig = z.infer<typeof providerLayerConfigSchema>;
+export type TierRoutingConfig = z.infer<typeof tierRoutingConfigSchema>;
+export type EscalationConfig = z.infer<typeof escalationConfigSchema>;

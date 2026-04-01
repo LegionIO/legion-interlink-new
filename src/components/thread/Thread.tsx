@@ -33,13 +33,16 @@ import {
 import { app } from '@/lib/ipc-client';
 import { copyTextToClipboard, logClipboardError } from '@/lib/clipboard';
 import { useAttachments } from '@/providers/AttachmentContext';
-import { useBranchNav } from '@/providers/RuntimeProvider';
+import { useBranchNav, type TokenUsageData } from '@/providers/RuntimeProvider';
 import { useConfig } from '@/providers/ConfigProvider';
 import { useRealtime } from '@/providers/RealtimeProvider';
 import { isDictationSupportedForProvider, createUnifiedDictationAdapter, type DictationSession, type AudioProvider } from '@/lib/audio/speech-adapters';
 import { MarkdownText } from './MarkdownText';
 import { ToolCallDisplay } from './ToolGroup';
 import { SubAgentInline } from './SubAgentInline';
+import { PipelineInsights } from './PipelineInsights';
+import type { PipelineEnrichments } from './PipelineInsights';
+import { TokenUsage } from './TokenUsage';
 import { ComposerInput } from './ComposerInput';
 import { DeviceRow } from './DeviceRow';
 import { SearchBar } from './SearchBar';
@@ -679,6 +682,14 @@ const AssistantMessage: FC = () => {
     p.type === 'text' && (p.source === 'interrupt' || p.source === 'unspoken'),
   );
 
+  // Extract pipeline enrichments stored as a content part
+  const enrichmentsPart = content.find((p: { type: string }) => p.type === 'enrichments') as
+    | { type: 'enrichments'; enrichments: PipelineEnrichments }
+    | undefined;
+  const pipelineEnrichments = enrichmentsPart?.enrichments ?? null;
+
+  const tokenUsage = (message as { tokenUsage?: TokenUsageData }).tokenUsage ?? null;
+
   return (
     <MessagePrimitive.Root className="group mb-8 flex justify-start">
       <div className="w-full max-w-4xl">
@@ -711,6 +722,8 @@ const AssistantMessage: FC = () => {
               </div>
             </>
           )}
+          {pipelineEnrichments && <PipelineInsights enrichments={pipelineEnrichments} />}
+          {tokenUsage && !isRunning && <TokenUsage usage={tokenUsage} />}
         </div>
         <div className="flex items-center gap-1">
           <MessageTimestamp date={message.createdAt} align="left" />

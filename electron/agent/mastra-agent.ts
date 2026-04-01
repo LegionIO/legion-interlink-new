@@ -12,7 +12,7 @@ export type { ReasoningEffort } from './model-catalog.js';
 
 export type StreamEvent = {
   conversationId: string;
-  type: 'text-delta' | 'observer-message' | 'tool-call' | 'tool-result' | 'tool-error' | 'tool-progress' | 'tool-compaction' | 'error' | 'done' | 'compaction' | 'context-usage' | 'model-fallback';
+  type: 'text-delta' | 'observer-message' | 'tool-call' | 'tool-result' | 'tool-error' | 'tool-progress' | 'tool-compaction' | 'error' | 'done' | 'compaction' | 'context-usage' | 'model-fallback' | 'enrichment';
   text?: string;
   toolCallId?: string;
   toolName?: string;
@@ -513,6 +513,11 @@ async function* streamWithRealEvents(
   let activeModelSettings = { ...modelSettings };
   let activeModelConfig = { ...modelConfig };
   let compatibilityRetried = false;
+  // Accumulated token usage across all steps
+  let accInputTokens = 0;
+  let accOutputTokens = 0;
+  let accCacheReadTokens = 0;
+  let accCacheWriteTokens = 0;
 
   compatibilityLoop:
   while (true) {
@@ -642,6 +647,19 @@ async function* streamWithRealEvents(
               console.info(`[Agent] Ending stream early for ${conversationId} after content-filter step finish`);
               break;
             }
+            // Accumulate token usage from each step
+            const stepUsage = payload?.usage as { promptTokens?: number; completionTokens?: number } | undefined;
+            if (stepUsage) {
+              accInputTokens += stepUsage.promptTokens ?? 0;
+              accOutputTokens += stepUsage.completionTokens ?? 0;
+            }
+            // Extract Anthropic cache token info from providerMetadata
+            const stepMeta = payload?.providerMetadata as Record<string, unknown> | undefined;
+            const anthropicMeta = stepMeta?.anthropic as Record<string, unknown> | undefined;
+            if (anthropicMeta) {
+              accCacheReadTokens += (anthropicMeta.cacheReadInputTokens as number | undefined) ?? 0;
+              accCacheWriteTokens += (anthropicMeta.cacheCreationInputTokens as number | undefined) ?? 0;
+            }
           } else if (type && isExpectedMastraStructuralEvent(type)) {
             continue;
           } else if (type) {
@@ -705,6 +723,21 @@ async function* streamWithRealEvents(
         finishedAt,
       };
     }
+  }
+
+  // Emit accumulated token usage before done
+  if (accInputTokens > 0 || accOutputTokens > 0) {
+    yield {
+      conversationId,
+      type: 'context-usage',
+      data: {
+        inputTokens: accInputTokens,
+        outputTokens: accOutputTokens,
+        cacheReadTokens: accCacheReadTokens,
+        cacheWriteTokens: accCacheWriteTokens,
+        totalTokens: accInputTokens + accOutputTokens,
+      },
+    };
   }
 
   yield {
