@@ -40,6 +40,7 @@ import { isDictationSupportedForProvider, createUnifiedDictationAdapter, type Di
 import { MarkdownText } from './MarkdownText';
 import { ToolCallDisplay } from './ToolGroup';
 import { SubAgentInline } from './SubAgentInline';
+import { SidechainGroup } from './SidechainGroup';
 import { PipelineInsights } from './PipelineInsights';
 import type { PipelineEnrichments } from './PipelineInsights';
 import { TokenUsage } from './TokenUsage';
@@ -693,6 +694,26 @@ const AssistantMessage: FC = () => {
         content={textContent}
         timestamp={proactiveMeta.timestamp ?? message.createdAt?.toISOString() ?? new Date().toISOString()}
       />
+    );
+  }
+
+  // Check for daemon sidechain metadata
+  const isSidechain = (message as { sidechain?: boolean }).sidechain === true;
+  const agentId = (message as { agentId?: string }).agentId;
+
+  // Render sidechain messages as a compact grouped view
+  if (isSidechain && agentId) {
+    const sidechainMessages = [{
+      id: (message as { id?: string }).id ?? `sc-${Date.now()}`,
+      content: content as Array<{ type: string; text?: string }>,
+      createdAt: message.createdAt,
+    }];
+    return (
+      <MessagePrimitive.Root className="group mb-2 flex justify-start">
+        <div className="w-full max-w-4xl">
+          <SidechainGroup agentId={agentId} messages={sidechainMessages} />
+        </div>
+      </MessagePrimitive.Root>
     );
   }
 
