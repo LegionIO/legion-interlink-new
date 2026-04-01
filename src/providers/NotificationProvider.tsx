@@ -66,6 +66,8 @@ const TOAST_TYPES = new Set([
   'governance.approval_required',
   'health.degraded', 'health.recovered',
   'alert', 'error',
+  'proactive.message', 'proactive.insight', 'proactive.check_in',
+  'trigger.needs_input', 'trigger.resolved',
 ]);
 
 function classifyEvent(raw: unknown): AppNotification {
@@ -114,6 +116,21 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({ children }) 
     }).catch(() => {});
 
     const unsub = app.daemon.onEvent((event) => {
+      // Route proactive messages to GAIA thread
+      const evt = event as Record<string, unknown>;
+      const eventType = String(evt.type || evt.event || evt.kind || '');
+      if (eventType.startsWith('proactive.') || eventType === 'gaia.proactive') {
+        const proactiveMsg = {
+          id: String(evt.id || `proactive-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+          intent: String(evt.intent || evt.type || 'insight'),
+          content: String(evt.content || evt.message || evt.text || ''),
+          source: String(evt.source || 'gaia'),
+          metadata: (evt.metadata || {}) as Record<string, unknown>,
+          timestamp: String(evt.timestamp || new Date().toISOString()),
+        };
+        void app.gaiaThread.append(proactiveMsg).catch(() => {});
+      }
+
       const notification = classifyEvent(event);
       setNotifications((prev) => [notification, ...prev].slice(0, MAX_NOTIFICATIONS));
 
