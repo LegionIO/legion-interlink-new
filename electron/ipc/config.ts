@@ -657,6 +657,7 @@ export function desktopConfigPayload(config: AppConfig): Record<string, unknown>
     daemonLlm: config.daemonLlm,
     proactiveMessaging: config.proactiveMessaging,
     messageChains: config.messageChains,
+    triggers: config.triggers,
   };
 }
 

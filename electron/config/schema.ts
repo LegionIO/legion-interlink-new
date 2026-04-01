@@ -432,6 +432,22 @@ const messageChainsConfigSchema = z.object({
   collapseSidechainsByDefault: z.boolean().default(true),
 });
 
+const triggerRuleSchema = z.object({
+  source: z.enum(['github', 'linear', 'slack']),
+  eventType: z.string().default('*'),
+  action: z.enum(['ignore', 'observe', 'act']).default('observe'),
+  filter: z.string().optional(),
+});
+
+const triggersConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  autoTriage: z.boolean().default(true),
+  triageModel: z.string().default(''),
+  rules: z.array(triggerRuleSchema).default([]),
+  maxConcurrentWorkflows: z.number().int().min(1).max(10).default(3),
+  requireApprovalForActions: z.boolean().default(false),
+});
+
 const daemonLlmConfigSchema = z.object({
   contextCuration: contextCurationConfigSchema,
   debate: debateConfigSchema,
@@ -493,6 +509,7 @@ export const appConfigSchema = z.object({
   daemonLlm: daemonLlmConfigSchema.optional(),
   proactiveMessaging: proactiveMessagingConfigSchema.optional(),
   messageChains: messageChainsConfigSchema.optional(),
+  triggers: triggersConfigSchema.optional(),
 });
 
 export type AppConfig = z.infer<typeof appConfigSchema>;
@@ -506,3 +523,5 @@ export type TierRoutingConfig = z.infer<typeof tierRoutingConfigSchema>;
 export type EscalationConfig = z.infer<typeof escalationConfigSchema>;
 export type ProactiveMessagingConfig = z.infer<typeof proactiveMessagingConfigSchema>;
 export type MessageChainsConfig = z.infer<typeof messageChainsConfigSchema>;
+export type TriggersConfig = z.infer<typeof triggersConfigSchema>;
+export type TriggerRule = z.infer<typeof triggerRuleSchema>;
