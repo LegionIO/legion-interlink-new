@@ -418,6 +418,14 @@ const escalationConfigSchema = z.object({
   pipelineEnabled: z.boolean().default(true),
 });
 
+const proactiveMessagingConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  toastEnabled: z.boolean().default(true),
+  inlineEnabled: z.boolean().default(true),
+  gaiaThreadEnabled: z.boolean().default(true),
+  deferWhileComposing: z.boolean().default(true),
+});
+
 const daemonLlmConfigSchema = z.object({
   contextCuration: contextCurationConfigSchema,
   debate: debateConfigSchema,
@@ -477,6 +485,7 @@ export const appConfigSchema = z.object({
   imageGeneration: imageGenerationConfigSchema.optional(),
   videoGeneration: videoGenerationConfigSchema.optional(),
   daemonLlm: daemonLlmConfigSchema.optional(),
+  proactiveMessaging: proactiveMessagingConfigSchema.optional(),
 });
 
 export type AppConfig = z.infer<typeof appConfigSchema>;
@@ -488,3 +497,4 @@ export type TokenBudgetConfig = z.infer<typeof tokenBudgetConfigSchema>;
 export type ProviderLayerConfig = z.infer<typeof providerLayerConfigSchema>;
 export type TierRoutingConfig = z.infer<typeof tierRoutingConfigSchema>;
 export type EscalationConfig = z.infer<typeof escalationConfigSchema>;
+export type ProactiveMessagingConfig = z.infer<typeof proactiveMessagingConfigSchema>;
