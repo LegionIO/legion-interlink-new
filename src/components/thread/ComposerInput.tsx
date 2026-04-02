@@ -8,7 +8,7 @@ import { useAttachments } from '@/providers/AttachmentContext';
  * uses the same composer runtime for state management.
  */
 export const ComposerInput: FC<{ placeholder?: string; className?: string; autoFocus?: boolean }> = ({
-  placeholder = __BRAND_COMPOSER_PLACEHOLDER,
+  placeholder = 'How can I help you today?',
   className = '',
   autoFocus,
 }) => {
@@ -17,7 +17,9 @@ export const ComposerInput: FC<{ placeholder?: string; className?: string; autoF
   const editorRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
   const lastTextRef = useRef('');
-  const [isEmpty, setIsEmpty] = useState(true);
+  const [showPlaceholder, setShowPlaceholder] = useState(true);
+
+  const shouldShowPlaceholder = (text: string): boolean => text.trim().length === 0;
 
   // --- Cursor save/restore ---
   const saveCursorOffset = (): number => {
@@ -110,11 +112,11 @@ export const ComposerInput: FC<{ placeholder?: string; className?: string; autoF
       if (runtimeText !== lastTextRef.current) {
         lastTextRef.current = runtimeText;
         const el = editorRef.current;
-        setIsEmpty(!runtimeText.trim());
+        setShowPlaceholder(shouldShowPlaceholder(runtimeText));
         if (el && document.activeElement !== el) {
-          el.innerHTML = toHighlightedHTML(runtimeText);
+          el.innerHTML = toHighlightedHTML(runtimeText) || '<br>';
         } else if (el && runtimeText === '') {
-          el.innerHTML = '';
+          el.innerHTML = '<br>';
         }
       }
     });
@@ -126,9 +128,9 @@ export const ComposerInput: FC<{ placeholder?: string; className?: string; autoF
     const state = composerRuntime.getState();
     const text = state.text ?? '';
     lastTextRef.current = text;
-    setIsEmpty(!text.trim());
+    setShowPlaceholder(shouldShowPlaceholder(text));
     if (editorRef.current) {
-      editorRef.current.innerHTML = toHighlightedHTML(text);
+      editorRef.current.innerHTML = toHighlightedHTML(text) || '<br>';
     }
     if (autoFocus) editorRef.current?.focus();
   }, []);
@@ -138,14 +140,14 @@ export const ComposerInput: FC<{ placeholder?: string; className?: string; autoF
     if (isComposingRef.current) return;
     const text = getPlainText();
     lastTextRef.current = text;
-    const nowEmpty = !text.trim();
-    setIsEmpty(nowEmpty);
+    const nowEmpty = text.length === 0;
+    setShowPlaceholder(shouldShowPlaceholder(text));
     composerRuntime.setText(text);
     if (nowEmpty) {
-      // Clear fully and reset cursor to start
+      // Preserve a clickable empty line shell so modified Enter works from the start.
       const el = editorRef.current;
       if (el) {
-        el.innerHTML = '';
+        el.innerHTML = '<br>';
         const range = document.createRange();
         range.setStart(el, 0);
         range.collapse(true);
@@ -157,17 +159,32 @@ export const ComposerInput: FC<{ placeholder?: string; className?: string; autoF
     }
   };
 
+  const insertLineBreak = () => {
+    const el = editorRef.current;
+    if (!el) return;
+
+    el.focus();
+    document.execCommand('insertLineBreak');
+    handleInput();
+  };
+
   // --- Keyboard ---
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    // Enter to send (Shift+Enter for newline)
-    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+    if (e.key === 'Enter' && (e.shiftKey || e.altKey) && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      insertLineBreak();
+      return;
+    }
+
+    // Enter sends; Shift+Enter and Option+Enter insert a newline.
+    if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
       const text = getPlainText().trim();
       if (text) {
         composerRuntime.send();
-        if (editorRef.current) editorRef.current.innerHTML = '';
+        if (editorRef.current) editorRef.current.innerHTML = '<br>';
         lastTextRef.current = '';
-        setIsEmpty(true);
+        setShowPlaceholder(true);
       }
       return;
     }
@@ -221,7 +238,7 @@ export const ComposerInput: FC<{ placeholder?: string; className?: string; autoF
     const el = editorRef.current;
     if (!el) return;
     // When empty, place cursor at position 0
-    if (!getPlainText().trim()) {
+    if (getPlainText().length === 0) {
       const range = document.createRange();
       range.setStart(el, 0);
       range.collapse(true);
@@ -247,7 +264,7 @@ export const ComposerInput: FC<{ placeholder?: string; className?: string; autoF
       className={`outline-none whitespace-pre-wrap break-words app-ce-placeholder ${className}`}
       role="textbox"
       aria-multiline
-      data-placeholder={isEmpty ? placeholder : undefined}
+      data-placeholder={showPlaceholder ? placeholder : undefined}
     />
   );
 };

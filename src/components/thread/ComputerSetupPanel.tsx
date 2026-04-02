@@ -241,7 +241,7 @@ export const ComputerSetupPanel: FC<ComputerSetupPanelProps> = ({
   }, [canStart, canContinue, conversationId, computerGoal, startSession, continueSession, activeComputerSession, computerTarget, startSurface, computerApprovalMode, selectedModelKey, selectedProfileKey]);
 
   const handleGoalKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
       handleStart();
     }
@@ -259,7 +259,7 @@ export const ComputerSetupPanel: FC<ComputerSetupPanelProps> = ({
 
   return (
     <div className="space-y-3 px-1 pb-1">
-      {/* Goal input — Enter to start, Shift+Enter for newline */}
+      {/* Goal input — Enter to start, Shift+Enter / Option+Enter for newline */}
       <textarea
         ref={goalRef}
         value={computerGoal}

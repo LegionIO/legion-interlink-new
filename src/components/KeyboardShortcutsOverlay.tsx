@@ -32,6 +32,7 @@ const GROUPS: Array<{ label: string; shortcuts: Array<{ keys: string[]; descript
     shortcuts: [
       { keys: ['Enter'], description: 'Send message' },
       { keys: ['Shift', 'Enter'], description: 'New line' },
+      { keys: ['Option', 'Enter'], description: 'New line' },
       { keys: ['⌘', '↑'], description: 'Edit last message' },
       { keys: ['Escape'], description: 'Cancel / close overlay' },
     ],

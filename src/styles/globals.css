@@ -197,14 +197,18 @@
 
 /* contentEditable placeholder — data-placeholder attr is only set when isEmpty.
    ::before renders inline at cursor position, no offset issues. */
-.app-ce-placeholder[data-placeholder]::before {
-  content: attr(data-placeholder);
-  color: var(--muted-foreground);
-  pointer-events: none;
+.app-ce-placeholder[data-placeholder] {
+  position: relative;
 }
 
-.app-ce-placeholder[data-placeholder]:focus::before {
-  content: '';
+.app-ce-placeholder[data-placeholder]::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  inset: 0;
+  padding-left: 0.35rem;
+  color: var(--muted-foreground);
+  pointer-events: none;
+  white-space: pre-wrap;
 }
 
 /* Animated gradient text for branding */

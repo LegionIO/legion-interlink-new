@@ -256,7 +256,7 @@ const GuidanceComposer: FC<{ sessionId: string }> = ({ sessionId }) => {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            if (e.key === 'Enter' && !e.shiftKey && !e.altKey) {
               e.preventDefault();
               handleSend();
             }
@@ -1290,7 +1290,7 @@ const Composer: FC<{
             ) : (
               <>
                 <ComposerInput
-                  placeholder={__BRAND_COMPOSER_PLACEHOLDER}
+                  placeholder="How can I help you today?"
                   className="min-h-[48px] max-h-[220px] w-full overflow-y-auto px-1 py-0.5 text-[15px]"
                   autoFocus
                 />
