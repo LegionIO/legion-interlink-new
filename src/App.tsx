@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, type FC } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, type FC } from 'react';
 import { ConfigProvider, useConfig } from '@/providers/ConfigProvider';
 import { AttachmentProvider } from '@/providers/AttachmentContext';
 import { RuntimeProvider, useSubAgents } from '@/providers/RuntimeProvider';
@@ -29,6 +29,8 @@ import { ComputerUseProvider, useComputerUse } from '@/providers/ComputerUseProv
 import { OverlayShell } from '@/components/overlay/OverlayShell';
 import { BellIcon, BookOpenIcon, BotIcon, CpuIcon, DownloadIcon, GaugeIcon, GitBranchIcon, PuzzleIcon, SettingsIcon } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { SidebarDock, type DockItem } from '@/components/SidebarDock';
+import { TooltipProvider } from '@/components/ui/Tooltip';
 import type { ReasoningEffort } from '@/components/thread/ReasoningEffortSelector';
 import { app } from '@/lib/ipc-client';
 import type { ConversationRecord } from '@/providers/RuntimeProvider';
@@ -36,15 +38,17 @@ import { shouldShowComputerSetup, type ComputerSession, type ComputerUseSurface 
 
 export default function App() {
   return (
-    <ConfigProvider>
-      <PluginProvider>
-        <ComputerUseProvider>
-          <NotificationProvider>
-            <AppRoot />
-          </NotificationProvider>
-        </ComputerUseProvider>
-      </PluginProvider>
-    </ConfigProvider>
+    <TooltipProvider delayDuration={200}>
+      <ConfigProvider>
+        <PluginProvider>
+          <ComputerUseProvider>
+            <NotificationProvider>
+              <AppRoot />
+            </NotificationProvider>
+          </ComputerUseProvider>
+        </PluginProvider>
+      </ConfigProvider>
+    </TooltipProvider>
   );
 }
 
@@ -631,6 +635,69 @@ function AppShell() {
     });
   }, []);
 
+  /* ── Sidebar dock items ────────────────────────────── */
+
+  const toggleView = useCallback((view: AppView) => {
+    setActiveView((v) => (v === view ? 'chat' : view));
+  }, []);
+
+  const dockItems: DockItem[] = useMemo(() => [
+    {
+      id: 'settings',
+      label: 'Settings',
+      icon: <SettingsIcon className="h-[18px] w-[18px]" />,
+      onClick: () => { void handleSettingsToggle(); },
+      active: activeView === 'settings',
+    },
+    {
+      id: 'dashboard',
+      label: 'Dashboard',
+      icon: <GaugeIcon className="h-[18px] w-[18px]" />,
+      onClick: () => toggleView('dashboard'),
+      active: activeView === 'dashboard',
+    },
+    {
+      id: 'knowledge',
+      label: 'Knowledge',
+      icon: <BookOpenIcon className="h-[18px] w-[18px]" />,
+      onClick: () => toggleView('knowledge'),
+      active: activeView === 'knowledge',
+    },
+    {
+      id: 'github',
+      label: 'GitHub',
+      icon: <GitBranchIcon className="h-[18px] w-[18px]" />,
+      onClick: () => toggleView('github'),
+      active: activeView === 'github',
+    },
+    {
+      id: 'extensions',
+      label: 'Extensions',
+      icon: <PuzzleIcon className="h-[18px] w-[18px]" />,
+      onClick: () => toggleView('marketplace'),
+      active: activeView === 'marketplace',
+    },
+    {
+      id: 'subagents',
+      label: 'Sub-Agents',
+      icon: <BotIcon className="h-[18px] w-[18px]" />,
+      onClick: () => toggleView('subagents'),
+      active: activeView === 'subagents',
+    },
+    {
+      id: 'notifications',
+      label: 'Notifications',
+      icon: <BellIcon className="h-[18px] w-[18px]" />,
+      onClick: () => toggleView('notifications'),
+      active: activeView === 'notifications',
+      badge: unreadCount > 0 ? (
+        <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-bold text-white">
+          {unreadCount > 99 ? '99+' : unreadCount}
+        </span>
+      ) : undefined,
+    },
+  ], [activeView, unreadCount, handleSettingsToggle, toggleView]);
+
   return (
     <AttachmentProvider>
       <DropZone>
@@ -681,71 +748,7 @@ function AppShell() {
               <div className="shrink-0">
                 <SubAgentSidebarSection />
               </div>
-              <div className="flex items-center gap-2 border-t border-sidebar-border/80 px-4 py-3">
-                <button
-                  type="button"
-                  onClick={() => { void handleSettingsToggle(); }}
-                  className="titlebar-no-drag flex flex-1 items-center gap-2 rounded-xl px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                  title="Settings"
-                >
-                  <SettingsIcon className="h-4 w-4" />
-                  Settings
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveView(activeView === 'dashboard' ? 'chat' : 'dashboard')}
-                  className={`rounded-md p-1.5 transition-colors hover:bg-sidebar-accent/80 ${activeView === 'dashboard' ? 'bg-primary/15 text-primary' : 'text-muted-foreground'}`}
-                  title="Dashboard"
-                >
-                  <GaugeIcon className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveView(activeView === 'knowledge' ? 'chat' : 'knowledge')}
-                  className={`rounded-md p-1.5 transition-colors hover:bg-sidebar-accent/80 ${activeView === 'knowledge' ? 'bg-primary/15 text-primary' : 'text-muted-foreground'}`}
-                  title="Knowledge"
-                >
-                  <BookOpenIcon className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveView(activeView === 'github' ? 'chat' : 'github')}
-                  className={`rounded-md p-1.5 transition-colors hover:bg-sidebar-accent/80 ${activeView === 'github' ? 'bg-primary/15 text-primary' : 'text-muted-foreground'}`}
-                  title="GitHub"
-                >
-                  <GitBranchIcon className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveView(activeView === 'marketplace' ? 'chat' : 'marketplace')}
-                  className={`rounded-md p-1.5 transition-colors hover:bg-sidebar-accent/80 ${activeView === 'marketplace' ? 'bg-primary/15 text-primary' : 'text-muted-foreground'}`}
-                  title="Extensions"
-                >
-                  <PuzzleIcon className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveView(activeView === 'subagents' ? 'chat' : 'subagents')}
-                  className={`rounded-md p-1.5 transition-colors hover:bg-sidebar-accent/80 ${activeView === 'subagents' ? 'bg-primary/15 text-primary' : 'text-muted-foreground'}`}
-                  title="Sub-Agents"
-                >
-                  <BotIcon className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveView(activeView === 'notifications' ? 'chat' : 'notifications')}
-                  className={`relative rounded-md p-1.5 transition-colors hover:bg-sidebar-accent/80 ${activeView === 'notifications' ? 'bg-primary/15 text-primary' : 'text-muted-foreground'}`}
-                  title="Notifications"
-                >
-                  <BellIcon className="h-4 w-4" />
-                  {unreadCount > 0 && (
-                    <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-bold text-white">
-                      {unreadCount > 99 ? '99+' : unreadCount}
-                    </span>
-                  )}
-                </button>
-                <ThemeToggle />
-              </div>
+              <SidebarDock items={dockItems} trailing={<ThemeToggle />} />
             </div>
           </aside>
           <div

@@ -8,12 +8,18 @@ import type { ComputerSession } from '../../../shared/computer-use';
 import { TriggerWorkflows } from './TriggerWorkflows';
 import { GaiaPresenceIndicator } from './GaiaPresenceIndicator';
 import { GaiaThreadEntry } from './GaiaThreadEntry';
+import { useConversationPreferences } from './useConversationPreferences';
+import { SortPopover } from './SortPopover';
+import { FilterPopover } from './FilterPopover';
 
 type ConversationSummary = Pick<
   ConversationRecord,
   'id' | 'title' | 'fallbackTitle' | 'createdAt' | 'updatedAt' | 'lastMessageAt' |
   'messageCount' | 'userMessageCount' | 'runStatus' | 'hasUnread' | 'lastAssistantUpdateAt'
->;
+> & {
+  /** Computed server-side: true if any message contains a tool-call content part */
+  hasToolCalls?: boolean;
+};
 
 type ConversationListProps = {
   activeConversationId: string | null;
@@ -138,6 +144,11 @@ export const ConversationList: FC<ConversationListProps> = ({
     try { return new Set(JSON.parse(localStorage.getItem(__BRAND_APP_SLUG + ':pinned-conversations') || '[]')); } catch { return new Set(); }
   });
   const { sessionsByConversation } = useComputerUse();
+  const [sortOpen, setSortOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const sortButtonRef = useRef<HTMLButtonElement>(null);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
+  const { sort, setSort, filter, setFilter, activeFilterCount, clearFilters, isDefaultSort } = useConversationPreferences();
 
   const togglePin = useCallback((id: string) => {
     setPinnedIds((prev) => {
@@ -214,14 +225,60 @@ export const ConversationList: FC<ConversationListProps> = ({
   }, []);
 
   const isSearchActive = searchQuery.trim().length > 0;
+  const hasActiveFilters = activeFilterCount > 0;
 
-  const filteredConversations = useMemo(() => {
-    if (!isSearchActive) return conversations;
-    const q = searchQuery.toLowerCase();
-    return conversations.filter((c) =>
-      getDisplayTitle(c, sessionsByConversation.get(c.id)).toLowerCase().includes(q),
-    );
-  }, [conversations, searchQuery, isSearchActive]);
+  const processedConversations = useMemo(() => {
+    let result = [...conversations];
+
+    // Stage 1: Apply filters
+    if (hasActiveFilters) {
+      result = result.filter((conv) => {
+        if (filter.hasToolCalls === true && !conv.hasToolCalls) return false;
+        if (filter.hasComputerUse === true && !sessionsByConversation.has(conv.id)) return false;
+        if (filter.messageCountMin != null && conv.messageCount < filter.messageCountMin) return false;
+        if (filter.messageCountMax != null && conv.messageCount > filter.messageCountMax) return false;
+        if (filter.createdAfter && conv.createdAt.slice(0, 10) < filter.createdAfter) return false;
+        if (filter.createdBefore && conv.createdAt.slice(0, 10) > filter.createdBefore) return false;
+        const effectiveUpdated = conv.lastAssistantUpdateAt ?? conv.lastMessageAt ?? conv.updatedAt;
+        if (filter.updatedAfter && (effectiveUpdated ?? '').slice(0, 10) < filter.updatedAfter) return false;
+        if (filter.updatedBefore && (effectiveUpdated ?? '').slice(0, 10) > filter.updatedBefore) return false;
+        return true;
+      });
+    }
+
+    // Stage 2: Apply text search
+    if (isSearchActive) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((c) =>
+        getDisplayTitle(c, sessionsByConversation.get(c.id)).toLowerCase().includes(q),
+      );
+    }
+
+    // Stage 3: Apply sort
+    result.sort((a, b) => {
+      let cmp = 0;
+      switch (sort.field) {
+        case 'latest-updated': {
+          const aAt = a.lastAssistantUpdateAt ?? a.lastMessageAt ?? a.updatedAt ?? a.createdAt;
+          const bAt = b.lastAssistantUpdateAt ?? b.lastMessageAt ?? b.updatedAt ?? b.createdAt;
+          cmp = aAt.localeCompare(bAt);
+          break;
+        }
+        case 'first-created':
+          cmp = a.createdAt.localeCompare(b.createdAt);
+          break;
+        case 'alphabetical': {
+          const aTitle = getDisplayTitle(a, sessionsByConversation.get(a.id)).toLowerCase();
+          const bTitle = getDisplayTitle(b, sessionsByConversation.get(b.id)).toLowerCase();
+          cmp = aTitle.localeCompare(bTitle);
+          break;
+        }
+      }
+      return sort.direction === 'desc' ? -cmp : cmp;
+    });
+
+    return result;
+  }, [conversations, filter, hasActiveFilters, searchQuery, isSearchActive, sort, sessionsByConversation]);
 
   const handleDelete = async (id: string) => {
     const shouldCreateReplacementThread = id === activeConversationId;
@@ -241,7 +298,7 @@ export const ConversationList: FC<ConversationListProps> = ({
   };
 
   const handleDeleteBulk = async () => {
-    const idsToDelete = filteredConversations.map((c) => c.id);
+    const idsToDelete = processedConversations.map((c) => c.id);
 
     for (const id of idsToDelete) {
       await app.conversations.delete(id);
@@ -280,12 +337,46 @@ export const ConversationList: FC<ConversationListProps> = ({
       <div className="flex items-center justify-between px-4 pb-2 pt-4">
         <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Threads</span>
         <div className="flex items-center gap-1 text-muted-foreground">
-          <button type="button" className="rounded-md p-1.5 transition-colors hover:bg-sidebar-accent/80" title="Organize threads">
+          <button
+            ref={sortButtonRef}
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => { setSortOpen((p) => !p); setFilterOpen(false); }}
+            className={`rounded-md p-1.5 transition-colors hover:bg-sidebar-accent/80 ${!isDefaultSort ? 'text-primary' : ''}`}
+            title="Sort threads"
+          >
             <PanelTopOpenIcon className="h-4 w-4" />
           </button>
-          <button type="button" className="rounded-md p-1.5 transition-colors hover:bg-sidebar-accent/80" title="Filter threads">
-            <SlidersHorizontalIcon className="h-4 w-4" />
-          </button>
+          <div className="relative">
+            <button
+              ref={filterButtonRef}
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => { setFilterOpen((p) => !p); setSortOpen(false); }}
+              className="rounded-md p-1.5 transition-colors hover:bg-sidebar-accent/80"
+              title="Filter threads"
+            >
+              <SlidersHorizontalIcon className="h-4 w-4" />
+            </button>
+            {activeFilterCount > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground pointer-events-none">
+                {activeFilterCount > 9 ? '9+' : activeFilterCount}
+              </span>
+            )}
+          </div>
+          {sortOpen && (
+            <SortPopover sort={sort} onSortChange={setSort} onClose={() => setSortOpen(false)} anchorRef={sortButtonRef} />
+          )}
+          {filterOpen && (
+            <FilterPopover
+              filter={filter}
+              onFilterChange={setFilter}
+              activeFilterCount={activeFilterCount}
+              onClear={clearFilters}
+              onClose={() => setFilterOpen(false)}
+              anchorRef={filterButtonRef}
+            />
+          )}
         </div>
       </div>
 
@@ -321,8 +412,8 @@ export const ConversationList: FC<ConversationListProps> = ({
 
       <div className="flex-1 overflow-y-auto px-3">
         {(() => {
-          const pinned = filteredConversations.filter((c) => pinnedIds.has(c.id));
-          const unpinned = filteredConversations.filter((c) => !pinnedIds.has(c.id));
+          const pinned = processedConversations.filter((c) => pinnedIds.has(c.id));
+          const unpinned = processedConversations.filter((c) => !pinnedIds.has(c.id));
           const sections: Array<{ label?: string; items: ConversationSummary[] }> = [];
           if (pinned.length > 0) sections.push({ label: 'Pinned', items: pinned });
           sections.push({ items: unpinned });
@@ -398,18 +489,18 @@ export const ConversationList: FC<ConversationListProps> = ({
           ));
         })()}
 
-        {filteredConversations.length === 0 && (
+        {processedConversations.length === 0 && (
           <p className="text-xs text-muted-foreground p-3 text-center">
-            {searchQuery ? 'No matching conversations' : 'No conversations yet'}
+            {searchQuery || hasActiveFilters ? 'No matching conversations' : 'No conversations yet'}
           </p>
         )}
       </div>
 
       {/* Delete all / delete searched — bottom of sidebar */}
-      {filteredConversations.length > 0 && (
+      {processedConversations.length > 0 && (
         <div className="border-t border-sidebar-border/70 p-3">
           <BulkDeleteButton
-            label={isSearchActive ? `Delete ${filteredConversations.length} searched` : 'Delete all chats'}
+            label={isSearchActive || hasActiveFilters ? `Delete ${processedConversations.length} shown` : 'Delete all chats'}
             onConfirm={handleDeleteBulk}
           />
         </div>

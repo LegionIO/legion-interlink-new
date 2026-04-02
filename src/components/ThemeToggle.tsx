@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, type FC } from 'react';
 import { MonitorIcon, SunIcon, MoonIcon } from 'lucide-react';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { app } from '@/lib/ipc-client';
 
 type ThemeMode = 'system' | 'light' | 'dark';
@@ -82,13 +83,14 @@ export const ThemeToggle: FC = () => {
   const Icon = icons[mode];
 
   return (
-    <button
-      type="button"
-      onClick={toggle}
-      className="titlebar-no-drag rounded-xl p-2 transition-colors hover:bg-sidebar-accent"
-      title={titles[mode]}
-    >
-      <Icon className="h-4 w-4 text-muted-foreground" />
-    </button>
+    <Tooltip content={titles[mode]} side="top" sideOffset={6}>
+      <button
+        type="button"
+        onClick={toggle}
+        className="titlebar-no-drag rounded-xl p-1.5 transition-colors hover:bg-sidebar-accent"
+      >
+        <Icon className="h-[18px] w-[18px] text-muted-foreground" />
+      </button>
+    </Tooltip>
   );
 };

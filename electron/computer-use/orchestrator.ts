@@ -14,7 +14,7 @@ import type { ModelChainEntry, FallbackCallbacks } from './provider-adapters/sha
 import { IsolatedBrowserHarness } from './harnesses/isolated-browser.js';
 import { LocalMacosHarness } from './harnesses/local-macos.js';
 import type { ComputerHarness, ComputerHarnessActionResult } from './harnesses/shared.js';
-import { closeOverlayWindow } from './overlay-window.js';
+import { closeOverlayWindow, hideOverlayForCapture, showOverlayAfterCapture } from './overlay-window.js';
 
 type SessionMutator = (sessionId: string, update: (session: ComputerSession) => ComputerSession) => ComputerSession | null;
 type SessionReader = (sessionId: string) => ComputerSession | null;
@@ -493,27 +493,45 @@ export class ComputerUseOrchestrator {
     const session = this.readSession(sessionId);
     if (!session) return;
 
-    const result: ComputerHarnessActionResult = await (action.kind === 'navigate'
-      ? harness.navigate(session, action, { signal })
-      : action.kind === 'movePointer'
-        ? harness.movePointer(session, action, { signal })
-        : action.kind === 'click'
-          ? harness.click(session, action, { signal })
-          : action.kind === 'doubleClick'
-            ? harness.doubleClick(session, action, { signal })
-            : action.kind === 'drag'
-              ? harness.drag(session, action, { signal })
-              : action.kind === 'scroll'
-                ? harness.scroll(session, action, { signal })
-                : action.kind === 'typeText'
-                  ? harness.typeText(session, action, { signal })
-                  : action.kind === 'pressKeys'
-                    ? harness.pressKeys(session, action, { signal })
-                    : action.kind === 'openApp'
-                      ? harness.openApp(session, action, { signal })
-                      : action.kind === 'focusWindow'
-                        ? harness.focusWindow(session, action, { signal })
-                        : harness.waitForIdle(session, action, { signal }));
+    // Hide the overlay before pointer-based actions so the always-on-top overlay
+    // window doesn't intercept synthetic CGEvents dispatched by the macOS helper.
+    // The overlay uses setIgnoreMouseEvents(true, {forward: true}) but macOS may
+    // still route synthetic HID-level events to the topmost window.
+    const pointerAction = action.kind === 'click' || action.kind === 'doubleClick'
+      || action.kind === 'drag' || action.kind === 'movePointer' || action.kind === 'scroll';
+    if (pointerAction && session.target === 'local-macos') {
+      await hideOverlayForCapture(sessionId);
+    }
+
+    let result: ComputerHarnessActionResult;
+    try {
+      result = await (action.kind === 'navigate'
+        ? harness.navigate(session, action, { signal })
+        : action.kind === 'movePointer'
+          ? harness.movePointer(session, action, { signal })
+          : action.kind === 'click'
+            ? harness.click(session, action, { signal })
+            : action.kind === 'doubleClick'
+              ? harness.doubleClick(session, action, { signal })
+              : action.kind === 'drag'
+                ? harness.drag(session, action, { signal })
+                : action.kind === 'scroll'
+                  ? harness.scroll(session, action, { signal })
+                  : action.kind === 'typeText'
+                    ? harness.typeText(session, action, { signal })
+                    : action.kind === 'pressKeys'
+                      ? harness.pressKeys(session, action, { signal })
+                      : action.kind === 'openApp'
+                        ? harness.openApp(session, action, { signal })
+                        : action.kind === 'focusWindow'
+                          ? harness.focusWindow(session, action, { signal })
+                          : harness.waitForIdle(session, action, { signal }));
+    } finally {
+      // Always restore the overlay, even if the action threw
+      if (pointerAction && session.target === 'local-macos') {
+        showOverlayAfterCapture(sessionId);
+      }
+    }
 
     const actionDisplayIndex = action.displayIndex ?? 0;
     const cursor = result.cursor

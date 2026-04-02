@@ -75,7 +75,18 @@ export function registerConversationHandlers(ipcMain: IpcMain, appHome: string, 
       const bAt = b.lastAssistantUpdateAt ?? b.lastMessageAt ?? b.updatedAt ?? b.createdAt;
       return bAt.localeCompare(aAt);
     });
-    return conversations;
+    // Add computed metadata for client-side filtering
+    return conversations.map((conv) => ({
+      ...conv,
+      hasToolCalls: Array.isArray(conv.messages) && conv.messages.some(
+        (msg: unknown) => {
+          const m = msg as Record<string, unknown>;
+          return Array.isArray(m.content) && (m.content as Array<Record<string, unknown>>).some(
+            (part) => part?.type === 'tool-call',
+          );
+        },
+      ),
+    }));
   });
 
   ipcMain.handle('conversations:get', (_event, id: string) => {

@@ -326,3 +326,8 @@ html:not(.dark) .app-gradient-text {
 .overlay-pulse-icon {
   animation: overlay-icon-pulse 2s ease-in-out infinite;
 }
+
+/* Hide scrollbar on the sidebar dock while keeping scroll functional */
+.dock-scroll::-webkit-scrollbar {
+  display: none;
+}
