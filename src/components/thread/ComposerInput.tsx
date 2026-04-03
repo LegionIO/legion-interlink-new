@@ -8,7 +8,7 @@ import { useAttachments } from '@/providers/AttachmentContext';
  * uses the same composer runtime for state management.
  */
 export const ComposerInput: FC<{ placeholder?: string; className?: string; autoFocus?: boolean }> = ({
-  placeholder = 'How can I help you today?',
+  placeholder = __BRAND_COMPOSER_PLACEHOLDER,
   className = '',
   autoFocus,
 }) => {
