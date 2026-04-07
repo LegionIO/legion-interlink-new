@@ -1,5 +1,5 @@
-// Type-safe wrapper for the Electron IPC bridge exposed via preload
-// window.app is set by electron/preload.ts via contextBridge
+// Type-safe wrapper for the Electron IPC bridge exposed via preload.
+// `window.app` is the canonical bridge and `window.legion` is kept as a compatibility alias.
 
 import type {
   ComputerUseEvent,
@@ -284,14 +284,16 @@ type AppAPI = {
 declare global {
   interface Window {
     app?: AppAPI;
+    legion?: AppAPI;
   }
 }
 
 function getApp(): AppAPI {
-  if (!window.app) {
+  const bridge = window.app ?? window.legion;
+  if (!bridge) {
     throw new Error(__BRAND_PRODUCT_NAME + ' IPC bridge not available. Ensure the app is running in Electron.');
   }
-  return window.app;
+  return bridge;
 }
 
 // Lazy proxy — only accesses window.app when actually called

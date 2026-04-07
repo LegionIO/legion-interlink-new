@@ -428,3 +428,5 @@ const appAPI = {
 };
 
 contextBridge.exposeInMainWorld('app', appAPI);
+// Backwards-compatibility alias for plugins/docs that still expect window.legion.
+contextBridge.exposeInMainWorld('legion', appAPI);
