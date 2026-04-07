@@ -13,7 +13,7 @@ function matchesPattern(command: string, pattern: string): boolean {
   return command.includes(pattern);
 }
 
-function isCommandAllowed(command: string, config: AppConfig): { allowed: boolean; reason?: string } {
+export function isCommandAllowed(command: string, config: AppConfig): { allowed: boolean; reason?: string } {
   const shellConfig = config.tools.shell;
   if (!shellConfig.enabled) return { allowed: false, reason: 'Shell tool is disabled' };
 

@@ -6,13 +6,13 @@ const SUPERPOWERS_REPO = 'https://github.com/obra/superpowers.git';
 const SUPERPOWERS_DIR_NAME = 'superpowers';
 
 function parseSkillMdFrontmatter(content: string): { name?: string; description?: string } {
-  const match = content.match(/^---\s*\n([\s\S]*?)\n---/);
+  const match = content.match(/^---\s*\r?\n([\s\S]*?)\r?\n---/);
   if (!match) return {};
 
   const frontmatter = match[1];
   const result: Record<string, string> = {};
 
-  for (const line of frontmatter.split('\n')) {
+  for (const line of frontmatter.split(/\r?\n/)) {
     const colonIndex = line.indexOf(':');
     if (colonIndex < 0) continue;
     const key = line.slice(0, colonIndex).trim();
@@ -28,13 +28,13 @@ function parseSkillMdFrontmatter(content: string): { name?: string; description?
 }
 
 function getSkillMdBody(content: string): string {
-  const match = content.match(/^---\s*\n[\s\S]*?\n---\s*\n([\s\S]*)$/);
+  const match = content.match(/^---\s*\r?\n[\s\S]*?\r?\n---\s*\r?\n([\s\S]*)$/);
   return match ? match[1].trim() : content.trim();
 }
 
-function generateSkillJson(skillDir: string, skillName: string): boolean {
-  const skillMdPath = join(skillDir, 'SKILL.md');
-  const skillJsonPath = join(skillDir, 'skill.json');
+function generateSkillJson(sourceDir: string, outputDir: string, skillName: string): boolean {
+  const skillMdPath = join(sourceDir, 'SKILL.md');
+  const skillJsonPath = join(outputDir, 'skill.json');
 
   // Don't overwrite if skill.json already exists (user may have customized)
   if (existsSync(skillJsonPath)) return false;
@@ -108,25 +108,7 @@ export function bootstrapSuperpowers(skillsDir: string): void {
     }
 
     // Read SKILL.md from the repo and generate skill.json in the wrapper dir
-    const skillMdPath = join(skillSubDir, 'SKILL.md');
-    const skillJsonPath = join(wrapperDir, 'skill.json');
-
-    if (!existsSync(skillJsonPath) && existsSync(skillMdPath)) {
-      const content = readFileSync(skillMdPath, 'utf-8');
-      const frontmatter = parseSkillMdFrontmatter(content);
-      const body = getSkillMdBody(content);
-
-      const manifest = {
-        name: `superpowers-${entry}`,
-        description: frontmatter.description || `Superpowers skill: ${entry}`,
-        version: '1.0.0',
-        execution: {
-          type: 'prompt',
-          promptTemplate: body,
-        },
-      };
-
-      writeFileSync(skillJsonPath, JSON.stringify(manifest, null, 2));
+    if (generateSkillJson(skillSubDir, wrapperDir, `superpowers-${entry}`)) {
       generated++;
     }
   }
@@ -160,7 +142,7 @@ export function updateSuperpowers(skillsDir: string): void {
       }
       const wrapperDir = join(skillsDir, `superpowers-${entry}`);
       if (!existsSync(wrapperDir)) mkdirSync(wrapperDir, { recursive: true });
-      generateSkillJson(wrapperDir, `superpowers-${entry}`);
+      generateSkillJson(skillSubDir, wrapperDir, `superpowers-${entry}`);
     }
   } catch (err) {
     console.warn('[Superpowers] Failed to update superpowers:', err);
