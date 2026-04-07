@@ -1,17 +1,17 @@
 import { z } from 'zod';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import type { AppConfig } from '../config/schema.js';
 import type { ToolDefinition } from './types.js';
 import { runCommandWithStreaming, resolveProcessStreamingConfig } from './process-runner.js';
 import { runToolExecution } from './execution.js';
+import { isCommandAllowed } from './shell.js';
 
 function binaryExists(name: string): boolean {
-  try {
-    execFileSync('/usr/bin/which', [name], { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
+  const isWindows = process.platform === 'win32';
+  const result = isWindows
+    ? spawnSync('where', [name], { stdio: 'ignore', shell: false })
+    : spawnSync('command', ['-v', name], { stdio: 'ignore', shell: true });
+  return result.status === 0;
 }
 
 type CliToolSpec = {
@@ -36,6 +36,20 @@ function createCliTool(spec: CliToolSpec, getConfig: () => AppConfig): ToolDefin
       run: async () => {
         const { command, cwd, timeout } = input as { command: string; cwd?: string; timeout?: number };
         const config = getConfig();
+
+        // Validate command starts with an allowed binary for this tool
+        const allBinaries = [spec.binary, ...(spec.extraBinaries ?? [])];
+        const firstToken = command.trim().split(/\s+/)[0];
+        if (!allBinaries.includes(firstToken)) {
+          return { error: `Command must start with one of: ${allBinaries.join(', ')}`, command, isError: true };
+        }
+
+        // Apply shell allow/deny guardrails
+        const check = isCommandAllowed(command, config);
+        if (!check.allowed) {
+          return { error: check.reason, command, isError: true };
+        }
+
         const streaming = resolveProcessStreamingConfig(config);
         const result = await runCommandWithStreaming({
           command,
@@ -154,10 +168,7 @@ export function buildCliTools(getConfig: () => AppConfig): ToolDefinition[] {
   const tools: ToolDefinition[] = [];
 
   for (const spec of CLI_TOOL_SPECS) {
-    const allBinaries = [spec.binary, ...(spec.extraBinaries ?? [])];
-    const anyExists = allBinaries.some((b) => binaryExists(b));
-
-    if (anyExists) {
+    if (binaryExists(spec.binary)) {
       tools.push(createCliTool(spec, getConfig));
     }
   }
