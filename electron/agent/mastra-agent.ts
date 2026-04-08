@@ -22,10 +22,7 @@ export type StreamEvent = {
   data?: unknown;
   startedAt?: string;
   finishedAt?: string;
-<<<<<<< HEAD
   durationMs?: number;
-=======
->>>>>>> e79782afb3c120df4a8ce91c4a316b9fd8d210e6
   observerInitiated?: boolean;
   compaction?: {
     originalContent: string;

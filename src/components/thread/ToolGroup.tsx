@@ -306,20 +306,13 @@ const ToolElapsedBadge: FC<{
   isError: boolean;
   startedAt?: string;
   finishedAt?: string;
-<<<<<<< HEAD
   durationMs?: number;
 }> = ({ isRunning, isError, startedAt, finishedAt, durationMs }) => {
-=======
-}> = ({ isRunning, isError, startedAt, finishedAt }) => {
->>>>>>> e79782afb3c120df4a8ce91c4a316b9fd8d210e6
   return (
     <ElapsedBadge
       startedAt={startedAt}
       finishedAt={finishedAt}
-<<<<<<< HEAD
       durationMs={durationMs}
-=======
->>>>>>> e79782afb3c120df4a8ce91c4a316b9fd8d210e6
       isRunning={isRunning}
       isError={isError}
       className="ml-auto"

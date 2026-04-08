@@ -1,6 +1,5 @@
 # Changelog
 
-<<<<<<< HEAD
 ## [1.0.18] - 2026-04-07
 
 ### Added
@@ -13,10 +12,7 @@
 - Tool timing prefers explicit `startedAt`/`finishedAt`/`durationMs` from daemon over generic timestamp field
 - Completed tools enforce minimum 1ms display instead of showing 0ms
 
-## [1.0.17] - 2026-04-06
-=======
-## [Unreleased]
->>>>>>> e79782afb3c120df4a8ce91c4a316b9fd8d210e6
+## [1.0.17]
 
 ### Added
 - 18 daemon IPC proxies for v1.7.0 endpoints (structural index, tool audit, state diff, session search, triggers CRUD, token budget, native dispatch, context curation)
