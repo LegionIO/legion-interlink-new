@@ -1223,7 +1223,7 @@ export function RuntimeProvider({
         conversationId: string; type: string; text?: string;
         toolCallId?: string; toolName?: string; args?: unknown;
         result?: unknown; error?: string;
-        startedAt?: string; finishedAt?: string;
+        startedAt?: string; finishedAt?: string; durationMs?: number;
         compaction?: {
           originalContent: string;
           wasCompacted: boolean;

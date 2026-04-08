@@ -23,6 +23,7 @@ type ToolCallPart = {
   isError?: boolean;
   startedAt?: string;
   finishedAt?: string;
+  durationMs?: number;
   /** Original (pre-compaction) result — present when tool output was compacted */
   originalResult?: unknown;
   /** Tool compaction metadata */

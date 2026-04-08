@@ -97,6 +97,12 @@
     "onlyBuiltDependencies": [
       "electron",
       "esbuild"
-    ]
+    ],
+    "overrides": {
+      "picomatch": ">=4.0.4",
+      "path-to-regexp@<0.1.13": ">=0.1.13",
+      "fast-xml-parser@>=5.0.0 <5.5.6": ">=5.5.6",
+      "@xmldom/xmldom": ">=0.8.12"
+    }
   }
 }
