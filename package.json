@@ -73,6 +73,7 @@
     "highlight.js": "^11.11.1",
     "js-beautify": "^1.15.4",
     "json5": "^2.2.3",
+    "jsonrepair": "^3.13.3",
     "lucide-react": "^0.468.0",
     "microsoft-cognitiveservices-speech-sdk": "^1.48.0",
     "openai": "^6.33.0",

@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { generateObject } from 'ai';
+import { generateObject, generateText, Output } from 'ai';
+import { safeParseJSON } from '@ai-sdk/provider-utils';
+import { jsonrepair } from 'jsonrepair';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import type {
   ComputerActionProposal,
   ComputerDisplayLayout,
@@ -36,6 +39,79 @@ function isRetryableParseError(error: unknown): boolean {
     || (error instanceof Error && error.constructor.name === 'NoObjectGeneratedError');
 }
 
+function isClaudeOpenAICompatModel(modelConfig: LLMModelConfig): boolean {
+  return modelConfig.provider === 'openai-compatible'
+    && /(?:^|[./:_-])(claude|anthropic)(?:$|[./:_-])|claude|anthropic/i.test(modelConfig.modelName);
+}
+
+function extractJsonCandidate(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  const fencedMatches = [...trimmed.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)];
+  for (const match of fencedMatches) {
+    const candidate = match[1]?.trim();
+    if (candidate) return candidate;
+  }
+
+  if (/^\s*{/.test(trimmed)) return trimmed;
+  const firstBrace = trimmed.indexOf('{');
+  const lastBrace = trimmed.lastIndexOf('}');
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    return trimmed.slice(firstBrace, lastBrace + 1).trim();
+  }
+
+  return null;
+}
+
+async function generateObjectWithJsonRepair<T extends z.ZodType>(
+  schema: T,
+  request: Omit<Parameters<typeof generateObject>[0], 'model'>,
+  model: Awaited<ReturnType<typeof createModel>>,
+): Promise<z.infer<T>> {
+  const schemaJson = JSON.stringify(zodToJsonSchema(schema, 'result'), null, 2);
+  const jsonOnlyInstruction = [
+    'Return only a JSON object that matches the JSON Schema exactly.',
+    'Do not include markdown fences, explanations, or any text before or after the JSON.',
+    'Use null for fields that do not apply.',
+    `JSON Schema:\n${schemaJson}`,
+  ].join('\n\n');
+
+  const textRequest = {
+    ...(request as Omit<Parameters<typeof generateObject>[0], 'model'> & {
+      schema: T;
+      output?: string;
+      schemaName?: string;
+      schemaDescription?: string;
+    }),
+  } as Record<string, unknown>;
+  delete textRequest.schema;
+  delete textRequest.output;
+  delete textRequest.schemaName;
+  delete textRequest.schemaDescription;
+
+  const result = await generateText({
+    ...(textRequest as Parameters<typeof generateText>[0]),
+    model,
+    output: Output.text(),
+    system: [String(textRequest.system ?? '').trim() || undefined, jsonOnlyInstruction].filter(Boolean).join('\n\n'),
+  });
+
+  const jsonLikeText = extractJsonCandidate(result.text) ?? result.text;
+  const repairedText = jsonrepair(jsonLikeText);
+  const parseResult = await safeParseJSON({ text: repairedText });
+  if (!parseResult.success) {
+    throw parseResult.error;
+  }
+
+  const validated = schema.safeParse(parseResult.value);
+  if (!validated.success) {
+    throw new Error(`Repaired JSON did not match schema: ${validated.error.message}`);
+  }
+
+  return validated.data;
+}
+
 // ── generateObjectWithFallback ─────────────────────────────────────────────────
 
 export type GenerateObjectResult<T> = {
@@ -61,6 +137,10 @@ async function generateObjectWithFallback<T extends z.ZodType>(
     for (let attempt = 0; attempt <= retryLimit; attempt++) {
       try {
         const request = buildRequest(model);
+        if (isClaudeOpenAICompatModel(entry.modelConfig)) {
+          const repairedObject = await generateObjectWithJsonRepair((request as { schema: T }).schema, request, model);
+          return { object: repairedObject, modelIndex };
+        }
         const result = await generateObject({ ...request, model } as Parameters<typeof generateObject>[0]);
         return { object: (result as { object: z.infer<T> }).object, modelIndex };
       } catch (error) {
