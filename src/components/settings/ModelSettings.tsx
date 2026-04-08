@@ -10,6 +10,7 @@ type Provider = {
   enabled?: boolean;
   endpoint?: string;
   apiKey?: string;
+  useResponsesApi?: boolean;
   apiVersion?: string;
   region?: string;
   accessKeyId?: string;
@@ -107,9 +108,11 @@ export const ModelSettings: FC<SettingsProps> = ({ config, updateConfig }) => {
           value={models.defaultModelKey}
           onChange={(e) => updateConfig('models.defaultModelKey', e.target.value)}
         >
-          {models.catalog.map((m) => (
-            <option key={m.key} value={m.key}>{formatModelDisplayName(m.displayName)}</option>
-          ))}
+          {models.catalog
+            .filter((m) => models.providers[m.provider]?.enabled !== false)
+            .map((m) => (
+              <option key={m.key} value={m.key}>{formatModelDisplayName(m.displayName)}</option>
+            ))}
         </select>
       </div>
 
@@ -373,7 +376,9 @@ const ModelForm: FC<{
     if (deploymentName.trim()) entry.deploymentName = deploymentName.trim();
     if (maxInputTokens) entry.maxInputTokens = Number(maxInputTokens);
     if (selectedProvider?.type === 'openai-compatible') {
-      entry.useResponsesApi = computerUseSupport === 'openai-responses' ? true : useResponsesApi;
+      if (computerUseSupport === 'openai-responses' || useResponsesApi) {
+        entry.useResponsesApi = true;
+      }
     }
     entry.computerUseSupport = computerUseSupport;
     entry.visionCapable = visionCapable;
@@ -458,7 +463,7 @@ const ModelForm: FC<{
       </div>
 
       {selectedProvider?.type === 'openai-compatible' && (
-        <Toggle label="Use Responses API" checked={useResponsesApi} onChange={setUseResponsesApi} />
+        <Toggle label="Force Responses API For This Model" checked={useResponsesApi} onChange={setUseResponsesApi} />
       )}
 
       <div className="grid grid-cols-2 gap-2">
@@ -565,6 +570,7 @@ const ProviderCard: FC<{
   const prefix = `models.providers.${name}`;
   const isBedrock = provider.type === 'amazon-bedrock';
   const isOllama = name === 'ollama';
+  const isOpenAICompatible = provider.type === 'openai-compatible' && !isOllama;
 
   return (
     <div className="rounded-lg border p-3 space-y-2">
@@ -575,13 +581,11 @@ const ProviderCard: FC<{
         </span>
       </div>
 
-      {provider.enabled !== undefined && (
-        <Toggle
-          label="Enabled"
-          checked={provider.enabled}
-          onChange={(v) => updateConfig(`${prefix}.enabled`, v)}
-        />
-      )}
+      <Toggle
+        label="Enabled"
+        checked={provider.enabled !== false}
+        onChange={(v) => updateConfig(`${prefix}.enabled`, v)}
+      />
 
       {provider.endpoint !== undefined && (
         <div>
@@ -595,6 +599,14 @@ const ProviderCard: FC<{
             placeholder={isOllama ? 'http://localhost:11434' : 'https://api.openai.com/v1'}
           />
         </div>
+      )}
+
+      {isOpenAICompatible && (
+        <Toggle
+          label="Use Responses API By Default"
+          checked={provider.useResponsesApi ?? false}
+          onChange={(v) => updateConfig(`${prefix}.useResponsesApi`, v)}
+        />
       )}
 
       {!isOllama && provider.apiKey !== undefined && (

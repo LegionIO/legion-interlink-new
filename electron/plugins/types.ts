@@ -142,6 +142,7 @@ export type PluginUIState = {
   settingsSections: PluginSettingsSectionDescriptor[];
   rendererScripts: PluginRendererScript[];
   requiredPluginsReady: boolean;
+  brandRequiredPluginNames: string[];
 };
 
 /* ── PluginAPI (given to each plugin's activate()) ── */

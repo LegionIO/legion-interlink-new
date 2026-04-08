@@ -21,6 +21,7 @@ const providerSchema = z.object({
   enabled: z.boolean().optional(),
   endpoint: z.string().optional(),
   apiKey: z.string().optional(),
+  useResponsesApi: z.boolean().optional(),
   apiVersion: z.string().optional(),
   region: z.string().optional(),
   accessKeyId: z.string().optional(),
@@ -458,6 +459,16 @@ const daemonLlmConfigSchema = z.object({
   escalation: escalationConfigSchema,
 });
 
+const cliToolSchema = z.object({
+  name: z.string(),
+  binary: z.string(),
+  extraBinaries: z.array(z.string()).optional(),
+  description: z.string(),
+  prefix: z.string().optional(),
+  enabled: z.boolean().optional(),
+  builtIn: z.boolean().optional(),
+});
+
 export const appConfigSchema = z.object({
   models: modelsConfigSchema,
   runtime: runtimeConfigSchema,
@@ -489,10 +500,6 @@ export const appConfigSchema = z.object({
   ui: z.object({
     theme: z.enum(['light', 'dark', 'system']),
     sidebarWidth: z.number().positive(),
-    brandHue: z.number().min(0).max(360).optional(),
-    brandAccent: z.string().optional(),
-    background: z.enum(['matrix-rain', 'gradient', 'none']).optional(),
-    gradientText: z.boolean().optional(),
   }),
   audio: audioConfigSchema,
   realtime: realtimeConfigSchema,
@@ -514,6 +521,7 @@ export const appConfigSchema = z.object({
   proactiveMessaging: proactiveMessagingConfigSchema.optional(),
   messageChains: messageChainsConfigSchema.optional(),
   triggers: triggersConfigSchema.optional(),
+  cliTools: z.array(cliToolSchema).optional(),
 });
 
 export type AppConfig = z.infer<typeof appConfigSchema>;
@@ -529,3 +537,4 @@ export type ProactiveMessagingConfig = z.infer<typeof proactiveMessagingConfigSc
 export type MessageChainsConfig = z.infer<typeof messageChainsConfigSchema>;
 export type TriggersConfig = z.infer<typeof triggersConfigSchema>;
 export type TriggerRule = z.infer<typeof triggerRuleSchema>;
+export type CliToolConfig = z.infer<typeof cliToolSchema>;

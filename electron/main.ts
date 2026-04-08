@@ -3,9 +3,10 @@ import { join } from 'path';
 import { mkdirSync, existsSync, readFileSync, writeFileSync, readdirSync, statSync } from 'fs';
 import { homedir } from 'os';
 import { readEffectiveConfig, registerConfigHandlers } from './ipc/config.js';
-import { registerAgentHandlers, registerTools, updateMcpTools, updateSkillTools, updatePluginTools, getRegisteredTools } from './ipc/agent.js';
+import { registerAgentHandlers, registerTools, updateMcpTools, updateSkillTools, updatePluginTools, updateCliTools, getRegisteredTools } from './ipc/agent.js';
 import { registerConversationHandlers } from './ipc/conversations.js';
 import { buildToolRegistry } from './tools/registry.js';
+import { buildCliTools } from './tools/cli-tools.js';
 import { registerMcpHandlers } from './ipc/mcp.js';
 import { registerMemoryHandlers } from './ipc/memory.js';
 import { rebuildMcpTools } from './tools/mcp-client.js';
@@ -25,8 +26,10 @@ import { registerClipboardHandlers } from './ipc/clipboard.js';
 import { closeAllOverlayWindows } from './computer-use/overlay-window.js';
 import { registerTriggerDispatchHandlers, handleSseEvent } from './ipc/trigger-dispatch.js';
 import { registerGaiaThreadHandlers } from './ipc/gaia-thread.js';
+import { registerUsageHandlers } from './ipc/usage.js';
 import { applyBrandUserAgent, withBrandUserAgent } from './utils/user-agent.js';
 import { bootstrapSuperpowers } from './tools/superpowers-bootstrap.js';
+import { bootstrapBundledPlugins, getBrandRequiredPluginNames } from './plugins/plugin-bootstrap.js';
 
 const APP_HOME = join(homedir(), '.' + __BRAND_APP_SLUG);
 
@@ -74,6 +77,13 @@ function ensureAppHome(): void {
     bootstrapSuperpowers(join(APP_HOME, 'skills'));
   } catch (err) {
     console.warn('[Main] Superpowers bootstrap failed (non-fatal):', err);
+  }
+
+  // Copy brand-required plugins from bundled resources into ~/.{appSlug}/plugins/
+  try {
+    bootstrapBundledPlugins(join(APP_HOME, 'plugins'));
+  } catch (err) {
+    console.warn('[Main] Bundled plugin bootstrap failed (non-fatal):', err);
   }
 }
 
@@ -361,6 +371,7 @@ if (gotSingleInstanceLock) {
     // Track last mcpServers fingerprint to detect changes
     let lastMcpFingerprint = JSON.stringify(getConfig().mcpServers ?? []);
     let lastSkillsFingerprint = JSON.stringify(getConfig().skills?.enabled ?? []);
+    let lastCliToolsFingerprint = JSON.stringify(getConfig().cliTools ?? []);
     let lastDisplayFingerprint = JSON.stringify(getConfig().computerUse?.localMacos?.allowedDisplays ?? []);
     const syncRealtimeTools = (): void => {
       updateActiveRealtimeSessionTools(getRegisteredTools());
@@ -390,6 +401,16 @@ if (gotSingleInstanceLock) {
         updateSkillTools(skillTools);
         syncRealtimeTools();
         console.info(`[${__BRAND_PRODUCT_NAME}] Skills hot-reload complete: ${skillTools.length} skill tools`);
+      }
+
+      // CLI tools hot-reload
+      const newCliToolsFp = JSON.stringify(config.cliTools ?? []);
+      if (newCliToolsFp !== lastCliToolsFingerprint) {
+        lastCliToolsFingerprint = newCliToolsFp;
+        const cliTools = buildCliTools(getConfig);
+        updateCliTools(cliTools);
+        syncRealtimeTools();
+        console.info(`[${__BRAND_PRODUCT_NAME}] CLI tools hot-reload: ${cliTools.length} tools`);
       }
 
       // Display list change detection — auto-update maxDimension when allowed displays change
@@ -448,6 +469,7 @@ if (gotSingleInstanceLock) {
     registerComputerUseHandlers(ipcMain, APP_HOME, getConfig);
     registerKnowledgeHandlers(ipcMain, APP_HOME, getConfig);
     registerClipboardHandlers(ipcMain);
+    registerUsageHandlers(ipcMain, APP_HOME);
 
     // Auto-seed computer use display settings on startup.
     // If allowedDisplays is empty, populate it with all discovered displays
@@ -484,6 +506,7 @@ if (gotSingleInstanceLock) {
       APP_HOME,
       getConfig,
       setConfig, // Unified setConfig that handles models.* persistence correctly
+      getBrandRequiredPluginNames(),
     );
     registerPluginHandlers(ipcMain, pluginManager);
     pluginManagerRef = pluginManager;

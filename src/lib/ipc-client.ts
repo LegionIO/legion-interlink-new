@@ -142,6 +142,9 @@ type AppAPI = {
     testConnection: (server: { name: string; url?: string; command?: string; args?: string[]; env?: Record<string, string> }) =>
       Promise<{ status: string; toolCount: number; error?: string }>;
   };
+  cliTools: {
+    checkBinaries: (binaryNames: string[]) => Promise<Record<string, boolean>>;
+  };
   skills: {
     list: () => Promise<Array<{
       name: string;
@@ -275,6 +278,15 @@ type AppAPI = {
     health: () => Promise<{ ok: boolean; data?: unknown; error?: string }>;
     maintain: () => Promise<{ ok: boolean; data?: unknown; error?: string }>;
     status: () => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+  };
+  usage: {
+    summary: () => Promise<unknown>;
+    byConversation: (params?: Record<string, unknown>) => Promise<unknown>;
+    byModel: () => Promise<unknown>;
+    timeSeries: (params?: Record<string, unknown>) => Promise<unknown>;
+    nonLlmEvents: (params?: Record<string, string>) => Promise<unknown>;
+    recordEvent: (event: unknown) => Promise<unknown>;
+    exportCsv: () => Promise<unknown>;
   };
   onMenuOpenSettings: (callback: () => void) => () => void;
   onFind: (callback: () => void) => () => void;

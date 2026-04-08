@@ -44,11 +44,13 @@ export function resolveModelCatalog(config: AppConfig): {
   for (const model of config.models.catalog) {
     const providerConfig = config.models.providers[model.provider];
     if (!providerConfig) continue;
+    if (providerConfig.enabled === false) continue;
 
     const modelConfig: LLMModelConfig = {
       provider: providerConfig.type,
       endpoint: providerConfig.endpoint ?? '',
       apiKey: providerConfig.apiKey ?? '',
+      useResponsesApi: model.useResponsesApi ?? providerConfig.useResponsesApi,
       apiVersion: providerConfig.apiVersion,
       region: providerConfig.region,
       accessKeyId: providerConfig.accessKeyId,
@@ -60,7 +62,6 @@ export function resolveModelCatalog(config: AppConfig): {
       deploymentName: model.deploymentName,
       modelName: model.modelName,
       maxInputTokens: model.maxInputTokens,
-      useResponsesApi: model.useResponsesApi,
       temperature: config.advanced.temperature,
       maxSteps: config.advanced.maxSteps,
       maxRetries: config.advanced.maxRetries,
@@ -148,13 +149,12 @@ export function resolveStreamConfig(
   const maxSteps = profile?.maxSteps ?? config.advanced.maxSteps;
   const maxRetries = profile?.maxRetries ?? config.advanced.maxRetries;
   const profileUseResponsesApi = profile?.useResponsesApi;
-  const useResponsesApi = profileUseResponsesApi ?? config.advanced.useResponsesApi;
+  const useResponsesApi = profileUseResponsesApi ?? primaryModel.modelConfig.useResponsesApi ?? config.advanced.useResponsesApi;
   const systemPrompt = profile?.systemPrompt?.trim() || config.systemPrompt;
   const reasoningEffort = opts.reasoningEffort ?? profile?.reasoningEffort as ReasoningEffort | undefined;
 
   // 5. Apply merged parameters to model configs (cloned so we don't mutate catalog)
-  // For useResponsesApi, precedence is: profile explicit > per-model > global default.
-  // We only let the profile override the per-model value when the profile explicitly sets it.
+  // For useResponsesApi, precedence is: profile explicit > model/provider default > global default.
   const applyOverrides = (entry: ModelCatalogEntry): ModelCatalogEntry => ({
     key: entry.key,
     displayName: entry.displayName,

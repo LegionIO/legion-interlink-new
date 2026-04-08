@@ -5,6 +5,7 @@ import { homedir } from 'os';
 import type { AppConfig } from '../config/schema.js';
 import { detectAppRuntime } from '../agent/app-runtime.js';
 import { broadcastToAllWindows } from '../utils/window-send.js';
+import { binaryExists } from '../tools/cli-tools.js';
 
 export type { AppConfig } from '../config/schema.js';
 
@@ -119,10 +120,6 @@ function getDefaultConfig() {
     ui: {
       theme: 'system' as const,
       sidebarWidth: 280,
-      brandHue: Number(__BRAND_THEME_HUE) || 292,
-      brandAccent: __BRAND_THEME_ACCENT_LIGHT || '#7f77dd',
-      background: (__BRAND_THEME_BACKGROUND || 'matrix-rain') as 'matrix-rain' | 'gradient' | 'none',
-      gradientText: __BRAND_THEME_GRADIENT_TEXT !== 'false',
     },
     audio: {
       provider: 'native' as const,
@@ -239,6 +236,30 @@ function getDefaultConfig() {
       provider: 'azure' as const,
       model: 'sora-2',
     },
+    cliTools: [
+      { name: 'github', binary: 'gh', extraBinaries: ['git'], description: 'Run GitHub CLI (gh) and git commands. Use for:\n- GitHub: gh pr list, gh issue create, gh repo clone, gh api, gh run list\n- Git: git status, git log, git diff, git commit, git push, git pull, git branch\n- Worktrees: git worktree add, git worktree list, git worktree remove\nPass the full command string including the binary name (gh or git).', prefix: 'gh pr list', enabled: true, builtIn: true },
+      { name: 'brew', binary: 'brew', description: 'Run Homebrew package manager commands.\nExamples: brew install <pkg>, brew upgrade, brew list, brew search <query>, brew info <pkg>, brew services list.', enabled: true, builtIn: true },
+      { name: 'wget', binary: 'wget', description: 'Download files from the web using wget.\nExamples: wget <url>, wget -O <file> <url>, wget -r <url>, wget --spider <url>.', enabled: true, builtIn: true },
+      { name: 'jq', binary: 'jq', description: 'Process JSON data with jq. Pipe JSON into jq or read from files.\nExamples: echo \'{"a":1}\' | jq .a, cat file.json | jq \'.items[] | .name\', jq -r .version package.json.', enabled: true, builtIn: true },
+      { name: 'tree', binary: 'tree', description: 'Display directory structure as a tree.\nExamples: tree, tree -L 2, tree -I node_modules, tree --dirsfirst -a, tree -P "*.ts".', enabled: true, builtIn: true },
+      { name: 'python', binary: 'python3', extraBinaries: ['pip3'], description: 'Run Python 3 and pip commands.\nExamples: python3 script.py, python3 -c "print(1+1)", pip3 install <pkg>, pip3 list, pip3 freeze.\nPass the full command including the binary name (python3 or pip3).', prefix: 'python3 --version', enabled: true, builtIn: true },
+      { name: 'ollama', binary: 'ollama', description: 'Manage and run local LLM models with Ollama.\nExamples: ollama list, ollama pull <model>, ollama run <model>, ollama show <model>, ollama ps, ollama rm <model>.', enabled: true, builtIn: true },
+      { name: 'klist', binary: 'klist', description: 'Display Kerberos ticket cache contents.\nExamples: klist, klist -l, klist -e, klist -A.', enabled: true, builtIn: true },
+      { name: 'jfrog', binary: 'jfrog', description: 'Run JFrog CLI commands for Artifactory, Xray, and other JFrog services.\nExamples: jfrog rt ping, jfrog rt search <pattern>, jfrog rt upload <file> <repo>, jfrog config show.', enabled: true, builtIn: true },
+      { name: 'curl', binary: 'curl', description: 'Make HTTP requests with curl.\nExamples: curl -s <url>, curl -X POST -d \'{"key":"val"}\' -H "Content-Type: application/json" <url>, curl -o file <url>.', enabled: true, builtIn: true },
+      { name: 'docker', binary: 'docker', extraBinaries: ['docker-compose'], description: 'Manage Docker containers and images.\nExamples: docker ps, docker images, docker run, docker build, docker-compose up, docker-compose down.', prefix: 'docker ps', enabled: true, builtIn: true },
+      { name: 'kubectl', binary: 'kubectl', description: 'Manage Kubernetes clusters with kubectl.\nExamples: kubectl get pods, kubectl get services, kubectl describe pod <name>, kubectl logs <pod>.', enabled: true, builtIn: true },
+      { name: 'node', binary: 'node', extraBinaries: ['npm', 'npx', 'pnpm'], description: 'Run Node.js, npm, npx, and pnpm commands.\nExamples: node -e "console.log(1)", npm list, npx create-react-app, pnpm install.\nPass the full command including the binary name (node, npm, npx, or pnpm).', prefix: 'node --version', enabled: true, builtIn: true },
+      { name: 'aws', binary: 'aws', description: 'Run AWS CLI commands.\nExamples: aws s3 ls, aws ec2 describe-instances, aws sts get-caller-identity, aws iam list-users.', enabled: true, builtIn: true },
+      { name: 'terraform', binary: 'terraform', description: 'Run Terraform infrastructure-as-code commands.\nExamples: terraform plan, terraform apply, terraform state list, terraform init, terraform output.', enabled: true, builtIn: true },
+      { name: 'rsync', binary: 'rsync', description: 'Sync files and directories with rsync.\nExamples: rsync -av src/ dest/, rsync -avz --progress src/ remote:dest/.', enabled: true, builtIn: true },
+      { name: 'make', binary: 'make', description: 'Run Makefile targets with make.\nExamples: make, make build, make test, make clean, make -j4.', enabled: true, builtIn: true },
+      { name: 'ruby', binary: 'ruby', extraBinaries: ['gem', 'bundle'], description: 'Run Ruby, gem, and bundler commands.\nExamples: ruby -e "puts 1+1", gem list, bundle install, bundle exec rspec.\nPass the full command including the binary name (ruby, gem, or bundle).', prefix: 'ruby --version', enabled: true, builtIn: true },
+      { name: 'go', binary: 'go', description: 'Run Go toolchain commands.\nExamples: go build, go test, go run main.go, go mod tidy, go vet.', enabled: true, builtIn: true },
+      { name: 'cargo', binary: 'cargo', description: 'Run Rust Cargo commands.\nExamples: cargo build, cargo test, cargo run, cargo clippy, cargo fmt.', enabled: true, builtIn: true },
+      { name: 'ssh', binary: 'ssh', extraBinaries: ['scp'], description: 'SSH and SCP for remote access and file transfer.\nExamples: ssh user@host, scp file user@host:/path, ssh -L 8080:localhost:80 user@host.', enabled: true, builtIn: true },
+      { name: 'helm', binary: 'helm', description: 'Manage Kubernetes Helm charts.\nExamples: helm list, helm install <release> <chart>, helm upgrade, helm repo update.', enabled: true, builtIn: true },
+    ] as Array<{ name: string; binary: string; extraBinaries?: string[]; description: string; prefix?: string; enabled: boolean; builtIn: boolean }>,
   };
 }
 
@@ -276,6 +297,7 @@ type AppProviderConfig = {
   api_key?: string | null;
   openai_api_key?: string | null;
   base_url?: string | null;
+  use_responses_api?: boolean | null;
   region?: string | null;
   bearer_token?: string | null;
   default_model?: string | null;
@@ -355,7 +377,7 @@ function defaultAppConfig(): AppLlmFile {
       default_model: null,
       providers: {
         anthropic: { enabled: false, api_key: null },
-        openai: { enabled: false, api_key: null, openai_api_key: null },
+        openai: { enabled: false, api_key: null, openai_api_key: null, use_responses_api: false },
         gemini: { enabled: false, api_key: null },
         bedrock: {
           enabled: false,
@@ -415,6 +437,7 @@ function toAppProvider(providerKey: AppProviderType, provider: AppProviderConfig
       enabled,
       apiKey: provider?.api_key ?? provider?.openai_api_key ?? '',
       endpoint: provider?.base_url ?? '',
+      useResponsesApi: provider?.use_responses_api ?? false,
     };
   }
 
@@ -591,6 +614,8 @@ export function persistAppModels(
       }
     } else if (field === 'endpoint') {
       provider.base_url = stringValue || null;
+    } else if (field === 'useResponsesApi' && providerKey === 'openai') {
+      provider.use_responses_api = Boolean(value);
     } else if (field === 'region' && providerKey === 'bedrock') {
       provider.region = stringValue || null;
     }
@@ -662,6 +687,7 @@ export function desktopConfigPayload(config: AppConfig): Record<string, unknown>
     proactiveMessaging: config.proactiveMessaging,
     messageChains: config.messageChains,
     triggers: config.triggers,
+    cliTools: config.cliTools,
   };
 }
 
@@ -672,14 +698,16 @@ export function readEffectiveConfig(appHome: string): AppConfig {
   if (existsSync(configPath)) {
     try {
       const raw = JSON.parse(readFileSync(configPath, 'utf-8'));
-      return migrateLegacySystemPrompt(applyExternalModelConfig(deepMerge(defaults, raw) as AppConfig, appHome));
+      return normalizeResponsesApiConfig(
+        migrateLegacySystemPrompt(applyExternalModelConfig(deepMerge(defaults, raw) as AppConfig, appHome)),
+      );
     } catch (error) {
       console.error('[Config] Failed to parse desktop.json, using defaults:', error);
-      return migrateLegacySystemPrompt(applyExternalModelConfig(defaults as unknown as AppConfig, appHome));
+      return normalizeResponsesApiConfig(migrateLegacySystemPrompt(applyExternalModelConfig(defaults as unknown as AppConfig, appHome)));
     }
   }
 
-  return migrateLegacySystemPrompt(applyExternalModelConfig(defaults as unknown as AppConfig, appHome));
+  return normalizeResponsesApiConfig(migrateLegacySystemPrompt(applyExternalModelConfig(defaults as unknown as AppConfig, appHome)));
 }
 
 function migrateLegacySystemPrompt(config: AppConfig): AppConfig {
@@ -687,6 +715,26 @@ function migrateLegacySystemPrompt(config: AppConfig): AppConfig {
     return { ...config, systemPrompt: DEFAULT_SYSTEM_PROMPT };
   }
   return config;
+}
+
+function normalizeResponsesApiConfig(config: AppConfig): AppConfig {
+  let changed = false;
+  const nextCatalog = config.models.catalog.map((entry) => {
+    if (entry.useResponsesApi !== false) return entry;
+    changed = true;
+    const rest = { ...entry };
+    delete rest.useResponsesApi;
+    return rest;
+  });
+
+  if (!changed) return config;
+  return {
+    ...config,
+    models: {
+      ...config.models,
+      catalog: nextCatalog,
+    },
+  };
 }
 
 export function writeDesktopConfig(appHome: string, config: AppConfig): void {
@@ -826,6 +874,14 @@ export function registerConfigHandlers(
   });
 
   ipcMain.handle('platform:homedir', () => appHome);
+
+  ipcMain.handle('cli-tools:check-binaries', (_event, binaryNames: string[]) => {
+    const results: Record<string, boolean> = {};
+    for (const name of binaryNames) {
+      results[name] = binaryExists(name);
+    }
+    return results;
+  });
 
   return { setConfig: setConfigImpl };
 }

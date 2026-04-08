@@ -17,6 +17,11 @@ files:
 extraResources:
   - from: build/bin/LocalMacosHelper
     to: bin/LocalMacosHelper
+  - from: bundled-plugins
+    to: bundled-plugins
+    filter:
+      - "**/*"
+      - "!.gitkeep"
 icon: build/icon.icns
 mac:
   category: "{{macCategory}}"

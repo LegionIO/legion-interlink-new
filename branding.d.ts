@@ -43,3 +43,6 @@ declare const __BRAND_THEME_GRADIENT_TEXT: string;
 declare const __BRAND_MICROPHONE_USAGE: string;
 declare const __BRAND_APPLE_EVENTS_USAGE: string;
 declare const __BRAND_SCREEN_CAPTURE_USAGE: string;
+
+// ── Required Plugins ─────────────────────────────────────────────────────
+declare const __BRAND_REQUIRED_PLUGINS: ReadonlyArray<string>;

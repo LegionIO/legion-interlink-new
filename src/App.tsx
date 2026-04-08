@@ -737,7 +737,7 @@ function AppShell() {
             <div className="titlebar-drag relative flex h-14 items-center justify-center border-b border-sidebar-border/80 px-4">
               <div className="pointer-events-none absolute inset-y-0 left-0 w-20" />
               <span className="titlebar-no-drag inline-flex items-center gap-0.5 text-sm font-medium text-sidebar-foreground">
-                <span className={`app-wordmark ${(config?.ui as Record<string, unknown> | undefined)?.gradientText !== false && __BRAND_THEME_GRADIENT_TEXT !== 'false' ? 'app-gradient-text' : 'app-gradient-text-off'}`}>{__BRAND_WORDMARK}</span>
+                <span className={`app-wordmark ${__BRAND_THEME_GRADIENT_TEXT !== 'false' ? 'app-gradient-text' : 'app-gradient-text-off'}`}>{__BRAND_WORDMARK}</span>
                 <CpuIcon className="h-4 w-4 text-primary/80" />
               </span>
             </div>

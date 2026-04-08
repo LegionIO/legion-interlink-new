@@ -8,6 +8,7 @@ import { ProfileSettings } from './ProfileSettings';
 import { CompactionSettings } from './CompactionSettings';
 import { MemorySettings } from './MemorySettings';
 import { ToolSettings } from './ToolSettings';
+import { CliToolsSettings } from './CliToolsSettings';
 import { AdvancedSettings } from './AdvancedSettings';
 import { McpSettings } from './McpSettings';
 import { SkillSettings } from './SkillSettings';
@@ -36,26 +37,26 @@ import { DaemonCostTracker } from './DaemonCostTracker';
 import { DaemonMesh } from './DaemonMesh';
 import { DaemonScheduleBuilder } from './DaemonScheduleBuilder';
 import { TriggerSettings } from './TriggerSettings';
-import { AppearanceSettings } from './AppearanceSettings';
+import { UsageDashboard } from './UsageDashboard';
 import type { SettingsProps } from './shared';
 import { usePluginSettingsSections } from '@/components/plugins/PluginSettingsSections';
 import { getPluginComponent } from '@/components/plugins/PluginComponentRegistry';
 import { usePlugins } from '@/providers/PluginProvider';
 
 type SettingsSection =
-  | 'appearance' | 'models' | 'profiles' | 'memory' | 'compaction' | 'tools' | 'skills' | 'sub-agents' | 'system-prompt'
-  | 'audio' | 'realtime' | 'media-generation' | 'computer-use' | 'advanced' | 'mcp'
+  | 'models' | 'profiles' | 'memory' | 'compaction' | 'tools' | 'cli-tools' | 'skills' | 'sub-agents' | 'system-prompt'
+  | 'audio' | 'realtime' | 'media-generation' | 'computer-use' | 'advanced' | 'mcp' | 'usage'
   | 'daemon' | 'extensions' | 'tasks' | 'workers' | 'events' | 'audit'
   | 'prompts' | 'webhooks' | 'tenants' | 'capacity' | 'governance' | 'metrics' | 'doctor' | 'topology'
   | 'gaia' | 'task-graph' | 'memory-inspector' | 'cost-tracker' | 'mesh' | 'schedule-builder' | 'triggers';
 
 const sections: Array<{ key: SettingsSection; label: string; group?: string }> = [
-  { key: 'appearance', label: 'Appearance' },
   { key: 'models', label: 'Models' },
   { key: 'profiles', label: 'Profiles' },
   { key: 'memory', label: 'Memory' },
   { key: 'compaction', label: 'Compaction' },
   { key: 'tools', label: 'Tools' },
+  { key: 'cli-tools', label: 'CLI Tools' },
   { key: 'skills', label: 'Skills' },
   { key: 'sub-agents', label: 'Sub-Agents' },
   { key: 'system-prompt', label: 'System Prompt' },
@@ -65,6 +66,7 @@ const sections: Array<{ key: SettingsSection; label: string; group?: string }> =
   { key: 'media-generation', label: 'Media Generation' },
   { key: 'computer-use', label: 'Computer Use' },
   { key: 'advanced', label: 'Advanced' },
+  { key: 'usage', label: 'Usage' },
   { key: 'daemon', label: 'Config', group: 'Daemon' },
   { key: 'extensions', label: 'Extensions', group: 'Daemon' },
   { key: 'tasks', label: 'Tasks', group: 'Daemon' },
@@ -106,6 +108,13 @@ export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
     if (isDaemonSectionActive) setDaemonNavOpen(true);
   }, [isDaemonSectionActive]);
 
+  // Listen for close-settings events (e.g. from Usage tab conversation navigation)
+  useEffect(() => {
+    const handler = () => onClose();
+    window.addEventListener('close-settings', handler);
+    return () => window.removeEventListener('close-settings', handler);
+  }, [onClose]);
+
   if (!config) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -130,7 +139,7 @@ export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
             type="button"
             onClick={() => setActiveSection(s.key)}
             className={`flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-xs font-medium transition-all ${
-              activeSection === s.key ? 'bg-primary text-primary-foreground shadow-[0_12px_28px_rgba(95,87,196,0.22)]' : 'hover:bg-muted/80 text-muted-foreground hover:text-foreground'
+              activeSection === s.key ? 'bg-primary text-primary-foreground shadow-[0_12px_28px_var(--brand-accent-glow)]' : 'hover:bg-muted/80 text-muted-foreground hover:text-foreground'
             }`}
           >
             {s.label}
@@ -143,7 +152,7 @@ export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
             type="button"
             onClick={() => setDaemonNavOpen((open) => !open)}
             className={`flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-xs font-medium transition-all ${
-              isDaemonSectionActive ? 'bg-primary text-primary-foreground shadow-[0_12px_28px_rgba(95,87,196,0.22)]' : 'hover:bg-muted/80 text-muted-foreground hover:text-foreground'
+              isDaemonSectionActive ? 'bg-primary text-primary-foreground shadow-[0_12px_28px_var(--brand-accent-glow)]' : 'hover:bg-muted/80 text-muted-foreground hover:text-foreground'
             }`}
           >
             <ServerIcon className="h-3.5 w-3.5" />
@@ -182,7 +191,7 @@ export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
                 type="button"
                 onClick={() => setActiveSection(s.key)}
                 className={`flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-xs font-medium transition-all ${
-                  activeSection === s.key ? 'bg-primary text-primary-foreground shadow-[0_12px_28px_rgba(95,87,196,0.22)]' : 'hover:bg-muted/80 text-muted-foreground hover:text-foreground'
+                  activeSection === s.key ? 'bg-primary text-primary-foreground shadow-[0_12px_28px_var(--brand-accent-glow)]' : 'hover:bg-muted/80 text-muted-foreground hover:text-foreground'
                 }`}
               >
                 {s.label}
@@ -195,12 +204,12 @@ export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
 
       {/* Section content */}
       <div className="flex-1 overflow-y-auto p-5">
-        {activeSection === 'appearance' && <AppearanceSettings config={config} updateConfig={updateConfig} />}
         {activeSection === 'models' && <ModelSettings config={config} updateConfig={updateConfig} />}
         {activeSection === 'profiles' && <ProfileSettings config={config} updateConfig={updateConfig} />}
         {activeSection === 'memory' && <MemorySettings config={config} updateConfig={updateConfig} />}
         {activeSection === 'compaction' && <CompactionSettings config={config} updateConfig={updateConfig} />}
         {activeSection === 'tools' && <ToolSettings config={config} updateConfig={updateConfig} />}
+        {activeSection === 'cli-tools' && <CliToolsSettings config={config} updateConfig={updateConfig} />}
         {activeSection === 'skills' && <SkillSettings config={config} updateConfig={updateConfig} />}
         {activeSection === 'sub-agents' && <SubAgentSettings config={config} updateConfig={updateConfig} />}
         {activeSection === 'system-prompt' && <SystemPromptSettings config={config} updateConfig={updateConfig} />}
@@ -210,6 +219,7 @@ export const SettingsPanel: FC<{ onClose: () => void }> = ({ onClose }) => {
         {activeSection === 'media-generation' && <MediaGenerationSettings config={config} updateConfig={updateConfig} />}
         {activeSection === 'computer-use' && <ComputerUseSettings config={config} updateConfig={updateConfig} />}
         {activeSection === 'advanced' && <AdvancedSettings config={config} updateConfig={updateConfig} />}
+        {activeSection === 'usage' && <UsageDashboard config={config} updateConfig={updateConfig} />}
         {activeSection === 'daemon' && <DaemonSettings config={config} updateConfig={updateConfig} />}
         {activeSection === 'extensions' && <DaemonExtensions config={config} updateConfig={updateConfig} />}
         {activeSection === 'tasks' && <DaemonTasks config={config} updateConfig={updateConfig} />}

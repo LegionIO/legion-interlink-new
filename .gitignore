@@ -12,3 +12,6 @@ pnpm-debug.log*
 
 # Auto-generated from electron-builder.template.yml by scripts/generate-builder-config.ts
 electron-builder.yml
+
+# Bundled plugins are copied in by branded build scripts (e.g. kai-builder/scripts/dev.sh)
+bundled-plugins/*/

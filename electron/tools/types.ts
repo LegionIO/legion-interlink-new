@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 
-export type ToolSource = 'builtin' | 'mcp' | 'skill' | 'plugin';
+export type ToolSource = 'builtin' | 'mcp' | 'skill' | 'plugin' | 'cli';
 
 export type ToolProgressEvent = {
   stream: 'stdout' | 'stderr';

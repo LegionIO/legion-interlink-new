@@ -4,7 +4,7 @@ import { toStandardSchema as toJsonStandardSchema } from '@mastra/schema-compat/
 import zodToJsonSchema from 'zod-to-json-schema';
 import type { AppConfig } from '../config/schema.js';
 import type { LLMModelConfig, ResolvedStreamConfig, ModelCatalogEntry, ReasoningEffort } from './model-catalog.js';
-import { createLanguageModelFromConfig } from './language-model.js';
+import { createLanguageModelFromConfig, shouldUseOpenAIResponsesApi } from './language-model.js';
 import { getSharedMemory, getResourceId } from './memory.js';
 import type { ToolDefinition, ToolExecutionContext, ToolProgressEvent } from '../tools/types.js';
 
@@ -231,12 +231,13 @@ function buildProviderOptions(
   reasoningEffort?: ReasoningEffort,
 ): Record<string, unknown> | undefined {
   if (modelConfig.provider !== 'openai-compatible') return undefined;
+  const usesResponsesApi = shouldUseOpenAIResponsesApi(modelConfig);
 
   const openaiOptions: Record<string, unknown> = {};
   if (reasoningEffort) {
     openaiOptions.reasoningEffort = reasoningEffort;
   }
-  if (modelConfig.useResponsesApi === true) {
+  if (usesResponsesApi) {
     // Prevent SDK-side item_reference replay during tool-follow-up turns.
     openaiOptions.store = false;
   }
@@ -324,7 +325,12 @@ export async function* streamAgentResponse(
   },
 ): AsyncGenerator<StreamEvent> {
   const msgArray = messages as Array<{ role?: string; content?: unknown }>;
-  console.info(`[Agent:upstream] conv=${conversationId} model=${modelConfig.modelName} provider=${modelConfig.provider} endpoint=${modelConfig.endpoint ?? 'default'}`);
+  const apiSurface = modelConfig.provider === 'openai-compatible'
+    ? (shouldUseOpenAIResponsesApi(modelConfig) ? 'responses' : 'chat')
+    : modelConfig.provider === 'anthropic'
+      ? 'messages'
+      : 'native';
+  console.info(`[Agent:upstream] conv=${conversationId} model=${modelConfig.modelName} provider=${modelConfig.provider} apiSurface=${apiSurface} endpoint=${modelConfig.endpoint ?? 'default'}`);
   console.info(`[Agent:upstream] messageCount=${msgArray.length} roles=[${msgArray.map((m) => m.role ?? '?').join(',')}]`);
 
   const memory = getSharedMemory(config, dbPath);

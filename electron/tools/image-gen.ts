@@ -3,6 +3,7 @@ import type { ToolDefinition } from './types.js';
 import type { AppConfig } from '../config/schema.js';
 import { resolveMediaGenEndpoint, saveMediaToFile, filePathToUrl } from './media-gen-utils.js';
 import { withBrandUserAgent } from '../utils/user-agent.js';
+import { recordUsageEvent } from '../ipc/usage.js';
 
 export function createImageGenTool(getConfig: () => AppConfig, appHome: string): ToolDefinition {
   return {
@@ -108,6 +109,14 @@ export function createImageGenTool(getConfig: () => AppConfig, appHome: string):
         if (images.length === 0) {
           return { error: 'Failed to process any images from the response.' };
         }
+
+        recordUsageEvent({
+          modality: 'image-gen',
+          imageCount: images.length,
+          size: (size || config.size || '1024x1024') as string,
+          quality: (quality || config.quality || 'high') as string,
+          modelKey: config.model || 'gpt-image-1.5',
+        });
 
         const markdownPreview = images
           .map((img, i) => `![Generated Image ${images.length > 1 ? i + 1 : ''}](${img.url})`)

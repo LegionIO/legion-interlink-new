@@ -176,6 +176,12 @@ const appAPI = {
       ipcRenderer.invoke('mcp:test-connection', server) as Promise<{ status: string; toolCount: number; error?: string }>,
   },
 
+  // CLI tools
+  cliTools: {
+    checkBinaries: (binaryNames: string[]) =>
+      ipcRenderer.invoke('cli-tools:check-binaries', binaryNames) as Promise<Record<string, boolean>>,
+  },
+
   // Skills
   skills: {
     list: () => ipcRenderer.invoke('skills:list') as Promise<Array<{
@@ -378,6 +384,20 @@ const appAPI = {
     health: () => ipcRenderer.invoke('knowledge:health'),
     maintain: () => ipcRenderer.invoke('knowledge:maintain'),
     status: () => ipcRenderer.invoke('knowledge:status'),
+  },
+
+  // Usage tracking
+  usage: {
+    summary: () => ipcRenderer.invoke('usage:summary'),
+    byConversation: (params?: Record<string, unknown>) =>
+      ipcRenderer.invoke('usage:by-conversation', params),
+    byModel: () => ipcRenderer.invoke('usage:by-model'),
+    timeSeries: (params?: Record<string, unknown>) =>
+      ipcRenderer.invoke('usage:time-series', params),
+    nonLlmEvents: (params?: Record<string, string>) =>
+      ipcRenderer.invoke('usage:non-llm-events', params),
+    recordEvent: (event: unknown) => ipcRenderer.invoke('usage:record-event', event),
+    exportCsv: () => ipcRenderer.invoke('usage:export-csv'),
   },
 
   // GAIA thread

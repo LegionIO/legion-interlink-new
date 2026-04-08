@@ -20,11 +20,38 @@ import {
   type LaunchToolCallResult,
 } from '../agent/tool-observer.js';
 import { sendSubAgentFollowUp, sendSubAgentFollowUpByToolCall, stopSubAgent, getActiveSubAgentIds } from '../tools/sub-agent.js';
+import { recordUsageEvent } from './usage.js';
 
 const activeStreams = new Map<string, { abort: () => void }>();
 const activeObserverSessions = new Map<string, string>();
 
+// Track the model key used for each active stream so we can attribute token usage
+const activeStreamModelKeys = new Map<string, string>();
+
 function broadcastStreamEvent(event: StreamEvent): void {
+  // Intercept context-usage events to record LLM token usage
+  if (event.type === 'context-usage' && event.conversationId) {
+    const data = event.data as {
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
+      totalTokens?: number;
+    } | undefined;
+    if (data && (data.inputTokens || data.outputTokens || data.totalTokens)) {
+      recordUsageEvent({
+        modality: 'llm',
+        conversationId: event.conversationId,
+        modelKey: activeStreamModelKeys.get(event.conversationId) ?? undefined,
+        inputTokens: data.inputTokens ?? 0,
+        outputTokens: data.outputTokens ?? 0,
+        cacheReadTokens: data.cacheReadTokens ?? 0,
+        cacheWriteTokens: data.cacheWriteTokens ?? 0,
+        totalTokens: data.totalTokens ?? 0,
+      });
+    }
+  }
+
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send('agent:stream-event', event);
   }
@@ -220,6 +247,12 @@ export function updatePluginTools(pluginTools: ToolDefinition[]): void {
   registeredTools = [...nonPlugin, ...ensureSafeToolDefinitions(pluginTools)];
 }
 
+/** Hot-swap CLI tools without touching built-in, MCP, skill, or plugin tools */
+export function updateCliTools(cliTools: ToolDefinition[]): void {
+  const nonCli = registeredTools.filter((t) => t.source !== 'cli');
+  registeredTools = [...nonCli, ...ensureSafeToolDefinitions(cliTools)];
+}
+
 export function registerAgentHandlers(ipcMain: IpcMain, appHome: string): void {
   const dbPath = join(appHome, 'data', 'memory.db');
 
@@ -267,6 +300,9 @@ export function registerAgentHandlers(ipcMain: IpcMain, appHome: string): void {
     const backend = await resolveAgentBackend(config);
     const messageList = messages as Array<{ role?: string; content?: unknown }>;
     console.info(`[Agent:stream] conv=${conversationId} backend=${backend} model=${modelKey ?? config.models.defaultModelKey} profile=${profileKey ?? 'none'} fallback=${fallbackEnabled ? 'on' : 'off'} fallbackModels=${streamConfig?.fallbackModels.length ?? 0} messageCount=${messageList.length}`);
+
+    // Track the model key for usage attribution
+    activeStreamModelKeys.set(conversationId, modelEntry?.modelConfig?.modelName ?? modelKey ?? config.models.defaultModelKey ?? 'unknown');
     for (const [index, message] of messageList.entries()) {
       const contentPreview = typeof message.content === 'string'
         ? message.content.slice(0, 200)
@@ -427,6 +463,7 @@ export function registerAgentHandlers(ipcMain: IpcMain, appHome: string): void {
           }
         } finally {
           activeStreams.delete(conversationId);
+          activeStreamModelKeys.delete(conversationId);
           if (activeObserverSessions.get(conversationId) === observerSessionId) {
             activeObserverSessions.delete(conversationId);
           }
@@ -1060,6 +1097,7 @@ export function registerAgentHandlers(ipcMain: IpcMain, appHome: string): void {
         await waitForObserverToolExecutions();
         observer?.dispose();
         activeStreams.delete(conversationId);
+        activeStreamModelKeys.delete(conversationId);
         if (activeObserverSessions.get(conversationId) === observerSessionId) {
           activeObserverSessions.delete(conversationId);
         }
@@ -1075,6 +1113,7 @@ export function registerAgentHandlers(ipcMain: IpcMain, appHome: string): void {
     if (controller) {
       controller.abort();
       activeStreams.delete(conversationId);
+      activeStreamModelKeys.delete(conversationId);
     }
     activeObserverSessions.delete(conversationId);
     return { ok: true };

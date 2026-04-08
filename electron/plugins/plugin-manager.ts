@@ -46,6 +46,7 @@ export class PluginManager {
     private _appHome: string,
     private getConfig: () => AppConfig,
     private setConfig: (path: string, value: unknown) => void,
+    private brandRequiredPluginNames: Set<string> = new Set(),
   ) {}
 
   /* ── Discovery ── */
@@ -84,7 +85,7 @@ export class PluginManager {
           renderer: typeof raw.renderer === 'string' ? raw.renderer : undefined,
           permissions: Array.isArray(raw.permissions) ? raw.permissions : [],
           priority: typeof raw.priority === 'number' ? raw.priority : 100,
-          required: raw.required === true,
+          required: raw.required === true || this.brandRequiredPluginNames.has(raw.name ?? entry),
           configSchema: raw.configSchema,
         };
         results.push({ manifest, dir: pluginDir });
@@ -154,6 +155,12 @@ export class PluginManager {
 
   private async ensurePluginApproved(manifest: PluginManifest, fileHash: string): Promise<boolean> {
     if (this.isPluginApproved(manifest.name, fileHash)) {
+      return true;
+    }
+
+    // Brand-required plugins are auto-approved — no user dialog needed
+    if (this.brandRequiredPluginNames.has(manifest.name)) {
+      this.persistPluginApproval(manifest.name, fileHash);
       return true;
     }
 
@@ -431,7 +438,15 @@ export class PluginManager {
     // Sort settings sections by priority
     settingsSections.sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
 
-    return { banners, modals, settingsSections, rendererScripts, requiredPluginsReady };
+    // A brand-required plugin that wasn't even discovered means it's not installed
+    for (const requiredName of this.brandRequiredPluginNames) {
+      if (!this.plugins.has(requiredName)) {
+        requiredPluginsReady = false;
+        break;
+      }
+    }
+
+    return { banners, modals, settingsSections, rendererScripts, requiredPluginsReady, brandRequiredPluginNames: [...this.brandRequiredPluginNames] };
   }
 
   private broadcastUIState(): void {
@@ -482,6 +497,7 @@ export class PluginManager {
     description: string;
     state: string;
     required: boolean;
+    brandRequired: boolean;
     error?: string;
   }> {
     return [...this.plugins.values()].map((instance) => ({
@@ -491,6 +507,7 @@ export class PluginManager {
       description: instance.manifest.description,
       state: instance.state,
       required: instance.manifest.required,
+      brandRequired: this.brandRequiredPluginNames.has(instance.manifest.name),
       error: instance.error,
     }));
   }

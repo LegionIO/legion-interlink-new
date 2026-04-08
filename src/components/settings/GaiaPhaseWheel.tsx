@@ -64,7 +64,7 @@ export const GaiaPhaseWheel: FC<Props> = ({ phases, tickMode, tickCount }) => {
     dormant: '#737373',
     sentinel: '#f59e0b',
     full_active: '#34d399',
-    dormant_active: '#a78bfa',
+    dormant_active: 'var(--primary)',
   };
 
   return (
@@ -125,13 +125,13 @@ export const GaiaPhaseWheel: FC<Props> = ({ phases, tickMode, tickCount }) => {
               className="cursor-pointer"
             >
               {isRunning && (
-                <circle cx={x} cy={y} r={innerNodeR + 3} fill="#a78bfa" opacity={0.2}>
+                <circle cx={x} cy={y} r={innerNodeR + 3} fill="var(--primary)" opacity={0.2}>
                   <animate attributeName="r" values={`${innerNodeR + 1};${innerNodeR + 5};${innerNodeR + 1}`} dur="2s" repeatCount="indefinite" />
                 </circle>
               )}
               <circle
                 cx={x} cy={y} r={innerNodeR}
-                fill={state.status === 'idle' ? '#525252' : '#a78bfa'}
+                fill={state.status === 'idle' ? '#525252' : 'var(--primary)'}
                 stroke={phaseStroke(state.status)}
                 strokeWidth="1"
                 strokeDasharray={phaseDash(state.status)}

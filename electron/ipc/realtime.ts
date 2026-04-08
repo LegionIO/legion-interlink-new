@@ -9,8 +9,11 @@ import { RealtimeSession } from '../realtime/realtime-session.js';
 import { buildRealtimeMemoryContext } from '../realtime/realtime-context.js';
 import type { AppConfig } from '../config/schema.js';
 import type { ToolDefinition } from '../tools/types.js';
+import { recordUsageEvent } from './usage.js';
 
 let activeSession: RealtimeSession | null = null;
+let sessionStartTime: string | null = null;
+let sessionConversationId: string | null = null;
 
 export function updateActiveRealtimeSessionTools(tools: ToolDefinition[]): void {
   activeSession?.updateTools(tools);
@@ -33,6 +36,9 @@ export function registerRealtimeHandlers(
         activeSession.close();
         activeSession = null;
       }
+
+      sessionStartTime = new Date().toISOString();
+      sessionConversationId = conversationId;
 
       const config = getConfig();
       console.info(`[Realtime IPC] memoryContext config: ${JSON.stringify(config.realtime.memoryContext)}`);
@@ -62,8 +68,19 @@ export function registerRealtimeHandlers(
 
   ipcMain.handle('realtime:end-session', async () => {
     if (activeSession) {
+      // Record usage event before closing
+      if (sessionStartTime) {
+        const durationSec = (Date.now() - new Date(sessionStartTime).getTime()) / 1000;
+        recordUsageEvent({
+          modality: 'realtime',
+          conversationId: sessionConversationId ?? undefined,
+          durationSec: Math.round(durationSec),
+        });
+      }
       activeSession.close();
       activeSession = null;
+      sessionStartTime = null;
+      sessionConversationId = null;
     }
     return { ok: true };
   });

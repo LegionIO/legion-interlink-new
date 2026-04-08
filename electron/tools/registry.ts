@@ -20,6 +20,7 @@ import { createModelSwitchTool } from './model-switch.js';
 import { createSubAgentTool } from './sub-agent.js';
 import { loadSkillsAsTools } from './skill-loader.js';
 import { createSkillManageTool } from './skill-manage.js';
+import { createCliToolManageTool } from './cli-tool-manage.js';
 import { webFetchTool } from './web-fetch.js';
 import { webSearchTool } from './web-search.js';
 import { createImageGenTool } from './image-gen.js';
@@ -231,6 +232,7 @@ export async function buildToolRegistry(getConfig: () => AppConfig, appHome?: st
   // Skill management tool (always available)
   if (appHome) {
     tools.push(createSkillManageTool(appHome));
+    tools.push(createCliToolManageTool(appHome));
   }
 
   const cuSurface = config.computerUse?.toolSurface ?? 'both';

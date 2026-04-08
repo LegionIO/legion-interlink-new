@@ -43,6 +43,7 @@ export type PluginUIState = {
   settingsSections: PluginSettingsSectionDescriptor[];
   rendererScripts: PluginRendererScript[];
   requiredPluginsReady: boolean;
+  brandRequiredPluginNames: string[];
 };
 
 type ModalCallbackData = {

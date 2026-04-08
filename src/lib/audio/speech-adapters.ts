@@ -77,6 +77,7 @@ export function createSpeechAdapter(config: TtsConfig): SpeechSynthesisAdapter {
     speak(text: string): SpeechSynthesisUtterance {
       const listeners = new Set<() => void>();
       let status: SpeechSynthesisStatus = { type: 'starting' };
+      let startedAt: number | null = null;
 
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = config.rate ?? 1;
@@ -91,6 +92,7 @@ export function createSpeechAdapter(config: TtsConfig): SpeechSynthesisAdapter {
       const notify = () => listeners.forEach((cb) => cb());
 
       utterance.onstart = () => {
+        startedAt = Date.now();
         status = { type: 'running' };
         notify();
       };
@@ -98,6 +100,14 @@ export function createSpeechAdapter(config: TtsConfig): SpeechSynthesisAdapter {
       utterance.onend = () => {
         status = { type: 'ended', reason: 'finished' };
         notify();
+        // Record TTS usage
+        const durationSec = startedAt ? (Date.now() - startedAt) / 1000 : 0;
+        if (durationSec > 0) {
+          try {
+            const bridge = (window as { app?: { usage?: { recordEvent: (e: unknown) => Promise<unknown> } } }).app;
+            bridge?.usage?.recordEvent({ modality: 'tts', durationSec: Math.round(durationSec * 10) / 10 });
+          } catch { /* ignore */ }
+        }
       };
 
       utterance.onerror = (event) => {

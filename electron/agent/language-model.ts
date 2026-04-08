@@ -38,6 +38,13 @@ function normalizeOpenAIBaseUrl(endpoint?: string): string | undefined {
   return stripTrailingSlashes(parsed.toString());
 }
 
+export function shouldUseOpenAIResponsesApi(
+  modelConfig: Pick<LLMModelConfig, 'provider' | 'useResponsesApi'>,
+): boolean {
+  if (modelConfig.provider !== 'openai-compatible') return false;
+  return modelConfig.useResponsesApi === true;
+}
+
 function createTemperatureOmissionFetch(): typeof fetch {
   return async (input, init) => {
     const headers = new Headers(withBrandUserAgent(init?.headers));
@@ -160,8 +167,7 @@ export async function createLanguageModelFromConfig(modelConfig: LLMModelConfig)
   });
 
   const modelId = modelConfig.deploymentName || modelConfig.modelName;
-  // Default to Chat Completions unless a model explicitly opts into Responses.
-  if (modelConfig.useResponsesApi === true) {
+  if (shouldUseOpenAIResponsesApi(modelConfig)) {
     return openai(modelId);
   }
   return openai.chat(modelId);

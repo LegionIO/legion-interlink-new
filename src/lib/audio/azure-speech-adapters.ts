@@ -106,6 +106,8 @@ export function createAzureSpeechAdapter(config: AzureTtsConfig): SpeechSynthesi
       let audioElement: HTMLAudioElement | null = null;
       let blobUrl: string | null = null;
 
+      let playbackStartedAt: number | null = null;
+
       const endpoint = buildTtsEndpoint(config);
       const ssml = buildSsml(config.voice, config.rate, text);
 
@@ -145,6 +147,7 @@ export function createAzureSpeechAdapter(config: AzureTtsConfig): SpeechSynthesi
 
           audioElement.onplay = () => {
             console.log('[Azure TTS] Audio playback started');
+            playbackStartedAt = Date.now();
             status = { type: 'running' };
             notify();
           };
@@ -154,6 +157,14 @@ export function createAzureSpeechAdapter(config: AzureTtsConfig): SpeechSynthesi
               console.log('[Azure TTS] Audio playback ended');
               status = { type: 'ended', reason: 'finished' };
               notify();
+              // Record TTS usage
+              const durationSec = playbackStartedAt ? (Date.now() - playbackStartedAt) / 1000 : 0;
+              if (durationSec > 0) {
+                try {
+                  const bridge = (window as { app?: { usage?: { recordEvent: (e: unknown) => Promise<unknown> } } }).app;
+                  bridge?.usage?.recordEvent({ modality: 'tts', durationSec: Math.round(durationSec * 10) / 10 });
+                } catch { /* ignore */ }
+              }
             }
             cleanupBlob();
           };

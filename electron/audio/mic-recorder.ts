@@ -13,6 +13,7 @@ import { applyBrandUserAgent } from '../utils/user-agent.js';
 import { writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { recordUsageEvent } from '../ipc/usage.js';
 
 let recorderWindow: BrowserWindow | null = null;
 let isRecording = false;
@@ -388,6 +389,13 @@ export function registerMicRecorderHandlers(ipc: IpcMain): void {
       } else if (result.wavBase64) {
         console.log('[MicRecorder] stop: %d b64 chars, %.2fs, amplitude=%.6f',
           result.wavBase64.length, result.durationSec ?? 0, result.maxAmplitude ?? 0);
+
+        if (result.durationSec && result.durationSec > 0) {
+          recordUsageEvent({
+            modality: 'stt',
+            durationSec: result.durationSec,
+          });
+        }
       }
 
       return result;
