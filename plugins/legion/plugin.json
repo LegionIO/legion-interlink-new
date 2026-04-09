@@ -1,0 +1,147 @@
+{
+  "name": "legion",
+  "displayName": "Legion",
+  "version": "0.2.0",
+  "description": "Legion integration for Kai with daemon health, event streaming, proactive threads, workflow routing, knowledge panels, marketplace tooling, GitHub views, and an optional daemon backend.",
+  "main": "main.mjs",
+  "renderer": "renderer.mjs",
+  "permissions": [
+    "config:read",
+    "config:write",
+    "tools:register",
+    "ui:banner",
+    "ui:settings",
+    "ui:panel",
+    "ui:navigation",
+    "network:fetch",
+    "notifications:send",
+    "conversations:read",
+    "conversations:write",
+    "navigation:open",
+    "state:publish",
+    "agent:backend"
+  ],
+  "priority": 20,
+  "required": true,
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "daemonUrl": {
+        "type": "string",
+        "default": "http://127.0.0.1:4567"
+      },
+      "configDir": {
+        "type": "string",
+        "default": ""
+      },
+      "apiKey": {
+        "type": "string",
+        "default": ""
+      },
+      "readyPath": {
+        "type": "string",
+        "default": "/api/ready"
+      },
+      "healthPath": {
+        "type": "string",
+        "default": "/api/health"
+      },
+      "streamPath": {
+        "type": "string",
+        "default": "/api/llm/inference"
+      },
+      "eventsPath": {
+        "type": "string",
+        "default": "/api/events"
+      },
+      "backendEnabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "daemonStreaming": {
+        "type": "boolean",
+        "default": true
+      },
+      "notificationsEnabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "nativeNotifications": {
+        "type": "boolean",
+        "default": true
+      },
+      "autoConnectEvents": {
+        "type": "boolean",
+        "default": true
+      },
+      "openProactiveThread": {
+        "type": "boolean",
+        "default": false
+      },
+      "healthPollMs": {
+        "type": "number",
+        "default": 60000
+      },
+      "eventsRecentCount": {
+        "type": "number",
+        "default": 50
+      },
+      "sseReconnectMs": {
+        "type": "number",
+        "default": 5000
+      },
+      "workspaceThreadTitle": {
+        "type": "string",
+        "default": "Legion Workspace"
+      },
+      "proactiveThreadTitle": {
+        "type": "string",
+        "default": "GAIA Activity"
+      },
+      "bootstrapPrompt": {
+        "type": "string",
+        "default": "Legion workspace ready. Use this thread for background coordination, backend-specific workflows, or plugin-triggered tasks."
+      },
+      "proactivePromptPrefix": {
+        "type": "string",
+        "default": "Proactive daemon activity"
+      },
+      "knowledgeRagEnabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "knowledgeCaptureEnabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "knowledgeScope": {
+        "type": "string",
+        "default": "all"
+      },
+      "triggersEnabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "autoTriage": {
+        "type": "boolean",
+        "default": true
+      },
+      "triageModel": {
+        "type": "string",
+        "default": ""
+      },
+      "maxConcurrentWorkflows": {
+        "type": "number",
+        "default": 3
+      },
+      "triggerRules": {
+        "type": "array",
+        "default": []
+      }
+    }
+  }
+}
