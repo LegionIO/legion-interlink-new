@@ -1,0 +1,10 @@
+{
+  "name": "legion-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Legion plugin source for Kai",
+  "scripts": {
+    "check": "node --check main.mjs && node --check renderer.mjs"
+  }
+}

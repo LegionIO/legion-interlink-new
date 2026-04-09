@@ -1,17 +1,3 @@
-node_modules/
-out/
-dist/
-build/bin/
-*.map
 .DS_Store
-.env
-.env.*
-!.env.example
-pnpm-debug.log*
-*.tsbuildinfo
-
-# Auto-generated from electron-builder.template.yml by scripts/generate-builder-config.ts
-electron-builder.yml
-
-# Bundled plugins are copied in by branded build scripts (e.g. kai-builder/scripts/dev.sh)
-bundled-plugins/*/
+plugins/*/node_modules/
+plugins/*/.DS_Store

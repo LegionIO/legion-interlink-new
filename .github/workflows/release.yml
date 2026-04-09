@@ -1,7 +1,6 @@
 name: Release
 
 on:
-  pull_request:
   workflow_dispatch:
     inputs:
       verbump:
@@ -14,64 +13,18 @@ on:
           - major
           - minor
           - patch
+      upstream_ref:
+        description: Upstream kai-desktop ref to build from
+        required: false
+        default: main
+        type: string
 
 concurrency:
-  group: release-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: legion-interlink-release
   cancel-in-progress: true
 
 jobs:
-  checks:
-    if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.22.0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - run: pnpm lint
-
-      - run: pnpm type-check
-
-      - run: pnpm build
-
-  pr-mac-build:
-    if: ${{ github.event_name == 'pull_request' }}
-    needs: checks
-    runs-on: macos-26
-    permissions:
-      contents: read
-    env:
-      CSC_IDENTITY_AUTO_DISCOVERY: "false"
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.22.0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - run: pnpm build:mac
-
   prepare-release:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
-    needs: checks
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -82,10 +35,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
 
       - name: Require default branch
         env:
@@ -103,18 +52,28 @@ jobs:
             exit 1
           fi
 
-      - name: Bump package version
+      - name: Bump builder version
         if: ${{ inputs.verbump != 'none' }}
-        run: npm version "${{ inputs.verbump }}" --no-git-tag-version
+        run: |
+          current="$(tr -d '[:space:]' < VERSION)"
+          IFS='.' read -r major minor patch <<< "$current"
+
+          case "${{ inputs.verbump }}" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+
+          echo "${major}.${minor}.${patch}" > VERSION
 
       - name: Resolve release version
         id: version
         run: |
-          version="$(node -p "require('./package.json').version")"
+          version="$(tr -d '[:space:]' < VERSION)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
-      - name: Commit package version bump
+      - name: Commit builder version bump
         if: ${{ inputs.verbump != 'none' }}
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
@@ -122,10 +81,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json
+          git add VERSION
 
           if git diff --cached --quiet; then
-            echo "package.json did not change after version bump." >&2
+            echo "VERSION did not change after version bump." >&2
             exit 1
           fi
 
@@ -151,17 +110,14 @@ jobs:
           git push origin "$TAG"
 
   publish-release:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
     needs: prepare-release
     runs-on: macos-26
     permissions:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      # Code signing — electron-builder reads these automatically
       CSC_LINK: ${{ secrets.CSC_LINK }}
       CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-      # Notarization — electron-builder reads these automatically
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -172,6 +128,15 @@ jobs:
         with:
           ref: ${{ needs.prepare-release.outputs.tag }}
 
+      - name: Clone upstream
+        env:
+          UPSTREAM_REF: ${{ inputs.upstream_ref || 'main' }}
+        run: |
+          git clone --depth 1 --branch "$UPSTREAM_REF" \
+            https://github.com/kai-systems/kai-desktop.git \
+            upstream
+          rm -f upstream/.npmrc
+
       - uses: pnpm/action-setup@v4
         with:
           version: 10.22.0
@@ -180,12 +145,41 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+          cache-dependency-path: upstream/pnpm-lock.yaml
+
+      - name: Overlay Legion branding and required plugin
+        env:
+          LEGION_VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          cp branding/branding.config.ts upstream/branding.config.ts
+
+          if find branding/build -type f | grep -q .; then
+            cp -f branding/build/* upstream/build/
+          fi
+
+          mkdir -p upstream/bundled-plugins
+          rm -rf upstream/bundled-plugins/legion
+          cp -R plugins/legion upstream/bundled-plugins/legion
+
+          cd upstream
+          node -e "
+            const fs = require('fs');
+            const pkg = require('./package.json');
+            pkg.name = 'legion-interlink';
+            pkg.productName = 'Legion Interlink';
+            pkg.description = 'Legion Interlink - Local AI Assistant';
+            pkg.version = process.env.LEGION_VERSION;
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
 
       - run: pnpm install --frozen-lockfile
+        working-directory: upstream
 
       - run: pnpm build:mac
+        working-directory: upstream
 
       - name: Verify Swift helper binary
+        working-directory: upstream
         run: |
           APP_PATH="$(find dist/mac-arm64 -maxdepth 1 -name '*.app' -type d | head -n 1)"
           HELPER="$APP_PATH/Contents/Resources/bin/LocalMacosHelper"
@@ -200,7 +194,6 @@ jobs:
           echo "Code signature:"
           codesign -dvv "$HELPER" 2>&1
 
-          # Verify the helper can run and report permissions (basic smoke test)
           RESULT=$("$HELPER" permissions 2>&1)
           echo "Permissions check output: $RESULT"
 
@@ -212,6 +205,7 @@ jobs:
           echo "✓ LocalMacosHelper binary verified"
 
       - name: Verify code signature
+        working-directory: upstream
         run: |
           APP_PATH="$(find dist/mac-arm64 -maxdepth 1 -name '*.app' -type d | head -n 1)"
           if [ -z "$APP_PATH" ]; then
@@ -228,6 +222,7 @@ jobs:
 
       - name: Locate DMG artifact
         id: artifact
+        working-directory: upstream
         run: |
           artifact_path="$(find dist -maxdepth 1 -type f -name '*.dmg' | head -n 1)"
 
@@ -243,13 +238,12 @@ jobs:
         env:
           TAG: ${{ needs.prepare-release.outputs.tag }}
         run: |
-          gh release create "$TAG" "${{ steps.artifact.outputs.path }}" \
+          gh release create "$TAG" "upstream/${{ steps.artifact.outputs.path }}" \
             --generate-notes \
             --title "$TAG" \
             --verify-tag
 
   update-cask:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
     needs:
       - prepare-release
       - publish-release
