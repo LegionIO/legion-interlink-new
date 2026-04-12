@@ -24,7 +24,12 @@ export function registerSkillsHandlers(
       new URL('/api/skills', base).toString(),
       { headers: authHeaders(config, appHome), ...withTimeout() },
     );
-    if (!res.ok) throw new Error(`skills:list failed: ${res.status}`);
+    if (!res.ok) {
+      const responseText = await res.text();
+      throw new Error(
+        `skills:list failed: ${res.status}${responseText ? ` - ${responseText}` : ''}`,
+      );
+    }
     return res.json();
   });
 
@@ -59,10 +64,14 @@ export function registerSkillsHandlers(
   ipcMain.handle('skills:cancel', async (_event, conversationId: string) => {
     const config = getConfig();
     const base = resolveDaemonUrl(config);
-    const res = await fetch(
-      new URL(`/api/skills/active/${encodeURIComponent(conversationId)}`, base).toString(),
-      { method: 'DELETE', headers: authHeaders(config, appHome), ...withTimeout() },
-    );
-    return res.ok;
+    try {
+      const res = await fetch(
+        new URL(`/api/skills/active/${encodeURIComponent(conversationId)}`, base).toString(),
+        { method: 'DELETE', headers: authHeaders(config, appHome), ...withTimeout() },
+      );
+      return res.ok;
+    } catch {
+      return false;
+    }
   });
 }

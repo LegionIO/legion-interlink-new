@@ -102,9 +102,43 @@ export class DaemonChatClient {
     const decoder = new TextDecoder();
     let fullText = '';
     let buffer = '';
+    let streamDone = false;
+    let streamError: string | undefined;
+
+    const processLine = (line: string): void => {
+      const trimmed = line.replace(/\r$/, '');
+      if (!trimmed || trimmed.startsWith(':') || trimmed.startsWith('event:')) return;
+      if (!trimmed.startsWith('data:')) return;
+      const raw = trimmed.slice(5).trimStart();
+      if (!raw || raw === '[DONE]') {
+        streamDone = true;
+        return;
+      }
+      try {
+        const parsed = JSON.parse(raw) as { text?: string; delta?: string; done?: boolean; error?: string };
+        if (parsed.error) {
+          streamError = parsed.error;
+          streamDone = true;
+          return;
+        }
+        if (parsed.done) {
+          streamDone = true;
+          return;
+        }
+        const delta = parsed.text ?? parsed.delta ?? '';
+        if (delta) {
+          fullText += delta;
+          onChunk(delta);
+        }
+      } catch {
+        // Non-JSON data line — forward as raw text delta
+        fullText += raw;
+        onChunk(raw);
+      }
+    };
 
     try {
-      while (true) {
+      while (!streamDone) {
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -113,29 +147,20 @@ export class DaemonChatClient {
         buffer = lines.pop() ?? '';
 
         for (const line of lines) {
-          const trimmed = line.replace(/\r$/, '');
-          if (!trimmed || trimmed.startsWith(':') || trimmed.startsWith('event:')) continue;
-          if (trimmed.startsWith('data:')) {
-            const raw = trimmed.slice(5).trimStart();
-            if (!raw || raw === '[DONE]') continue;
-            try {
-              const parsed = JSON.parse(raw) as { text?: string; delta?: string; done?: boolean };
-              const delta = parsed.text ?? parsed.delta ?? '';
-              if (delta) {
-                fullText += delta;
-                onChunk(delta);
-              }
-            } catch {
-              // Non-JSON data line — forward as raw text delta
-              fullText += raw;
-              onChunk(raw);
-            }
-          }
+          processLine(line);
+          if (streamDone) break;
         }
+      }
+
+      // Flush any remaining buffered data after the read loop
+      if (buffer.trim().length > 0) {
+        processLine(buffer.replace(/\r$/, ''));
       }
     } finally {
       reader.releaseLock();
     }
+
+    if (streamError) throw new Error(`Daemon stream error: ${streamError}`);
 
     return fullText;
   }
