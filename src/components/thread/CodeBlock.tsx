@@ -9,6 +9,7 @@ const lazyYAML = () => import('yaml');
 const lazyGraphQL = () => import('graphql');
 const lazyXmlFormat = () => import('xml-formatter').then((m) => m.default);
 const lazyJsBeautify = () => import('js-beautify').then((m) => m.default ?? m);
+const lazySanitizeHtml = () => import('sanitize-html').then((m) => m.default ?? m);
 // html-minifier-next, postcss, @csstools/postcss-minify removed (Node-only, incompatible with renderer)
 const lazyPrettier = () => import('prettier/standalone');
 const lazyPrettierTs = () => import('prettier/plugins/typescript');
@@ -182,18 +183,15 @@ async function analyzeAsync(text: string, language: string): Promise<FormatInfo 
         const { html: htmlBeautify } = await lazyJsBeautify();
         beautified = htmlBeautify(trimmed, { indent_size: 2 });
       }
-      // Simple HTML minification (regex-based, html-minifier-next removed — Node-only)
-      let withoutComments = trimmed;
-      let previous: string;
-      do {
-        previous = withoutComments;
-        withoutComments = withoutComments
-          .replaceAll(/<!--[\s\S]*?-->/g, '') // complete comments
-          .replaceAll(/<!--[\s\S]*/g, '');    // unclosed comment fragments
-      } while (withoutComments !== previous);
+      // HTML minification/sanitization using a parser-backed sanitizer
+      const sanitizeHtml = await lazySanitizeHtml();
+      const sanitized = sanitizeHtml(trimmed, {
+        allowedTags: [],
+        allowedAttributes: {},
+        disallowedTagsMode: 'discard',
+      });
 
-      const minified = withoutComments
-        .replaceAll(/>\s+</g, '><')
+      const minified = sanitized
         .replaceAll(/\s{2,}/g, ' ')
         .trim();
       const modes = buildModes(trimmed, beautified, minified);
