@@ -183,9 +183,16 @@ async function analyzeAsync(text: string, language: string): Promise<FormatInfo 
         beautified = htmlBeautify(trimmed, { indent_size: 2 });
       }
       // Simple HTML minification (regex-based, html-minifier-next removed — Node-only)
-      const minified = trimmed
-        .replaceAll(/<!--[\s\S]*?-->/g, '')  // complete comments
-        .replaceAll(/<!--[\s\S]*/g, '')       // unclosed comment fragments
+      let withoutComments = trimmed;
+      let previous: string;
+      do {
+        previous = withoutComments;
+        withoutComments = withoutComments
+          .replaceAll(/<!--[\s\S]*?-->/g, '') // complete comments
+          .replaceAll(/<!--[\s\S]*/g, '');    // unclosed comment fragments
+      } while (withoutComments !== previous);
+
+      const minified = withoutComments
         .replaceAll(/>\s+</g, '><')
         .replaceAll(/\s{2,}/g, ' ')
         .trim();
