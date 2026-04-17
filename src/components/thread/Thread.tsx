@@ -429,26 +429,43 @@ function useMatrixCanvas() {
         drops[index] += 1;
       }
 
+      // Throttled to ~8fps (130ms) — decorative animation, imperceptible vs 15fps
       frameId = window.setTimeout(() => {
         animationFrame = window.requestAnimationFrame(draw);
-      }, 65);
+      }, 130);
     };
 
-    setup();
-    draw();
-
-    const handleResize = () => {
+    const stop = () => {
       window.clearTimeout(frameId);
       window.cancelAnimationFrame(animationFrame);
-      setup();
+    };
+
+    const start = () => {
+      stop();
       draw();
     };
 
+    setup();
+    start();
+
+    const handleResize = () => { stop(); setup(); start(); };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') stop(); else start();
+    };
+    const handleBlur = () => stop();
+    const handleFocus = () => start();
+
     window.addEventListener('resize', handleResize);
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
+
     return () => {
-      window.clearTimeout(frameId);
-      window.cancelAnimationFrame(animationFrame);
+      stop();
       window.removeEventListener('resize', handleResize);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 
