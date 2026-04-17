@@ -30,10 +30,16 @@ export const webSearchTool: ToolDefinition = {
       for (let i = 0; i < Math.min(links.length, maxResults); i++) {
         const rawUrl = links[i][1];
         const decodedUrl = decodeURIComponent(rawUrl.replace(/.*uddg=/, '').split('&')[0]);
+        const stripTags = (s: string) => s
+          .replace(/<script[\s\S]*?<\/script\s*>/gi, '')
+          .replace(/<style[\s\S]*?<\/style\s*>/gi, '')
+          .replace(/<!--[\s\S]*?-->/g, '')
+          .replace(/<[^>]+>/g, '')
+          .trim();
         results.push({
           url: decodedUrl,
-          title: links[i][2].replace(/<[^>]+>/g, '').trim(),
-          snippet: snippets[i] ? snippets[i][1].replace(/<[^>]+>/g, '').trim() : '',
+          title: stripTags(links[i][2]),
+          snippet: snippets[i] ? stripTags(snippets[i][1]) : '',
         });
       }
 

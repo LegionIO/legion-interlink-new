@@ -22,8 +22,13 @@ export const webFetchTool: ToolDefinition = {
 
       if (contentType.includes('text/html')) {
         content = content
-          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+          // Strip script blocks including whitespace variants like </script  >
+          .replace(/<script[\s\S]*?<\/script\s*>/gi, '')
+          // Strip style blocks
+          .replace(/<style[\s\S]*?<\/style\s*>/gi, '')
+          // Strip HTML comments (incomplete sanitization source)
+          .replace(/<!--[\s\S]*?-->/g, '')
+          // Strip remaining tags
           .replace(/<[^>]+>/g, ' ')
           .replace(/\s+/g, ' ')
           .trim();
