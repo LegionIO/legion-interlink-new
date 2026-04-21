@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.4] - 2026-04-21
+
+### Fixed
+- `MessageTimestamp` crashes with `date.toDateString is not a function` when `message.createdAt` is a string or number instead of a `Date` object (e.g. after conversation restore from JSON persistence)
+
 ## [1.1.3] - 2026-04-17
 
 ### Fixed

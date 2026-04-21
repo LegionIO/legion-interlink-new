@@ -945,8 +945,10 @@ const SpeakButton: FC = () => {
   );
 };
 
-const MessageTimestamp: FC<{ date?: Date; align: 'left' | 'right' }> = ({ date, align }) => {
-  if (!date) return null;
+const MessageTimestamp: FC<{ date?: Date | string | number; align: 'left' | 'right' }> = ({ date: rawDate, align }) => {
+  if (!rawDate) return null;
+  const date = rawDate instanceof Date ? rawDate : new Date(rawDate);
+  if (isNaN(date.getTime())) return null;
   const now = new Date();
   const isToday = date.toDateString() === now.toDateString();
   const yesterday = new Date(now);
