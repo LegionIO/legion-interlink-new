@@ -31,7 +31,9 @@ type ConversationListProps = {
 
 function formatRelativeTime(timestamp: string | null): string {
   if (!timestamp) return 'No messages';
-  const diffMs = Date.now() - new Date(timestamp).getTime();
+  const parsed = new Date(timestamp);
+  if (isNaN(parsed.getTime())) return '';
+  const diffMs = Date.now() - parsed.getTime();
   if (diffMs < 60_000) return 'just now';
   if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)}m ago`;
   if (diffMs < 86_400_000) return `${Math.floor(diffMs / 3_600_000)}h ago`;

@@ -19,7 +19,8 @@ const INTENT_LABELS: Record<string, string> = {
 
 export const ProactiveMessage: FC<ProactiveMessageProps> = ({ intent, content, timestamp }) => {
   const label = INTENT_LABELS[intent] || 'GAIA';
-  const time = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const parsed = new Date(timestamp);
+  const time = isNaN(parsed.getTime()) ? '' : parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (
     <div className="my-4 mx-auto max-w-3xl rounded-lg border-l-2 border-amber-500/50 bg-amber-500/5 px-4 py-3">
