@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.6] - 2026-04-22
+
+### Changed
+- Model catalog now fetched from daemon `/v1/models` endpoint instead of requiring manual config in `~/.legionio/config.json`; discovers all models the daemon has valid credentials for at runtime
+- Falls back to `/api/llm/providers` (default model per provider) when `/v1/models` is unavailable, then to local config catalog if daemon is unreachable
+- Exposed `daemon:llm-models` IPC handler for direct `/v1/models` access from renderer
+
 ## [1.1.5] - 2026-04-21
 
 ### Fixed
