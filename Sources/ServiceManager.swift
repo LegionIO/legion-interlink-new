@@ -148,10 +148,10 @@ class ServiceManager: ObservableObject {
                 // legionio start blocks (runs in foreground), so fire-and-forget
                 // Start from ~/.legionio so relative log paths resolve correctly
                 Self.runProcessAsync(legionio, arguments: ["start"], workingDirectory: home)
-                await Self.waitForServiceReady(service: service, brew: brew, healthURL: healthURL, target: true, timeout: 30)
+                await Self.waitForServiceReady(service: service, brew: brew, healthURL: healthURL, target: true, timeout: 60)
             } else {
                 Self.runProcess(brew, arguments: ["services", "start", name])
-                await Self.waitForServiceReady(service: service, brew: brew, healthURL: healthURL, target: true, timeout: 30)
+                await Self.waitForServiceReady(service: service, brew: brew, healthURL: healthURL, target: true, timeout: 60)
             }
             await MainActor.run {
                 self.updateServiceStatus(service, .running)
@@ -178,7 +178,7 @@ class ServiceManager: ObservableObject {
                 Self.runProcess(brew, arguments: ["services", "stop", name])
             }
             // Wait until health check confirms the service is actually down
-            await Self.waitForServiceReady(service: service, brew: brew, healthURL: healthURL, target: false, timeout: 30)
+            await Self.waitForServiceReady(service: service, brew: brew, healthURL: healthURL, target: false, timeout: 60)
             await MainActor.run {
                 self.updateServiceStatus(service, .stopped)
                 self.suppressPolling = false
@@ -199,11 +199,11 @@ class ServiceManager: ObservableObject {
             Self.runProcess(legionio, arguments: ["stop"])
             Self.runProcessAsync(brew, arguments: ["services", "stop", "legionio"])
             Self.killProcessOnPort(4567)
-            await Self.waitForServiceReady(service: .legionio, brew: brew, healthURL: healthURL, target: false, timeout: 30)
+            await Self.waitForServiceReady(service: .legionio, brew: brew, healthURL: healthURL, target: false, timeout: 60)
             // Start from ~/.legionio so relative log paths resolve correctly
             await self.updateServiceStatus(.legionio, .starting)
             Self.runProcess(legionio, arguments: ["start"], workingDirectory: home)
-            await Self.waitForServiceReady(service: .legionio, brew: brew, healthURL: healthURL, target: true, timeout: 30)
+            await Self.waitForServiceReady(service: .legionio, brew: brew, healthURL: healthURL, target: true, timeout: 60)
             await MainActor.run { self.suppressPolling = false }
             await self.checkAllServices()
         }
@@ -368,8 +368,8 @@ class ServiceManager: ObservableObject {
     private nonisolated static func waitForServiceReady(
         service: ServiceName, brew: String, healthURL: URL, target: Bool, timeout: Int
     ) async {
-        let interval: UInt64 = 2_000_000_000  // 2 seconds
-        let maxAttempts = timeout / 2
+        let interval: UInt64 = 1_000_000_000  // 1 second
+        let maxAttempts = timeout
 
         for _ in 0..<maxAttempts {
             try? await Task.sleep(nanoseconds: interval)
