@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.15] - 2026-04-27
+
+### Fixed
+- Mission Control now labels persisted task rows as Tracked Tasks and adds a separate recent Activity card from daemon events so users can distinguish persisted jobs from live runner activity (#59)
+
 ## [1.1.14] - 2026-04-27
 
 ### Fixed
