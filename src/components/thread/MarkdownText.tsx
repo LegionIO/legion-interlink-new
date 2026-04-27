@@ -6,6 +6,7 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import { RefreshCwIcon } from 'lucide-react';
 import { CodeBlock } from './CodeBlock';
 import { cn } from '@/lib/utils';
+import { unwrapContentString } from '@/lib/utils/unwrap-content';
 
 const rehypeSanitizeOptions = {
   ...defaultSchema,
@@ -211,7 +212,7 @@ export const MarkdownText: FC<{ text: string }> = memo(({ text }) => {
         urlTransform={urlTransform}
         components={markdownComponents as Components}
       >
-        {text}
+        {unwrapContentString(text)}
       </ReactMarkdown>
     </div>
   );
