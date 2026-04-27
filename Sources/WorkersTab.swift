@@ -108,57 +108,53 @@ struct WorkersTab: View {
     // MARK: - Worker Card
 
     private func workerCard(_ worker: CachedWorker) -> some View {
-        HStack(spacing: 10) {
-            // State dot
-            Circle()
-                .fill(stateColor(worker.state))
-                .frame(width: 7, height: 7)
-                .shadow(color: stateColor(worker.state).opacity(0.5), radius: 3)
+        HoverCard {
+            HStack(spacing: 10) {
+                // State dot
+                Circle()
+                    .fill(stateColor(worker.state))
+                    .frame(width: 7, height: 7)
+                    .shadow(color: stateColor(worker.state).opacity(0.5), radius: 3)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(worker.className)
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                    .foregroundColor(TerminalTheme.text)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(worker.className)
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundColor(TerminalTheme.text)
 
-                HStack(spacing: 8) {
-                    Text("id:\(worker.id)")
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundColor(TerminalTheme.textDim)
-                        .lineLimit(1)
-
-                    Text(worker.state)
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                        .foregroundColor(stateColor(worker.state))
-
-                    if worker.taskCount > 0 {
-                        Text("\(worker.taskCount) tasks")
+                    HStack(spacing: 8) {
+                        Text("id:\(worker.id)")
                             .font(.system(size: 9, design: .monospaced))
-                            .foregroundColor(TerminalTheme.textDim.opacity(0.6))
+                            .foregroundColor(TerminalTheme.textDim)
+                            .lineLimit(1)
+
+                        Text(worker.state)
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .foregroundColor(stateColor(worker.state))
+
+                        if worker.taskCount > 0 {
+                            Text("\(worker.taskCount) tasks")
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundColor(TerminalTheme.textDim.opacity(0.6))
+                        }
                     }
                 }
+
+                Spacer()
+
+                Text(worker.state)
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundColor(stateColor(worker.state))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(stateColor(worker.state).opacity(0.1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(stateColor(worker.state).opacity(0.3), lineWidth: 1)
+                    )
+                    .cornerRadius(4)
             }
-
-            Spacer()
-
-            Text(worker.state)
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                .foregroundColor(stateColor(worker.state))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(stateColor(worker.state).opacity(0.1))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(stateColor(worker.state).opacity(0.3), lineWidth: 1)
-                )
-                .cornerRadius(4)
+            .padding(10)
         }
-        .padding(10)
-        .background(TerminalTheme.cardBg)
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(TerminalTheme.border, lineWidth: 1)
-        )
-        .cornerRadius(6)
     }
 
     private func stateColor(_ state: String) -> Color {

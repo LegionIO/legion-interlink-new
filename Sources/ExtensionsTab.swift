@@ -111,82 +111,78 @@ struct ExtensionsTab: View {
 
     private func extensionCard(_ ext: CachedExtension) -> some View {
         let color = ext.isReady ? TerminalTheme.green : TerminalTheme.gray
-        return VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
-                // State dot
-                Circle()
-                    .fill(color)
-                    .frame(width: 7, height: 7)
-                    .shadow(color: color.opacity(0.5), radius: 3)
+        return HoverCard {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 10) {
+                    // State dot
+                    Circle()
+                        .fill(color)
+                        .frame(width: 7, height: 7)
+                        .shadow(color: color.opacity(0.5), radius: 3)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(ext.name)
-                        .font(.system(size: 12, weight: .medium, design: .monospaced))
-                        .foregroundColor(TerminalTheme.text)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(ext.name)
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .foregroundColor(TerminalTheme.text)
 
-                    HStack(spacing: 8) {
-                        Text(ext.namespace)
-                            .font(.system(size: 9, design: .monospaced))
-                            .foregroundColor(TerminalTheme.textDim)
-
-                        Text("v\(ext.version)")
-                            .font(.system(size: 9, design: .monospaced))
-                            .foregroundColor(TerminalTheme.accent.opacity(0.7))
-
-                        Text(ext.displayState)
-                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                            .foregroundColor(color)
-                    }
-                }
-
-                Spacer()
-
-                Text(ext.displayState)
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                    .foregroundColor(color)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(color.opacity(0.1))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4)
-                            .stroke(color.opacity(0.3), lineWidth: 1)
-                    )
-                    .cornerRadius(4)
-            }
-            .padding(10)
-
-            // Runners
-            if !ext.runners.isEmpty {
-                Rectangle()
-                    .fill(TerminalTheme.border)
-                    .frame(height: 1)
-                    .padding(.horizontal, 10)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    ForEach(ext.runners, id: \.name) { runner in
-                        HStack(spacing: 6) {
-                            Image(systemName: "play.circle")
-                                .font(.system(size: 8))
-                                .foregroundColor(TerminalTheme.accent.opacity(0.6))
-                            Text(runner.name)
+                        HStack(spacing: 8) {
+                            Text(ext.namespace)
                                 .font(.system(size: 9, design: .monospaced))
                                 .foregroundColor(TerminalTheme.textDim)
-                            Text("\(runner.methodCount) methods")
+
+                            Text("v\(ext.version)")
                                 .font(.system(size: 9, design: .monospaced))
-                                .foregroundColor(TerminalTheme.textDim.opacity(0.6))
+                                .foregroundColor(TerminalTheme.accent.opacity(0.7))
+
+                            Text(ext.displayState)
+                                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                                .foregroundColor(color)
                         }
                     }
+
+                    Spacer()
+
+                    Text(ext.displayState)
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundColor(color)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(color.opacity(0.1))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .stroke(color.opacity(0.3), lineWidth: 1)
+                        )
+                        .cornerRadius(4)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+                .padding(10)
+
+                // Runners
+                if !ext.runners.isEmpty {
+                    Rectangle()
+                        .fill(TerminalTheme.border)
+                        .frame(height: 1)
+                        .padding(.horizontal, 10)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        ForEach(ext.runners, id: \.name) { runner in
+                            HStack(spacing: 6) {
+                                Image(systemName: "play.circle")
+                                    .font(.system(size: 8))
+                                    .foregroundColor(TerminalTheme.accent.opacity(0.6))
+                                Text(runner.name)
+                                    .font(.system(size: 9, design: .monospaced))
+                                    .foregroundColor(TerminalTheme.textDim)
+                                Text("\(runner.methodCount) methods")
+                                    .font(.system(size: 9, design: .monospaced))
+                                    .foregroundColor(TerminalTheme.textDim.opacity(0.6))
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                }
             }
         }
-        .background(TerminalTheme.cardBg)
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(TerminalTheme.border, lineWidth: 1)
-        )
-        .cornerRadius(6)
     }
 
     // MARK: - Empty / Error

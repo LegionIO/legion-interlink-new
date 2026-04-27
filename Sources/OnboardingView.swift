@@ -17,6 +17,25 @@ struct OnboardingStep: Identifiable {
     var output: String = ""
 }
 
+// MARK: - Spinning Loader
+
+private struct SpinnerView: View {
+    @State private var rotation: Double = 0
+
+    var body: some View {
+        Circle()
+            .trim(from: 0.15, to: 0.85)
+            .stroke(TerminalTheme.accent, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+            .frame(width: 12, height: 12)
+            .rotationEffect(.degrees(rotation))
+            .onAppear {
+                withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
+                    rotation = 360
+                }
+            }
+    }
+}
+
 // MARK: - OnboardingView
 
 struct OnboardingView: View {
@@ -59,6 +78,7 @@ struct OnboardingView: View {
     @State private var isRunning = false
     @State private var isDone = false
     @State private var currentOutput: String = ""
+    @State private var hasAppeared = false
 
     private var completedCount: Int {
         steps.filter { $0.status == .succeeded }.count
@@ -72,152 +92,376 @@ struct OnboardingView: View {
     var body: some View {
         VStack(spacing: 0) {
             headerSection
-            Divider()
+            separator
             stepListSection
-            Divider()
+            separator
             outputSection
-            Divider()
+            separator
             footerSection
         }
-        .frame(minWidth: 500, minHeight: 450)
+        .background(TerminalTheme.bg)
+        .frame(minWidth: 550, minHeight: 480)
+        .preferredColorScheme(.dark)
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.5)) {
+                hasAppeared = true
+            }
+        }
+    }
+
+    private var separator: some View {
+        Rectangle()
+            .fill(TerminalTheme.border)
+            .frame(height: 1)
     }
 
     // MARK: - Header
 
     private var headerSection: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "shippingbox.fill")
-                .font(.system(size: 36))
-                .foregroundStyle(.purple)
+        VStack(spacing: 12) {
+            // Grid icon matching the app identity
+            ZStack {
+                // Outer glow
+                Circle()
+                    .fill(TerminalTheme.accent.opacity(0.06))
+                    .frame(width: 64, height: 64)
 
-            Text("Welcome to Legion Interlink")
-                .font(.title2.bold())
+                Image(nsImage: onboardingGridIcon())
+            }
+            .opacity(hasAppeared ? 1 : 0)
+            .offset(y: hasAppeared ? 0 : 8)
+            .animation(.easeOut(duration: 0.6).delay(0.1), value: hasAppeared)
 
-            Text("Setting up your LegionIO environment")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+            VStack(spacing: 4) {
+                (Text("Legion")
+                    .foregroundColor(TerminalTheme.accent)
+                + Text(" Interlink")
+                    .foregroundColor(TerminalTheme.text))
+                    .font(.system(size: 18, weight: .bold, design: .monospaced))
+                    .opacity(hasAppeared ? 1 : 0)
+                    .animation(.easeOut(duration: 0.5).delay(0.2), value: hasAppeared)
 
-            ProgressView(value: progress)
-                .progressViewStyle(.linear)
-                .padding(.horizontal)
+                Text("initializing environment")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(TerminalTheme.textDim)
+                    .opacity(hasAppeared ? 1 : 0)
+                    .animation(.easeOut(duration: 0.5).delay(0.3), value: hasAppeared)
+            }
+
+            // Progress bar
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(TerminalTheme.cardBg)
+                        .frame(height: 4)
+
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(
+                            LinearGradient(
+                                colors: [TerminalTheme.accent.opacity(0.7), TerminalTheme.accent],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: max(0, geo.size.width * progress), height: 4)
+                        .shadow(color: TerminalTheme.accent.opacity(0.4), radius: 6, y: 0)
+                        .animation(.easeInOut(duration: 0.4), value: progress)
+                }
+            }
+            .frame(height: 4)
+            .padding(.horizontal, 40)
+            .padding(.top, 4)
+
+            // Fraction label
+            Text("\(completedCount)/\(steps.count) complete")
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundColor(TerminalTheme.textDim.opacity(0.5))
         }
-        .padding()
+        .padding(.vertical, 16)
+        .padding(.horizontal, 20)
+        .background(TerminalTheme.surfaceBg)
+    }
+
+    // MARK: - Grid Icon for Onboarding
+
+    private func onboardingGridIcon() -> NSImage {
+        let s: CGFloat = 36
+        let image = NSImage(size: NSSize(width: s, height: s), flipped: false) { rect in
+            let padding: CGFloat = s * 0.1
+            let gridSize = s - padding * 2
+            let step = gridSize / 2
+
+            var points: [NSPoint] = []
+            for row in 0..<3 {
+                for col in 0..<3 {
+                    points.append(NSPoint(
+                        x: padding + CGFloat(col) * step,
+                        y: padding + CGFloat(row) * step
+                    ))
+                }
+            }
+
+            let connections: [(Int, Int)] = [
+                (0, 1), (1, 2), (3, 4), (4, 5), (6, 7), (7, 8),
+                (0, 3), (3, 6), (1, 4), (4, 7), (2, 5), (5, 8),
+                (1, 3), (1, 5), (3, 7), (5, 7),
+            ]
+
+            let accentColor = NSColor(TerminalTheme.accent)
+            accentColor.withAlphaComponent(0.35).setStroke()
+            for (a, b) in connections {
+                let path = NSBezierPath()
+                path.move(to: points[a])
+                path.line(to: points[b])
+                path.lineWidth = s * 0.04
+                path.stroke()
+            }
+
+            let nodeRadius = s * 0.07
+            for (i, p) in points.enumerated() {
+                let isCenter = (i == 4)
+                let r = isCenter ? nodeRadius * 1.5 : nodeRadius
+                accentColor.withAlphaComponent(isCenter ? 1.0 : 0.7).setFill()
+                NSBezierPath(ovalIn: NSRect(
+                    x: p.x - r, y: p.y - r,
+                    width: r * 2, height: r * 2
+                )).fill()
+            }
+            return true
+        }
+        return image
     }
 
     // MARK: - Step List
 
     private var stepListSection: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(steps) { step in
-                    HStack(spacing: 10) {
-                        stepIcon(step.status)
-                            .frame(width: 20)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(step.title)
-                                .font(.body.weight(step.status == .running ? .semibold : .regular))
-                            Text(step.description)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-
-                        Spacer()
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 4)
-                    .background(step.status == .running ? Color.accentColor.opacity(0.05) : Color.clear)
-                    .cornerRadius(6)
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
+                    stepRow(step, index: index)
+                        .opacity(hasAppeared ? 1 : 0)
+                        .offset(x: hasAppeared ? 0 : -12)
+                        .animation(.easeOut(duration: 0.35).delay(0.15 + Double(index) * 0.05), value: hasAppeared)
                 }
             }
             .padding(.vertical, 8)
-            .padding(.horizontal, 4)
+            .padding(.horizontal, 12)
         }
         .frame(maxHeight: 220)
+        .background(TerminalTheme.bg)
+    }
+
+    private func stepRow(_ step: OnboardingStep, index: Int) -> some View {
+        let isActive = step.status == .running
+
+        return HStack(spacing: 10) {
+            // Step indicator
+            ZStack {
+                stepIcon(step.status)
+            }
+            .frame(width: 18, height: 18)
+
+            // Step text
+            VStack(alignment: .leading, spacing: 1) {
+                Text(step.title)
+                    .font(.system(size: 12, weight: isActive ? .semibold : .regular, design: .monospaced))
+                    .foregroundColor(
+                        step.status == .succeeded ? TerminalTheme.green :
+                        step.status == .failed ? TerminalTheme.red :
+                        isActive ? TerminalTheme.text :
+                        TerminalTheme.textDim
+                    )
+
+                Text(step.description)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundColor(TerminalTheme.textDim.opacity(isActive ? 0.7 : 0.4))
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            // Status badge
+            if step.status == .succeeded {
+                Text("done")
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .foregroundColor(TerminalTheme.green)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(TerminalTheme.green.opacity(0.1))
+                    .cornerRadius(3)
+            } else if step.status == .failed {
+                Text("fail")
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .foregroundColor(TerminalTheme.red)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(TerminalTheme.red.opacity(0.1))
+                    .cornerRadius(3)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(
+            isActive
+                ? TerminalTheme.accent.opacity(0.05)
+                : Color.clear
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 5)
+                .stroke(
+                    isActive ? TerminalTheme.accent.opacity(0.15) : Color.clear,
+                    lineWidth: 1
+                )
+        )
+        .cornerRadius(5)
+        .animation(.easeInOut(duration: 0.25), value: step.status)
     }
 
     @ViewBuilder
     private func stepIcon(_ status: OnboardingStepStatus) -> some View {
         switch status {
         case .pending:
-            Image(systemName: "circle")
-                .foregroundColor(.secondary)
+            Circle()
+                .stroke(TerminalTheme.textDim.opacity(0.25), lineWidth: 1)
+                .frame(width: 12, height: 12)
         case .running:
-            ProgressView()
-                .controlSize(.small)
+            SpinnerView()
         case .succeeded:
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(.green)
+            ZStack {
+                Circle()
+                    .fill(TerminalTheme.green)
+                    .frame(width: 12, height: 12)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 7, weight: .bold))
+                    .foregroundColor(TerminalTheme.bg)
+            }
         case .failed:
-            Image(systemName: "xmark.circle.fill")
-                .foregroundColor(.red)
+            ZStack {
+                Circle()
+                    .fill(TerminalTheme.red)
+                    .frame(width: 12, height: 12)
+                Image(systemName: "xmark")
+                    .font(.system(size: 7, weight: .bold))
+                    .foregroundColor(TerminalTheme.bg)
+            }
         }
     }
 
     // MARK: - Output
 
     private var outputSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Output")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .textCase(.uppercase)
-                .padding(.horizontal)
-                .padding(.top, 6)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "terminal")
+                    .font(.system(size: 9))
+                    .foregroundColor(TerminalTheme.accent.opacity(0.6))
+
+                Text("OUTPUT")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundColor(TerminalTheme.textDim.opacity(0.5))
+
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 6)
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    Text(currentOutput.isEmpty ? "Ready to begin setup..." : currentOutput)
-                        .font(.system(.caption2, design: .monospaced))
+                    Text(currentOutput.isEmpty ? "$ awaiting setup..." : currentOutput)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(
+                            currentOutput.isEmpty
+                                ? TerminalTheme.textDim.opacity(0.3)
+                                : TerminalTheme.green.opacity(0.8)
+                        )
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
-                        .padding(6)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 4)
+
+                    Color.clear
+                        .frame(height: 1)
                         .id("outputBottom")
                 }
-                .background(Color(nsColor: .textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .padding(.horizontal)
-                .padding(.bottom, 8)
-                .frame(maxHeight: 120)
+                .frame(maxHeight: 110)
                 .onChange(of: currentOutput) { _ in
-                    proxy.scrollTo("outputBottom", anchor: .bottom)
+                    withAnimation(.easeOut(duration: 0.1)) {
+                        proxy.scrollTo("outputBottom", anchor: .bottom)
+                    }
                 }
             }
         }
+        .background(TerminalTheme.bg)
     }
 
     // MARK: - Footer
 
     private var footerSection: some View {
-        HStack {
+        HStack(spacing: 12) {
             if isDone {
-                Text("Setup complete!")
-                    .foregroundColor(.green)
-                    .font(.subheadline.bold())
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(TerminalTheme.green)
+                        .frame(width: 6, height: 6)
+                        .shadow(color: TerminalTheme.green.opacity(0.5), radius: 4)
+
+                    Text("setup complete")
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundColor(TerminalTheme.green)
+                }
             } else if steps.contains(where: { $0.status == .failed }) {
-                Text("Setup encountered errors. You can retry or continue.")
-                    .foregroundColor(.orange)
-                    .font(.caption)
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(TerminalTheme.yellow)
+                        .frame(width: 6, height: 6)
+
+                    Text("errors encountered — retry or continue")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(TerminalTheme.yellow.opacity(0.8))
+                }
             }
 
             Spacer()
 
             if isDone {
-                Button("Done") {
+                Button(action: {
                     manager.checkSetupNeeded()
                     Task { await manager.checkAllServices() }
                     onComplete()
+                }) {
+                    Text("launch")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundColor(TerminalTheme.bg)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 7)
+                        .background(TerminalTheme.green)
+                        .cornerRadius(5)
+                        .shadow(color: TerminalTheme.green.opacity(0.3), radius: 8, y: 2)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.plain)
+                .pointerCursor()
             } else {
-                Button("Begin Setup") {
-                    Task { await runSetup() }
+                Button(action: { Task { await runSetup() } }) {
+                    Text(isRunning ? "setting up..." : "begin setup")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundColor(isRunning ? TerminalTheme.textDim : TerminalTheme.bg)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 7)
+                        .background(isRunning ? TerminalTheme.cardBg : TerminalTheme.accent)
+                        .cornerRadius(5)
+                        .shadow(color: isRunning ? Color.clear : TerminalTheme.accent.opacity(0.3), radius: 8, y: 2)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.plain)
                 .disabled(isRunning)
+                .pointerCursor()
             }
         }
-        .padding()
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(TerminalTheme.surfaceBg)
     }
 
     // MARK: - Setup Execution

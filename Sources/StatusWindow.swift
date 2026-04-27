@@ -17,6 +17,77 @@ enum TerminalTheme {
     static let gray = Color(red: 0.45, green: 0.45, blue: 0.48)
 }
 
+// MARK: - Hover Card
+
+/// A card container that subtly lifts and brightens its border on hover.
+struct HoverCard<Content: View>: View {
+    @State private var isHovered = false
+    let content: () -> Content
+
+    init(@ViewBuilder content: @escaping () -> Content) {
+        self.content = content
+    }
+
+    var body: some View {
+        content()
+            .background(isHovered ? TerminalTheme.cardBg.opacity(1.15) : TerminalTheme.cardBg)
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(
+                        isHovered ? TerminalTheme.accent.opacity(0.2) : TerminalTheme.border,
+                        lineWidth: 1
+                    )
+            )
+            .cornerRadius(6)
+            .shadow(
+                color: isHovered ? TerminalTheme.accent.opacity(0.06) : Color.clear,
+                radius: 8, y: 2
+            )
+            .animation(.easeOut(duration: 0.15), value: isHovered)
+            .onHover { hovering in
+                isHovered = hovering
+            }
+    }
+}
+
+// MARK: - Breathing Status Pill
+
+/// A status pill with a subtle breathing glow animation when online.
+private struct BreathingStatusPill: View {
+    let color: Color
+    let text: String
+    let isOnline: Bool
+    @State private var breathe = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(color)
+                .frame(width: 7, height: 7)
+                .shadow(color: color.opacity(breathe ? 0.8 : 0.3), radius: breathe ? 5 : 2)
+
+            Text(text.uppercased())
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundColor(color)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(color.opacity(breathe ? 0.12 : 0.08))
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(color.opacity(0.3), lineWidth: 1)
+        )
+        .cornerRadius(4)
+        .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: breathe)
+        .onAppear {
+            if isOnline { breathe = true }
+        }
+        .onChange(of: isOnline) { online in
+            breathe = online
+        }
+    }
+}
+
 // MARK: - Pulsing Status Text
 
 private struct PulsingStatusText: View {
@@ -98,6 +169,9 @@ struct StatusWindowView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .transition(.opacity)
+            .id(selectedTab)
+            .animation(.easeInOut(duration: 0.15), value: selectedTab)
         }
         .background(TerminalTheme.bg)
         .frame(minWidth: 700, minHeight: 520)
@@ -168,11 +242,23 @@ struct StatusWindowView: View {
                 color: NSColor(TerminalTheme.accent)
             ))
 
-            (Text("Legion")
-                .foregroundColor(TerminalTheme.accent)
-            + Text("IO")
-                .foregroundColor(TerminalTheme.text))
-                .font(.system(size: 14, weight: .semibold, design: .monospaced))
+            ZStack {
+                // Glow layer behind the brand text
+                (Text("Legion")
+                    .foregroundColor(TerminalTheme.accent)
+                + Text("IO")
+                    .foregroundColor(TerminalTheme.text))
+                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                    .blur(radius: 6)
+                    .opacity(0.3)
+
+                // Crisp brand text
+                (Text("Legion")
+                    .foregroundColor(TerminalTheme.accent)
+                + Text("IO")
+                    .foregroundColor(TerminalTheme.text))
+                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+            }
 
             statusPill
 
@@ -186,7 +272,17 @@ struct StatusWindowView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(TerminalTheme.surfaceBg)
+        .background(
+            ZStack {
+                TerminalTheme.surfaceBg
+                // Subtle gradient adding depth
+                LinearGradient(
+                    colors: [TerminalTheme.accent.opacity(0.03), Color.clear],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            }
+        )
     }
 
     private var statusPill: some View {
@@ -199,24 +295,7 @@ struct StatusWindowView: View {
             }
         }()
 
-        return HStack(spacing: 5) {
-            Circle()
-                .fill(color)
-                .frame(width: 7, height: 7)
-                .shadow(color: color.opacity(0.6), radius: 3)
-
-            Text(manager.overallStatus.displayText.uppercased())
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundColor(color)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
-        .background(color.opacity(0.1))
-        .overlay(
-            RoundedRectangle(cornerRadius: 4)
-                .stroke(color.opacity(0.3), lineWidth: 1)
-        )
-        .cornerRadius(4)
+        return BreathingStatusPill(color: color, text: manager.overallStatus.displayText, isOnline: manager.overallStatus == .online)
     }
 
     // MARK: - Tab Bar
@@ -242,7 +321,7 @@ struct StatusWindowView: View {
 
     private func tabButton(title: String, icon: String, index: Int) -> some View {
         let isSelected = selectedTab == index
-        return Button(action: { selectedTab = index }) {
+        return Button(action: { withAnimation(.easeInOut(duration: 0.15)) { selectedTab = index } }) {
             HStack(spacing: 6) {
                 Image(systemName: icon)
                     .font(.system(size: 11))
@@ -346,11 +425,90 @@ struct ServicesTab: View {
     // MARK: - Daemon Card (LegionIO with components)
 
     private func daemonCard(_ service: ServiceState) -> some View {
-        VStack(spacing: 0) {
-            // Main service row
+        HoverCard {
+            VStack(spacing: 0) {
+                // Main service row
+                HStack(spacing: 12) {
+                    statusDot(service.status)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(service.name.displayName)
+                            .font(.system(size: 13, weight: .medium, design: .monospaced))
+                            .foregroundColor(TerminalTheme.text)
+
+                        HStack(spacing: 8) {
+                            statusText(service.status)
+
+                            if let pid = service.pid {
+                                Text("pid:\(String(pid))")
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundColor(TerminalTheme.textDim)
+                            }
+                        }
+                    }
+
+                    Spacer()
+
+                    // Control buttons: start/stop
+                    HStack(spacing: 6) {
+                        if service.status == .stopping || service.status == .starting {
+                            // No button while transitioning
+                        } else if service.status == .running {
+                            terminalButton("stop", color: TerminalTheme.red) {
+                                manager.stopService(service.name)
+                            }
+                        } else {
+                            terminalButton("start", color: TerminalTheme.green) {
+                                manager.startService(service.name)
+                            }
+                        }
+                    }
+                }
+                .padding(12)
+
+                // Daemon Components (inline)
+                if service.status == .running && !manager.daemonReadiness.components.isEmpty {
+                    Rectangle()
+                        .fill(TerminalTheme.border)
+                        .frame(height: 1)
+                        .padding(.horizontal, 12)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        LazyVGrid(columns: [
+                            GridItem(.adaptive(minimum: 120), spacing: 4)
+                        ], spacing: 4) {
+                            ForEach(
+                                manager.daemonReadiness.components.sorted(by: { $0.key < $1.key }),
+                                id: \.key
+                            ) { component, ready in
+                                HStack(spacing: 4) {
+                                    Circle()
+                                        .fill(ready ? TerminalTheme.green : TerminalTheme.yellow)
+                                        .frame(width: 5, height: 5)
+                                    Text(component)
+                                        .font(.system(size: 9, design: .monospaced))
+                                        .foregroundColor(TerminalTheme.textDim)
+                                    Spacer()
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                }
+            }
+        }
+    }
+
+    // MARK: - Standard Service Card
+
+    private func serviceCard(_ service: ServiceState) -> some View {
+        HoverCard {
             HStack(spacing: 12) {
+                // Status indicator
                 statusDot(service.status)
 
+                // Service info
                 VStack(alignment: .leading, spacing: 2) {
                     Text(service.name.displayName)
                         .font(.system(size: 13, weight: .medium, design: .monospaced))
@@ -369,108 +527,21 @@ struct ServicesTab: View {
 
                 Spacer()
 
-                // Control buttons: start/stop
-                HStack(spacing: 6) {
-                    if service.status == .stopping || service.status == .starting {
-                        // No button while transitioning
-                    } else if service.status == .running {
-                        terminalButton("stop", color: TerminalTheme.red) {
-                            manager.stopService(service.name)
-                        }
-                    } else {
-                        terminalButton("start", color: TerminalTheme.green) {
-                            manager.startService(service.name)
-                        }
+                // Control button
+                if service.status == .stopping || service.status == .starting {
+                    // No button while transitioning
+                } else if service.status == .running {
+                    terminalButton("stop", color: TerminalTheme.red) {
+                        manager.stopService(service.name)
+                    }
+                } else {
+                    terminalButton("start", color: TerminalTheme.green) {
+                        manager.startService(service.name)
                     }
                 }
             }
             .padding(12)
-
-            // Daemon Components (inline)
-            if service.status == .running && !manager.daemonReadiness.components.isEmpty {
-                Rectangle()
-                    .fill(TerminalTheme.border)
-                    .frame(height: 1)
-                    .padding(.horizontal, 12)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    LazyVGrid(columns: [
-                        GridItem(.adaptive(minimum: 120), spacing: 4)
-                    ], spacing: 4) {
-                        ForEach(
-                            manager.daemonReadiness.components.sorted(by: { $0.key < $1.key }),
-                            id: \.key
-                        ) { component, ready in
-                            HStack(spacing: 4) {
-                                Circle()
-                                    .fill(ready ? TerminalTheme.green : TerminalTheme.yellow)
-                                    .frame(width: 5, height: 5)
-                                Text(component)
-                                    .font(.system(size: 9, design: .monospaced))
-                                    .foregroundColor(TerminalTheme.textDim)
-                                Spacer()
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-            }
         }
-        .background(TerminalTheme.cardBg)
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(TerminalTheme.border, lineWidth: 1)
-        )
-        .cornerRadius(6)
-    }
-
-    // MARK: - Standard Service Card
-
-    private func serviceCard(_ service: ServiceState) -> some View {
-        HStack(spacing: 12) {
-            // Status indicator
-            statusDot(service.status)
-
-            // Service info
-            VStack(alignment: .leading, spacing: 2) {
-                Text(service.name.displayName)
-                    .font(.system(size: 13, weight: .medium, design: .monospaced))
-                    .foregroundColor(TerminalTheme.text)
-
-                HStack(spacing: 8) {
-                    statusText(service.status)
-
-                    if let pid = service.pid {
-                        Text("pid:\(String(pid))")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundColor(TerminalTheme.textDim)
-                    }
-                }
-            }
-
-            Spacer()
-
-            // Control button
-            if service.status == .stopping || service.status == .starting {
-                // No button while transitioning
-            } else if service.status == .running {
-                terminalButton("stop", color: TerminalTheme.red) {
-                    manager.stopService(service.name)
-                }
-            } else {
-                terminalButton("start", color: TerminalTheme.green) {
-                    manager.startService(service.name)
-                }
-            }
-        }
-        .padding(12)
-        .background(TerminalTheme.cardBg)
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(TerminalTheme.border, lineWidth: 1)
-        )
-        .cornerRadius(6)
     }
 
     private func statusDot(_ status: ServiceStatus) -> some View {
@@ -501,24 +572,42 @@ struct ServicesTab: View {
     }
 
     private func terminalButton(_ label: String, color: Color, action: @escaping () -> Void) -> some View {
+        TerminalActionButton(label: label, color: color, action: action)
+    }
+
+}
+
+// MARK: - Terminal Action Button (with hover)
+
+private struct TerminalActionButton: View {
+    let label: String
+    let color: Color
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
         Button(action: action) {
             Text(label)
                 .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                .foregroundColor(color)
+                .foregroundColor(isHovered ? TerminalTheme.bg : color)
                 .frame(minWidth: 40)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 5)
-                .background(color.opacity(0.1))
+                .background(isHovered ? color : color.opacity(0.1))
                 .overlay(
                     RoundedRectangle(cornerRadius: 4)
-                        .stroke(color.opacity(0.3), lineWidth: 1)
+                        .stroke(color.opacity(isHovered ? 0.6 : 0.3), lineWidth: 1)
                 )
                 .cornerRadius(4)
         }
         .buttonStyle(.plain)
         .pointerCursor()
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.12)) {
+                isHovered = hovering
+            }
+        }
     }
-
 }
 
 // MARK: - Terminal Checkbox Style
