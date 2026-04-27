@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.12] - 2026-04-27
+
+### Fixed
+- Chat responses now show a visible streaming/done/interrupted/error status pill and stale streams are recovered after 60 seconds without progress instead of leaving conversations marked running forever (#56)
+
 ## [1.1.11] - 2026-04-27
 
 ### Fixed
