@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.20] - 2026-04-27
+
+### Fixed
+- Process execution, MCP stdio servers, and CLI tool binary checks now use a cached login-shell environment so tools installed by the user's shell profile are available from the desktop app (#48)
+
 ## [1.1.19] - 2026-04-27
 
 ### Added

@@ -8,6 +8,7 @@ import type { z as Z } from 'zod';
 import type { ToolDefinition } from './types.js';
 import { buildScopedToolName } from './naming.js';
 import type { AppConfig } from '../config/schema.js';
+import { getShellEnv } from '../utils/shell-env.js';
 
 type McpServerConfig = AppConfig['mcpServers'][number];
 
@@ -72,7 +73,7 @@ async function createTransport(server: McpServerConfig): Promise<Transport> {
     return new StdioClientTransport({
       command: server.command,
       args: server.args,
-      env: server.env ? { ...process.env, ...server.env } as Record<string, string> : undefined,
+      env: getShellEnv(server.env as NodeJS.ProcessEnv) as Record<string, string>,
     });
   }
 

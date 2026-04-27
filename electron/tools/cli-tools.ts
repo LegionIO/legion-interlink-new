@@ -5,6 +5,7 @@ import type { ToolDefinition } from './types.js';
 import { runCommandWithStreaming, resolveProcessStreamingConfig } from './process-runner.js';
 import { runToolExecution } from './execution.js';
 import { isCommandAllowed } from './shell.js';
+import { getShellEnv } from '../utils/shell-env.js';
 
 export type CliToolSpec = {
   name: string;
@@ -23,9 +24,10 @@ export type CliToolStatus = CliToolSpec & {
 
 export function binaryExists(name: string): boolean {
   const isWindows = process.platform === 'win32';
+  const env = getShellEnv();
   const result = isWindows
-    ? spawnSync('where', [name], { stdio: 'ignore', shell: false })
-    : spawnSync('command', ['-v', name], { stdio: 'ignore', shell: true });
+    ? spawnSync('where', [name], { stdio: 'ignore', shell: false, env })
+    : spawnSync('command', ['-v', name], { stdio: 'ignore', shell: true, env });
   return result.status === 0;
 }
 
