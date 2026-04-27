@@ -10,6 +10,19 @@ import {
   ScissorsIcon,
   DownloadIcon,
   FolderOpenIcon,
+  TerminalIcon,
+  FileIcon,
+  FileTextIcon,
+  FolderIcon,
+  GlobeIcon,
+  ExternalLinkIcon,
+  ScrollTextIcon,
+  SendHorizontalIcon,
+  CpuIcon,
+  BookOpenIcon,
+  CodeIcon,
+  AlertTriangleIcon,
+  ListChecksIcon,
 } from 'lucide-react';
 import { app } from '@/lib/ipc-client';
 import { formatElapsed } from '@/lib/response-timing';
@@ -43,19 +56,19 @@ type ToolCallPart = {
   };
 };
 
-export const ToolGroup: FC<{ parts: ToolCallPart[] }> = ({ parts }) => {
+export const ToolGroup: FC<{ parts: ToolCallPart[]; onSendFeedback?: (text: string) => void }> = ({ parts, onSendFeedback }) => {
   if (parts.length === 0) return null;
 
   return (
     <div className="my-2 space-y-1.5">
       {parts.map((part) => (
-        <ToolCallDisplay key={part.toolCallId} part={part} />
+        <ToolCallDisplay key={part.toolCallId} part={part} onSendFeedback={onSendFeedback} />
       ))}
     </div>
   );
 };
 
-export const ToolCallDisplay: FC<{ part: ToolCallPart }> = ({ part }) => {
+export const ToolCallDisplay: FC<{ part: ToolCallPart; onSendFeedback?: (text: string) => void }> = ({ part, onSendFeedback }) => {
   const [expanded, setExpanded] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
   const hasResult = part.result !== undefined;
@@ -67,7 +80,12 @@ export const ToolCallDisplay: FC<{ part: ToolCallPart }> = ({ part }) => {
   const canShowOriginal = wasCompacted && part.originalResult !== undefined;
   const isSummarizing = part.compactionPhase === 'start';
   const mediaResult = hasResult && !isError ? detectMediaResult(part.result) : null;
-  const resultPaths = hasResult ? extractFilePaths(canShowOriginal && showOriginal ? part.originalResult : part.result) : [];
+  const displayResult = canShowOriginal && showOriginal ? part.originalResult : part.result;
+  const smartResult = hasResult ? detectSmartResult(part, displayResult) : null;
+  const resultPaths = smartResult?.paths ?? [];
+  const resultUrls = smartResult?.urls ?? [];
+  const todoItems = smartResult?.todos ?? [];
+  const ToolIcon = getToolIcon(part.toolName, isError);
 
   return (
     <div className="rounded-lg border bg-card text-sm overflow-hidden">
@@ -85,7 +103,9 @@ export const ToolCallDisplay: FC<{ part: ToolCallPart }> = ({ part }) => {
         <StatusBadge isRunning={isRunning} isError={isError} isHung={isHung} />
         {wasCompacted && <CompactedBadge />}
         {isSummarizing && <SummarizingBadge />}
+        <ToolIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="font-mono text-xs font-semibold truncate">{part.toolName}</span>
+        {smartResult && <SmartResultBadge type={smartResult.type} />}
         <span className="text-[10px] text-muted-foreground ml-1 truncate">
           {getToolSummary(part)}
         </span>
@@ -145,9 +165,12 @@ export const ToolCallDisplay: FC<{ part: ToolCallPart }> = ({ part }) => {
             >
               {/* Media preview for image/video/audio generation results */}
               {mediaResult && <MediaPreview media={mediaResult} />}
+              {smartResult && <SmartResultSummary result={smartResult} />}
+              {todoItems.length > 0 && <TodoSummary items={todoItems} onSendFeedback={onSendFeedback} />}
               {resultPaths.length > 0 && <PathLinks paths={resultPaths} />}
+              {resultUrls.length > 0 && <UrlLinks urls={resultUrls} />}
               <CodeBlock
-                code={formatResult(canShowOriginal && showOriginal ? part.originalResult : part.result)}
+                code={formatResult(displayResult)}
                 language="json"
                 isError={isError}
               />
@@ -177,6 +200,22 @@ type MediaResult = {
   type: 'image' | 'video';
   urls: string[];
   filePaths?: string[];
+};
+
+type SmartResultType = 'files' | 'web' | 'code' | 'json' | 'text';
+
+type TodoItem = {
+  text: string;
+  done: boolean;
+};
+
+type SmartResult = {
+  type: SmartResultType;
+  label: string;
+  paths: string[];
+  urls: string[];
+  todos: TodoItem[];
+  lineCount: number;
 };
 
 function detectMediaResult(result: unknown): MediaResult | null {
@@ -282,6 +321,81 @@ const PathLinks: FC<{ paths: string[] }> = ({ paths }) => {
   );
 };
 
+const UrlLinks: FC<{ urls: string[] }> = ({ urls }) => {
+  const openUrl = useCallback((url: string) => {
+    void app.shell.openExternal(url);
+  }, []);
+
+  return (
+    <div className="mb-2 flex flex-wrap gap-1.5">
+      {urls.slice(0, 8).map((url) => (
+        <button
+          key={url}
+          type="button"
+          onClick={() => openUrl(url)}
+          className="inline-flex max-w-full items-center gap-1 rounded-md border border-border/70 bg-muted/50 px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
+          title={url}
+        >
+          <ExternalLinkIcon className="h-3 w-3 shrink-0" />
+          <span className="truncate">{url}</span>
+        </button>
+      ))}
+    </div>
+  );
+};
+
+const SmartResultBadge: FC<{ type: SmartResultType }> = ({ type }) => (
+  <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">
+    {type}
+  </span>
+);
+
+const SmartResultSummary: FC<{ result: SmartResult }> = ({ result }) => (
+  <div className="mb-2 grid gap-1.5 sm:grid-cols-4">
+    <Insight label={result.label} value={result.lineCount > 0 ? `${result.lineCount} lines` : 'structured'} />
+    <Insight label="Paths" value={String(result.paths.length)} />
+    <Insight label="URLs" value={String(result.urls.length)} />
+    <Insight label="TODOs" value={String(result.todos.length)} />
+  </div>
+);
+
+const Insight: FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div className="rounded-md border border-border/70 bg-muted/30 px-2 py-1">
+    <div className="text-[10px] text-muted-foreground">{label}</div>
+    <div className="text-xs font-medium">{value}</div>
+  </div>
+);
+
+const TodoSummary: FC<{ items: TodoItem[]; onSendFeedback?: (text: string) => void }> = ({ items, onSendFeedback }) => {
+  const openItems = items.filter((item) => !item.done);
+  const sendFeedback = () => {
+    if (!onSendFeedback || openItems.length === 0) return;
+    onSendFeedback(`Please address these TODO items:\n${openItems.map((item) => `- ${item.text}`).join('\n')}`);
+  };
+
+  return (
+    <div className="mb-2 rounded-md border border-border/70 bg-muted/30 p-2">
+      <div className="mb-1.5 flex items-center gap-2">
+        <ListChecksIcon className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="text-xs font-semibold">Detected TODOs</span>
+        {onSendFeedback && openItems.length > 0 && (
+          <button type="button" onClick={sendFeedback} className="ml-auto rounded-md border border-border/70 px-2 py-1 text-[10px] hover:bg-muted">
+            Ask to address
+          </button>
+        )}
+      </div>
+      <div className="space-y-1">
+        {items.slice(0, 8).map((item, index) => (
+          <div key={`${item.text}-${index}`} className="flex items-start gap-2 text-[11px]">
+            <span className={`mt-0.5 h-3 w-3 rounded-sm border ${item.done ? 'bg-green-500/20 border-green-500/50' : 'border-muted-foreground/40'}`} />
+            <span className={item.done ? 'text-muted-foreground line-through' : ''}>{item.text}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 /* ── Status Badges ── */
 
 const StatusBadge: FC<{ isRunning: boolean; isError: boolean; isHung?: boolean }> = ({ isRunning, isError, isHung }) => {
@@ -383,6 +497,20 @@ function isErrorResult(result: unknown): boolean {
   return Boolean(r.error) || r.isError === true || (r.exitCode !== undefined && r.exitCode !== 0);
 }
 
+function getToolIcon(toolName: string, isError: boolean): typeof CodeIcon {
+  if (isError) return AlertTriangleIcon;
+  if (/^(sh|shell|bash|zsh|github|brew|wget|jq|tree|python|ollama|klist|jfrog)$/.test(toolName)) return TerminalIcon;
+  if (/file_read|read_file/.test(toolName)) return FileTextIcon;
+  if (/file_write|file_edit|write_file|edit_file/.test(toolName)) return FileIcon;
+  if (/list_directory|glob/.test(toolName)) return FolderIcon;
+  if (/web|fetch|search|url|http/.test(toolName)) return GlobeIcon;
+  if (/plan/.test(toolName)) return ScrollTextIcon;
+  if (/ask|feedback|guidance/.test(toolName)) return SendHorizontalIcon;
+  if (/agent|computer|lattice/.test(toolName)) return CpuIcon;
+  if (/knowledge|memory|rag/.test(toolName)) return BookOpenIcon;
+  return CodeIcon;
+}
+
 function getToolSummary(part: ToolCallPart): string {
   const args = part.args as Record<string, unknown>;
   if (part.toolName === 'sh' && args.command) return String(args.command).slice(0, 60);
@@ -443,6 +571,88 @@ function sanitizeResultForDisplay(result: unknown): unknown {
   return visible;
 }
 
+function detectSmartResult(part: ToolCallPart, result: unknown): SmartResult {
+  const text = resultToText(result);
+  const paths = extractFilePaths(result);
+  const urls = extractUrls(result);
+  const todos = detectTodoItems(text);
+  const lineCount = text ? text.split(/\r?\n/).length : 0;
+  const toolName = part.toolName.toLowerCase();
+  let type: SmartResultType = 'text';
+
+  if (paths.length > 0 || /file|directory|glob|grep|tree/.test(toolName)) {
+    type = 'files';
+  } else if (urls.length > 0 || /web|fetch|search|http/.test(toolName)) {
+    type = 'web';
+  } else if (/shell|sh|bash|zsh|python|code|grep|jq/.test(toolName) || /\b(error|warning|stdout|stderr)\b/i.test(text)) {
+    type = 'code';
+  } else if (result && typeof result === 'object') {
+    type = 'json';
+  }
+
+  const labels: Record<SmartResultType, string> = {
+    files: 'File output',
+    web: 'Web output',
+    code: 'Command output',
+    json: 'Structured result',
+    text: 'Text result',
+  };
+
+  return { type, label: labels[type], paths, urls, todos, lineCount };
+}
+
+function resultToText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map(resultToText).filter(Boolean).join('\n');
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return Object.entries(record)
+      .filter(([key]) => !key.startsWith('__'))
+      .map(([, child]) => resultToText(child))
+      .filter(Boolean)
+      .join('\n');
+  }
+  return value == null ? '' : String(value);
+}
+
+function extractUrls(result: unknown): string[] {
+  const urls = new Set<string>();
+  const visit = (value: unknown): void => {
+    if (typeof value === 'string') {
+      for (const match of value.matchAll(/\bhttps?:\/\/[^\s"'`<>{}[\]]+/g)) {
+        urls.add(match[0].replace(/[),.;:]+$/g, ''));
+      }
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+
+    if (value && typeof value === 'object') {
+      Object.values(value as Record<string, unknown>).forEach(visit);
+    }
+  };
+
+  visit(result);
+  return [...urls];
+}
+
+function detectTodoItems(text: string): TodoItem[] {
+  if (!text) return [];
+  const items: TodoItem[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const match = line.match(/(?:^|\s)(?:[-*]\s*)?(?:\[(x| )\]\s*)?(TODO|FIXME|TASK|NOTE):?\s*(.+)$/i);
+    if (!match) continue;
+    items.push({
+      done: match[1]?.toLowerCase() === 'x',
+      text: match[3].trim(),
+    });
+  }
+  return items;
+}
+
 function extractFilePaths(result: unknown): string[] {
   const paths = new Set<string>();
   const visit = (value: unknown): void => {
@@ -461,7 +671,7 @@ function extractFilePaths(result: unknown): string[] {
     if (value && typeof value === 'object') {
       const record = value as Record<string, unknown>;
       for (const [key, child] of Object.entries(record)) {
-        if (/path|file|directory/i.test(key)) visit(child);
+        if (/path|file|directory|stdout|stderr|output/i.test(key)) visit(child);
       }
     }
   };

@@ -273,6 +273,8 @@ const appAPI = {
   shell: {
     openPath: (path: string) =>
       ipcRenderer.invoke('shell:open-path', path) as Promise<{ ok: boolean; error?: string }>,
+    openExternal: (url: string) =>
+      ipcRenderer.invoke('shell:open-external', url) as Promise<{ ok: boolean; error?: string }>,
   },
 
   // Image utilities (fetched via main process to bypass CORS)

@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.19] - 2026-04-27
+
+### Added
+- Tool result rendering now classifies file, web, command, structured, and text results, summarizes detected paths, URLs, and TODOs, opens HTTP(S) URLs natively, adds per-tool icons, and can send TODO feedback back into the thread (#49)
+
 ## [1.1.18] - 2026-04-27
 
 ### Added

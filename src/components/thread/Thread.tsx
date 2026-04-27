@@ -633,6 +633,14 @@ const ToolFallback: FC<{
     stopped?: boolean;
   };
 }> = (props) => {
+  const threadRuntime = useThreadRuntime();
+  const handleSendFeedback = useCallback((text: string) => {
+    threadRuntime.append({
+      role: 'user',
+      content: [{ type: 'text', text }],
+    });
+  }, [threadRuntime]);
+
   // Render sub-agent tool calls with the specialized component
   if (props.toolName === 'sub_agent') {
     return (
@@ -666,6 +674,7 @@ const ToolFallback: FC<{
           compactionPhase: props.compactionPhase,
           liveOutput: props.liveOutput,
         }}
+        onSendFeedback={handleSendFeedback}
       />
     </div>
   );

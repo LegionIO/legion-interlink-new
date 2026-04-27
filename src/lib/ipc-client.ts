@@ -215,6 +215,7 @@ type AppAPI = {
   };
   shell: {
     openPath: (path: string) => Promise<{ ok: boolean; error?: string }>;
+    openExternal: (url: string) => Promise<{ ok: boolean; error?: string }>;
   };
   image: {
     fetch: (url: string) => Promise<{ data?: string; mime?: string; error?: string }>;

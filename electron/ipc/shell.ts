@@ -20,4 +20,13 @@ export function registerShellHandlers(ipcMain: IpcMain): void {
     const error = await shell.openPath(target);
     return error ? { ok: false, error } : { ok: true };
   });
+
+  ipcMain.handle('shell:open-external', async (_event, url: string) => {
+    if (typeof url !== 'string' || !/^https?:\/\//i.test(url.trim())) {
+      return { ok: false, error: 'HTTP or HTTPS URL is required' };
+    }
+
+    await shell.openExternal(url.trim());
+    return { ok: true };
+  });
 }
