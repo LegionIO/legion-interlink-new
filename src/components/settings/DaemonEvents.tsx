@@ -7,8 +7,13 @@ type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
 interface DaemonEvent {
   timestamp: string;
-  type: string;
+  type?: string;
+  event?: string;
   data?: unknown;
+  task_id?: string | null;
+  runner_class?: string | null;
+  function?: string | null;
+  status?: string | null;
 }
 
 const LIVE_INTERVAL_MS = 3000;
@@ -33,8 +38,8 @@ export const DaemonEvents: FC<SettingsProps> = () => {
         const incoming = result.data as DaemonEvent[];
         if (append) {
           setEvents((prev) => {
-            const existingTs = new Set(prev.map((e) => `${e.timestamp}|${e.type}`));
-            const novel = incoming.filter((e) => !existingTs.has(`${e.timestamp}|${e.type}`));
+            const existingTs = new Set(prev.map((e) => eventKey(e)));
+            const novel = incoming.filter((e) => !existingTs.has(eventKey(e)));
             if (novel.length === 0) return prev;
             const merged = [...prev, ...novel];
             return merged.length > MAX_EVENTS ? merged.slice(merged.length - MAX_EVENTS) : merged;
@@ -106,6 +111,27 @@ export const DaemonEvents: FC<SettingsProps> = () => {
     if (data === undefined || data === null) return '';
     const str = JSON.stringify(data);
     return str.length > 120 ? str.slice(0, 120) + '…' : str;
+  };
+
+  const eventName = (evt: DaemonEvent): string => evt.type || evt.event || 'unknown';
+
+  const eventKey = (evt: DaemonEvent): string => `${evt.timestamp}|${eventName(evt)}`;
+
+  const runnerName = (runnerClass: string | null | undefined): string | null => {
+    if (!runnerClass) return null;
+    return runnerClass.replace(/^Legion::Extensions::/, '');
+  };
+
+  const detailPreview = (evt: DaemonEvent): string => {
+    const explicitData = dataPreview(evt.data);
+    if (explicitData) return explicitData;
+
+    return [
+      runnerName(evt.runner_class),
+      evt.function ? `function=${evt.function}` : null,
+      evt.task_id ? `task=${evt.task_id}` : null,
+      evt.status ? `status=${evt.status}` : null,
+    ].filter(Boolean).join(' · ');
   };
 
   if (loadState === 'idle' || loadState === 'loading') {
@@ -209,11 +235,11 @@ export const DaemonEvents: FC<SettingsProps> = () => {
                 })}
               </span>
               <span className="shrink-0 text-[10px] font-semibold font-mono w-[160px] truncate">
-                {evt.type}
+                {eventName(evt)}
               </span>
-              {evt.data !== undefined && (
+              {detailPreview(evt) && (
                 <span className="text-[10px] font-mono text-muted-foreground truncate">
-                  {dataPreview(evt.data)}
+                  {detailPreview(evt)}
                 </span>
               )}
             </div>
