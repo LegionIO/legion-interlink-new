@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.22] - 2026-04-27
+
+### Fixed
+- Markdown rendering now defensively unwraps serialized Anthropic Messages-API content blocks (`[{"type":"text","text":"..."}]`) at the renderer layer as a safety net for paths that bypass main-process normalization (#64)
+
 ## [1.1.21] - 2026-04-27
 
 ### Added
