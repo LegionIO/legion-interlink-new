@@ -21,26 +21,27 @@ export function unwrapContentString(content: string): string {
 
   try {
     const parsed = JSON.parse(trimmed)
-    if (!Array.isArray(parsed)) return content
+    if (!Array.isArray(parsed) || parsed.length === 0) return content
 
-    const textBlocks = parsed.filter(
-      (block: unknown) =>
-        typeof block === 'object' &&
-        block !== null &&
-        'type' in block &&
-        (block as Record<string, unknown>).type === 'text'
-    )
+    // Only unwrap when EVERY element is an Anthropic-shaped text block with a
+    // string `text` or `content` field. Any non-text block, missing string,
+    // or non-object element bails to the original input — this prevents a user
+    // pasting a JSON sample (or a streamed array containing tool_use/image
+    // blocks) from being silently rewritten.
+    const isTextBlock = (
+      block: unknown
+    ): block is { type: 'text'; text?: string; content?: string } => {
+      if (typeof block !== 'object' || block === null) return false
+      const candidate = block as Record<string, unknown>
+      if (candidate.type !== 'text') return false
+      return typeof candidate.text === 'string' || typeof candidate.content === 'string'
+    }
 
-    if (textBlocks.length === 0) return content
+    if (!parsed.every(isTextBlock)) return content
 
-    const extracted = textBlocks
-      .map((block: Record<string, unknown>) => {
-        const text = typeof block.text === 'string' ? block.text
-          : typeof block.content === 'string' ? block.content
-          : ''
-        return text
-      })
-      .filter(Boolean)
+    const extracted = parsed
+      .map((block) => block.text ?? block.content ?? '')
+      .filter((part) => part.length > 0)
       .join('\n\n')
 
     return extracted || content
